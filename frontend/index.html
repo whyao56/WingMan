@@ -1,0 +1,1212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ChatWing · 聊天僚机</title>
+<style>
+:root{
+  --bg:#0e1116; --panel:#151a22; --panel2:#1b212b; --panel3:#212836;
+  --border:#262d39; --border2:#313a49;
+  --text:#e8ebf0; --muted:#8d96a8; --dim:#66708a;
+  --accent:#5b9dff; --accent2:#a78bfa; --ok:#35c68a; --warn:#f5a524; --danger:#f0554d;
+  --r:10px; --mono:"Cascadia Code",Consolas,"SF Mono",Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--text); font-size:14px; line-height:1.6;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  overflow:hidden;
+}
+button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
+button{cursor:pointer}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:#2b3341;border-radius:5px;border:2px solid var(--bg)}
+::-webkit-scrollbar-thumb:hover{background:#3a4454}
+::-webkit-scrollbar-track{background:transparent}
+
+.app{display:grid;grid-template-columns:236px 1fr;height:100vh}
+
+/* ---------- 侧栏 ---------- */
+.side{background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.brand{padding:16px 16px 12px;border-bottom:1px solid var(--border)}
+.brand h1{font-size:17px;font-weight:650;letter-spacing:.3px}
+.brand h1 span{background:linear-gradient(92deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.brand p{font-size:11.5px;color:var(--dim);margin-top:2px}
+nav{padding:8px;display:flex;flex-direction:column;gap:2px}
+nav button{
+  background:transparent;border:0;text-align:left;padding:8px 10px;border-radius:8px;
+  color:var(--muted);display:flex;align-items:center;gap:9px;transition:.14s;
+}
+nav button:hover{background:var(--panel2);color:var(--text)}
+nav button.on{background:var(--panel3);color:var(--text);box-shadow:inset 2px 0 0 var(--accent)}
+nav button i{font-style:normal;width:16px;text-align:center;opacity:.85}
+
+.sidebody{flex:1;overflow-y:auto;padding:4px 8px 12px}
+.sidelabel{font-size:11px;color:var(--dim);padding:10px 10px 4px;letter-spacing:.5px;text-transform:uppercase}
+.chatitem{
+  padding:7px 10px;border-radius:8px;cursor:pointer;font-size:13px;
+  display:flex;justify-content:space-between;gap:6px;align-items:center;transition:.14s;
+}
+.chatitem:hover{background:var(--panel2)}
+.chatitem.on{background:var(--panel3)}
+.chatitem .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chatitem .ct{font-size:11px;color:var(--dim);flex:none}
+.empty-hint{color:var(--dim);font-size:12.5px;padding:10px;line-height:1.7}
+
+/* ---------- 主区 ---------- */
+main{overflow-y:auto;padding:22px 26px 60px}
+.view{display:none;max-width:1080px}
+.view.on{display:block}
+h2{font-size:19px;font-weight:620;margin-bottom:4px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:18px}
+
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:14px}
+.card>h3{font-size:14px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.card>h3 .tag{font-size:11px;font-weight:500;color:var(--dim);border:1px solid var(--border2);padding:1px 7px;border-radius:20px}
+
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:900px){.grid2{grid-template-columns:1fr}}
+
+label.f{display:block;margin-bottom:10px}
+label.f>span{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+input[type=text],input[type=password],input[type=number],select,textarea{
+  width:100%;background:var(--panel2);border:1px solid var(--border2);border-radius:8px;
+  padding:8px 10px;outline:none;transition:.14s;
+}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);background:var(--panel3)}
+textarea{resize:vertical;min-height:70px;line-height:1.65}
+select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 16px) 50%,calc(100% - 11px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:32px}
+
+.btn{
+  background:var(--panel3);border:1px solid var(--border2);border-radius:8px;
+  padding:7px 14px;transition:.14s;color:var(--text);white-space:nowrap;
+}
+.btn:hover{border-color:#41506a;background:#28313f}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:linear-gradient(92deg,#2f6fd0,#7c5cf0);border-color:transparent;font-weight:560}
+.btn.primary:hover{filter:brightness(1.12)}
+.btn.ghost{background:transparent}
+.btn.sm{padding:4px 10px;font-size:12.5px}
+.btn.danger{color:#ffb1ac;border-color:#5a2f2c}
+.btn.danger:hover{background:#3a1f1d}
+
+.pill{font-size:11.5px;padding:2px 9px;border-radius:20px;border:1px solid var(--border2);color:var(--muted);white-space:nowrap}
+.pill.ok{color:#8fe6c0;border-color:#1f5340;background:#10241c}
+.pill.bad{color:#ffb1ac;border-color:#5a2f2c;background:#241211}
+.pill.warn{color:#f7cd85;border-color:#5a4620;background:#241d10}
+.pill.info{color:#a9c9ff;border-color:#2b4570;background:#111c2e}
+
+.mono{font-family:var(--mono);font-size:12.5px}
+.muted{color:var(--muted)}
+.dim{color:var(--dim)}
+.small{font-size:12.5px}
+
+.note{border-left:3px solid var(--warn);background:#1d1a10;padding:9px 12px;border-radius:0 8px 8px 0;font-size:12.5px;color:#e8d5a8;margin:8px 0}
+.note.err{border-color:var(--danger);background:#1e1211;color:#f5c0bb}
+.note.ok{border-color:var(--ok);background:#101e18;color:#a9e3c8}
+
+/* ---------- 分析卡 ---------- */
+.analysis{display:grid;grid-template-columns:150px 1fr;gap:16px}
+@media(max-width:760px){.analysis{grid-template-columns:1fr}}
+.gauge{background:var(--panel2);border-radius:var(--r);padding:14px;text-align:center}
+.gauge .emo{font-size:16px;font-weight:600;margin-bottom:2px}
+.gauge .bar{height:6px;background:#2a3242;border-radius:3px;overflow:hidden;margin:10px 0 6px}
+.gauge .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+.gauge .lbl{font-size:11px;color:var(--dim)}
+
+.kv{margin:0 0 8px;font-size:13px}
+.kv b{color:var(--muted);font-weight:500;display:inline-block;min-width:52px}
+.delta-up{color:#ff7b72}
+.delta-down{color:#35c68a}
+.delta-zero{color:var(--muted)}
+
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.chip{font-size:12px;padding:3px 9px;border-radius:20px;background:var(--panel3);border:1px solid var(--border2);color:#b9c2d4}
+.chip.obs{background:#101c2e;border-color:#26405f;color:#a3c4f0}
+.chip.inf{background:#1c1630;border-color:#3d3160;color:#c4b1f5}
+
+.obslist{list-style:none;font-size:12.5px;color:#b9c2d4}
+.obslist li{padding:3px 0 3px 16px;position:relative}
+.obslist li:before{content:"";position:absolute;left:4px;top:11px;width:5px;height:5px;border-radius:50%;background:var(--accent)}
+
+/* ---------- 建议卡 ---------- */
+.opt{border:1px solid var(--border);border-radius:var(--r);background:var(--panel);margin-bottom:10px;overflow:hidden;transition:.16s}
+.opt:hover{border-color:#3a4657}
+.opt.best{border-color:#3b5a86;box-shadow:0 0 0 1px #2b4364 inset}
+.opthead{display:flex;align-items:center;gap:10px;padding:11px 14px;background:var(--panel2);cursor:pointer}
+.opthead .sty{font-weight:600;font-size:13.5px}
+.opthead .spacer{flex:1}
+.opthead .score{font-family:var(--mono);font-size:15px;font-weight:600}
+.optbody{padding:14px}
+.opttext{font-size:15px;line-height:1.7;background:var(--panel2);border-radius:8px;padding:11px 13px;border-left:3px solid var(--accent);margin-bottom:12px;user-select:text}
+.optacts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.mini{font-size:12.5px;color:var(--muted);margin:6px 0}
+.mini b{color:#c3cbdb;font-weight:500}
+
+.sbars{display:grid;gap:6px;margin-top:10px}
+.sbar{display:grid;grid-template-columns:64px 1fr 40px;gap:8px;align-items:center;font-size:11.5px;color:var(--muted)}
+.sbar .t{height:5px;background:#2a3242;border-radius:3px;overflow:hidden}
+.sbar .t i{display:block;height:100%;border-radius:3px}
+.sbar .n{text-align:right;font-family:var(--mono);font-size:11px}
+
+/* ---------- 推演树 ---------- */
+.branch{border:1px solid var(--border);border-radius:var(--r);padding:13px;margin-bottom:10px;background:var(--panel2)}
+.branch h4{font-size:13px;font-weight:600;display:flex;align-items:center;gap:9px;margin-bottom:9px;flex-wrap:wrap}
+.steps{display:grid;gap:7px}
+.step{display:grid;grid-template-columns:44px 1fr;gap:9px;align-items:start}
+.step .who{font-size:11.5px;padding:2px 0;text-align:center;border-radius:6px;background:var(--panel3);color:var(--muted)}
+.step.peer .who{background:#2a2038;color:#c4b1f5}
+.step .tx{font-size:13px}
+.step .nt{font-size:11.5px;color:var(--dim);margin-top:1px}
+.outcome{margin-top:10px;font-size:12.5px;color:#c3cbdb;border-top:1px dashed var(--border2);padding-top:9px}
+
+/* ---------- 消息流 ---------- */
+.msgs{max-height:520px;overflow-y:auto;background:var(--panel2);border-radius:var(--r);padding:12px}
+.msg{display:flex;gap:10px;margin-bottom:11px;font-size:13px}
+.msg .t{color:var(--dim);font-size:11px;flex:none;width:74px;padding-top:2px;font-family:var(--mono)}
+.msg .w{color:var(--muted);flex:none;width:52px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msg.me .w{color:#a3c4f0}
+.msg .c{flex:1;word-break:break-word;white-space:pre-wrap}
+.msg.me .c{color:#cfd7e6}
+
+/* ---------- 字幕 ---------- */
+.subs{max-height:420px;overflow-y:auto;background:var(--panel2);border-radius:var(--r);padding:12px}
+.sub{display:grid;grid-template-columns:64px 1fr;gap:10px;margin-bottom:10px;font-size:13px;align-items:start}
+.sub .ch{font-size:11px;text-align:center;padding:3px 0;border-radius:6px;background:#2a2038;color:#c4b1f5;font-weight:500}
+.sub.me .ch{background:#132a3d;color:#8fc4f5}
+.sub .txt{white-space:pre-wrap;word-break:break-word}
+.sub .meta{font-size:11px;color:var(--dim);margin-top:2px;font-family:var(--mono)}
+.meter{height:6px;background:#2a3242;border-radius:3px;overflow:hidden;flex:1}
+.meter i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--ok),var(--warn),var(--danger));transition:width .12s}
+
+.spin{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.hidden{display:none!important}
+table.t{width:100%;border-collapse:collapse;font-size:12.5px}
+table.t th,table.t td{text-align:left;padding:6px 9px;border-bottom:1px solid var(--border)}
+table.t th{color:var(--muted);font-weight:500;font-size:12px}
+table.t tr:hover td{background:var(--panel2)}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <h1>Chat<span>Wing</span></h1>
+      <p>聊天僚机 · 本地优先</p>
+    </div>
+    <nav id="nav">
+      <button data-v="copilot" class="on"><i>◎</i>指挥台</button>
+      <button data-v="memory"><i>◈</i>记忆</button>
+      <button data-v="import"><i>↧</i>导入</button>
+      <button data-v="voice"><i>◉</i>通话</button>
+      <button data-v="settings"><i>⚙</i>设置</button>
+    </nav>
+    <div class="sidebody">
+      <div class="sidelabel">会话</div>
+      <div id="chatlist"><div class="empty-hint">还没有导入任何聊天记录</div></div>
+    </div>
+    <div style="padding:10px 14px;border-top:1px solid var(--border)">
+      <div id="health" class="small dim">连接中…</div>
+    </div>
+  </aside>
+
+  <main>
+    <!-- ============ 指挥台 ============ -->
+    <section class="view on" id="view-copilot">
+      <h2>指挥台</h2>
+      <p class="sub">把对方刚发来的话贴进来，看看她的状态、给你四个不同风格的回复，再推演每条会把聊天带向哪里。</p>
+
+      <div id="cp-nochat" class="card">
+        <h3>先选一个会话</h3>
+        <p class="small muted">左侧还没有会话。去「导入」页上传一份聊天记录，或者用示例文件
+          <span class="mono">samples/qq_sample_小鹿.txt</span> 试跑。</p>
+      </div>
+
+      <div id="cp-main" class="hidden">
+        <div class="card">
+          <h3>对方最新消息 <span class="tag" id="cp-chatname"></span></h3>
+          <textarea id="cp-msg" placeholder="把对方刚发的那句话粘在这里，例如：哈哈哈今天好累啊"></textarea>
+          <div class="row" style="margin-top:10px">
+            <button class="btn primary" id="cp-go">分析并给建议</button>
+            <button class="btn sm ghost" id="cp-last">取会话里最后一条对方消息</button>
+            <label class="small muted" style="display:flex;align-items:center;gap:6px">
+              <input type="checkbox" id="cp-persist" checked /> 存入记忆
+            </label>
+            <span id="cp-trace" class="small dim"></span>
+          </div>
+        </div>
+
+        <div id="cp-result"></div>
+      </div>
+    </section>
+
+    <!-- ============ 记忆 ============ -->
+    <section class="view" id="view-memory">
+      <h2>记忆</h2>
+      <p class="sub">事实、画像、向量索引 —— 这三样决定了它"记不记得住"。</p>
+
+      <div id="mem-nochat" class="card">
+        <h3>还没有会话</h3>
+        <p class="small muted">先到「导入」页添加聊天记录。</p>
+      </div>
+
+      <div id="mem-main" class="hidden">
+        <div class="card">
+          <h3>会话信息 <span class="tag" id="mem-id"></span></h3>
+          <div id="mem-stats" class="row" style="margin-bottom:12px"></div>
+          <div class="row">
+            <button class="btn sm" id="mem-index">重建向量索引</button>
+            <button class="btn sm primary" id="mem-profile">抽取事实并生成画像</button>
+            <button class="btn sm ghost" id="mem-export">导出 JSON</button>
+            <button class="btn sm ghost danger" id="mem-del">删除会话</button>
+            <span id="mem-msg" class="small dim"></span>
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div class="card">
+            <h3>人物设定 <span class="tag">你手动维护的部分</span></h3>
+            <label class="f"><span>你的目标</span>
+              <input type="text" id="p-goal" placeholder="例：想约她周末去看展" /></label>
+            <label class="f"><span>关系阶段</span>
+              <select id="p-stage">
+                <option value="">（未设定）</option>
+                <option>陌生期</option><option>熟悉期</option><option>暧昧期</option>
+                <option>推进期</option><option>稳定期</option>
+              </select></label>
+            <label class="f"><span>雷区（逗号分隔）</span>
+              <input type="text" id="p-taboos" placeholder="例：宝贝、提她前任、追问细节" /></label>
+            <label class="f"><span>我的说话风格</span>
+              <textarea id="p-mystyle" style="min-height:56px"></textarea></label>
+            <label class="f"><span>对方画像（模型生成，可手改）</span>
+              <textarea id="p-profile" style="min-height:110px"></textarea></label>
+            <button class="btn primary sm" id="p-save">保存设定</button>
+            <span id="p-msg" class="small dim"></span>
+          </div>
+
+          <div class="card">
+            <h3>已记住的事实 <span class="tag" id="f-count"></span></h3>
+            <div id="facts" class="small muted">还没有抽取过事实。点上面的「抽取事实并生成画像」。</div>
+            <div class="row" style="margin-top:12px">
+              <input type="text" id="f-key" placeholder="类别，如 生日" style="flex:1;min-width:90px" />
+              <input type="text" id="f-val" placeholder="内容，如 3月14日" style="flex:2;min-width:110px" />
+              <button class="btn sm" id="f-add">手动加一条</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>聊天记录</h3>
+          <div id="mem-msgs" class="msgs">加载中…</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 导入 ============ -->
+    <section class="view" id="view-import">
+      <h2>导入聊天记录</h2>
+      <p class="sub">支持 QQ / 微信导出的 txt，以及自定义的 JSON / CSV。上传后会自动判断格式，你也可以手动指定。</p>
+
+      <div class="card">
+        <h3>上传文件</h3>
+        <input type="file" id="imp-file" accept=".txt,.log,.bak,.csv,.tsv,.json,.jsonl,.html,.htm" />
+        <div class="row" style="margin-top:12px">
+          <label class="f" style="margin:0;flex:1;min-width:150px">
+            <span>适配器（留空自动判断）</span>
+            <select id="imp-adapter">
+              <option value="">自动</option>
+              <option value="qq">QQ 聊天记录</option>
+              <option value="wechat">微信聊天记录</option>
+              <option value="generic">通用 JSON / CSV</option>
+            </select>
+          </label>
+          <label class="f" style="margin:0;flex:1;min-width:150px">
+            <span>会话名称（留空自动取名）</span>
+            <input type="text" id="imp-name" placeholder="例：小鹿" />
+          </label>
+          <label class="f" style="margin:0;flex:1;min-width:150px">
+            <span>你的昵称（逗号分隔）</span>
+            <input type="text" id="imp-mename" placeholder="默认已含「我」，通常不用填" />
+          </label>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn" id="imp-preview">先预览</button>
+          <button class="btn primary" id="imp-go">确认导入</button>
+          <span id="imp-msg" class="small dim"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>或者直接粘贴文本</h3>
+        <p class="small muted" style="margin-bottom:8px">
+          格式：每行 <span class="mono">2024-01-01 12:00:00 昵称</span>，下一行是内容，消息之间空一行。
+        </p>
+        <textarea id="paste-text" style="min-height:120px" placeholder="2024-01-01 21:00:00 小鹿&#10;在吗&#10;&#10;2024-01-01 21:02:00 我&#10;在的"></textarea>
+        <div class="row" style="margin-top:10px">
+          <input type="text" id="paste-name" placeholder="会话名称" style="max-width:200px" />
+          <button class="btn sm" id="paste-go">导入这段文本</button>
+          <span id="paste-msg" class="small dim"></span>
+        </div>
+      </div>
+
+      <div id="imp-result"></div>
+    </section>
+
+    <!-- ============ 通话 ============ -->
+    <section class="view" id="view-voice">
+      <h2>通话</h2>
+      <p class="sub">
+        双通道采集：系统回环听<span style="color:#c4b1f5">对方</span>，麦克风听<span style="color:#8fc4f5">你自己</span>。
+        转写实时推到下面。需要装 <span class="mono">soundcard</span> 和语音识别引擎。
+      </p>
+
+      <div class="card">
+        <h3>采集控制 <span class="tag" id="v-engine"></span></h3>
+        <div class="row" style="margin-bottom:12px">
+          <label class="f" style="margin:0;flex:1;min-width:200px">
+            <span>对声音通道（系统回环）</span>
+            <select id="v-peer"><option value="auto">自动（默认扬声器）</option></select>
+          </label>
+          <label class="f" style="margin:0;flex:1;min-width:200px">
+            <span>我的声音通道（麦克风）</span>
+            <select id="v-me"><option value="auto">自动（默认麦克风）</option></select>
+          </label>
+          <label class="f" style="margin:0;flex:1;min-width:180px">
+            <span>归入哪个会话（可选）</span>
+            <select id="v-chat"><option value="">不保存</option></select>
+          </label>
+        </div>
+        <div class="row">
+          <button class="btn sm ghost" id="v-reload">刷新设备</button>
+          <button class="btn primary" id="v-start">开始采集</button>
+          <button class="btn danger" id="v-stop" disabled>停止</button>
+          <span id="v-status" class="small dim"></span>
+        </div>
+        <div class="row" style="margin-top:12px;gap:16px">
+          <div class="row" style="flex:1;gap:8px"><span class="small dim" style="width:52px">对方</span><div class="meter"><i id="v-lv-peer"></i></div></div>
+          <div class="row" style="flex:1;gap:8px"><span class="small dim" style="width:52px">我</span><div class="meter"><i id="v-lv-me"></i></div></div>
+        </div>
+        <div class="note" style="margin-top:12px">
+          录音涉及法律问题：请确认你所在地区的规定，并只用于个人备忘。不要用于采集你未参与的对话。
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>实时字幕 <span class="tag" id="v-count">0 段</span></h3>
+        <div class="row" style="margin-bottom:10px">
+          <input type="text" id="v-manual" placeholder="没有麦克风？在这里手动输入一句话当作『听到的内容』" style="flex:1" />
+          <select id="v-manual-ch" style="max-width:110px"><option value="peer">对方说</option><option value="me">我说</option></select>
+          <button class="btn sm" id="v-manual-go">注入</button>
+          <button class="btn sm ghost" id="v-clear">清空</button>
+        </div>
+        <div id="v-subs" class="subs"><div class="empty-hint">还没有转写内容。</div></div>
+      </div>
+    </section>
+
+    <!-- ============ 设置 ============ -->
+    <section class="view" id="view-settings">
+      <h2>设置</h2>
+      <p class="sub">不填任何 API Key 也能跑 —— 会自动使用内置的 Mock Provider。填上真实配置后即可接入真模型。</p>
+
+      <div class="card">
+        <h3>当前生效的组件</h3>
+        <div id="s-providers" class="row"></div>
+      </div>
+
+      <div class="card">
+        <h3>大模型 <span class="tag">对话与推理</span></h3>
+        <label class="f"><span>Provider</span>
+          <select id="s-llm_provider">
+            <option value="mock">Mock（无需 Key，仅演示流程）</option>
+            <option value="openai_compat">OpenAI 兼容云服务（DeepSeek / 通义 / Kimi / 硅基流动…）</option>
+            <option value="ollama">Ollama 本地模型</option>
+          </select></label>
+        <div class="grid2">
+          <label class="f"><span>Base URL</span>
+            <input type="text" id="s-llm_base_url" placeholder="https://api.deepseek.com/v1" /></label>
+          <label class="f"><span>API Key</span>
+            <input type="password" id="s-llm_api_key" placeholder="sk-..." /></label>
+          <label class="f"><span>模型名</span>
+            <input type="text" id="s-llm_model" placeholder="deepseek-chat" /></label>
+          <label class="f"><span>温度</span>
+            <input type="number" id="s-llm_temperature" step="0.1" min="0" max="2" /></label>
+          <label class="f"><span>Ollama 地址</span>
+            <input type="text" id="s-ollama_host" placeholder="http://127.0.0.1:11434" /></label>
+          <label class="f"><span>Ollama 模型</span>
+            <input type="text" id="s-ollama_model" placeholder="qwen2.5:7b" /></label>
+        </div>
+        <div class="row">
+          <button class="btn sm" id="s-test-llm">测试连通</button>
+          <button class="btn sm ghost" id="s-list-models">拉取模型列表</button>
+          <span id="s-llm-msg" class="small dim"></span>
+        </div>
+        <div id="s-models" class="chips"></div>
+      </div>
+
+      <div class="card">
+        <h3>向量模型 <span class="tag">记忆检索</span></h3>
+        <div class="grid2">
+          <label class="f"><span>模式</span>
+            <select id="s-embedder">
+              <option value="auto">auto（有云端配置就用云端，否则本地哈希）</option>
+              <option value="cloud">cloud（OpenAI 兼容 /v1/embeddings）</option>
+              <option value="hash">hash（纯本地，零依赖）</option>
+            </select></label>
+          <label class="f"><span>模型名</span>
+            <input type="text" id="s-embed_model" placeholder="text-embedding-3-small" /></label>
+          <label class="f"><span>Base URL（留空复用主模型）</span>
+            <input type="text" id="s-embed_base_url" /></label>
+          <label class="f"><span>API Key（留空复用主模型）</span>
+            <input type="password" id="s-embed_api_key" /></label>
+        </div>
+        <button class="btn sm" id="s-test-embed">测试向量化</button>
+        <span id="s-embed-msg" class="small dim"></span>
+      </div>
+
+      <div class="card">
+        <h3>语音识别 <span class="tag">通话转写</span></h3>
+        <label class="f"><span>引擎</span>
+          <select id="s-asr_engine">
+            <option value="mock">Mock（占位文本）</option>
+            <option value="local">本地 faster-whisper（隐私最好）</option>
+            <option value="cloud">云端 ASR（OpenAI 兼容）</option>
+          </select></label>
+        <div class="grid2">
+          <label class="f"><span>whisper 模型大小</span>
+            <select id="s-whisper_model">
+              <option>tiny</option><option>base</option><option>small</option>
+              <option>medium</option><option>large-v3</option>
+            </select></label>
+          <label class="f"><span>识别语言</span>
+            <input type="text" id="s-asr_language" placeholder="zh" /></label>
+          <label class="f"><span>云 ASR Base URL</span>
+            <input type="text" id="s-asr_base_url" placeholder="https://api.openai.com/v1" /></label>
+          <label class="f"><span>云 ASR API Key</span>
+            <input type="password" id="s-asr_api_key" /></label>
+          <label class="f"><span>云 ASR 模型</span>
+            <input type="text" id="s-asr_model" placeholder="whisper-1" /></label>
+          <label class="f"><span>VAD 静音阈值</span>
+            <input type="number" id="s-vad_threshold" step="0.001" min="0" max="1" /></label>
+        </div>
+        <button class="btn sm" id="s-test-asr">检查语音引擎</button>
+        <span id="s-asr-msg" class="small dim"></span>
+      </div>
+
+      <div class="row">
+        <button class="btn primary" id="s-save">保存设置</button>
+        <button class="btn ghost" id="s-reset">清除运行时覆盖（回到 .env）</button>
+        <span id="s-msg" class="small dim"></span>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+"use strict";
+
+// ================================================================ 基础工具
+
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => Array.from(document.querySelectorAll(s));
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+const state = { chats: [], chatId: null, bundle: null, voice: null, subs: 0 };
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    headers: opts.body instanceof FormData ? {} : { "Content-Type": "application/json" },
+    ...opts,
+  });
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = { detail: text }; }
+  if (!res.ok) throw new Error((data && (data.detail || data.message)) || `HTTP ${res.status}`);
+  return data;
+}
+
+function toast(el, msg, kind = "") {
+  const n = $(el);
+  if (!n) return;
+  n.textContent = msg;
+  n.className = "small " + (kind === "err" ? "delta-up" : kind === "ok" ? "delta-down" : "dim");
+}
+
+function busy(btn, on, label) {
+  const b = typeof btn === "string" ? $(btn) : btn;
+  if (!b) return;
+  if (on) {
+    b.dataset.old = b.innerHTML;
+    b.disabled = true;
+    b.innerHTML = `<span class="spin"></span> ${label || "处理中…"}`;
+  } else {
+    b.disabled = false;
+    if (b.dataset.old) b.innerHTML = b.dataset.old;
+  }
+}
+
+// ================================================================ 导航
+
+$$("#nav button").forEach(b => b.addEventListener("click", () => {
+  $$("#nav button").forEach(x => x.classList.toggle("on", x === b));
+  $$(".view").forEach(v => v.classList.toggle("on", v.id === "view-" + b.dataset.v));
+}));
+
+function goView(name) {
+  $$("#nav button").forEach(x => x.classList.toggle("on", x.dataset.v === name));
+  $$(".view").forEach(v => v.classList.toggle("on", v.id === "view-" + name));
+}
+
+// ================================================================ 健康检查
+
+async function loadHealth() {
+  try {
+    const h = await api("/api/health");
+    const p = h.providers.map(x =>
+      `<span class="pill ${x.available ? "ok" : "bad"}" title="${esc(x.note)}">${esc(x.kind)}: ${esc(x.name)}</span>`
+    ).join(" ");
+    $("#health").innerHTML = `v${esc(h.version)} · ${h.counts.messages} 条消息<br>${p}`;
+    $("#s-providers").innerHTML = h.providers.map(x =>
+      `<span class="pill ${x.available ? "ok" : "warn"}">${esc(x.kind)} · ${esc(x.name)} · ${esc(x.note)}</span>`
+    ).join(" ");
+    $("#v-engine").textContent = "ASR: " + (h.providers.find(p => p.kind === "asr")?.name || "?");
+  } catch (e) {
+    $("#health").innerHTML = `<span class="delta-up">后端未连接</span>`;
+  }
+}
+
+// ================================================================ 会话列表
+
+async function loadChats() {
+  try { state.chats = await api("/api/chats"); } catch { state.chats = []; }
+  const box = $("#chatlist");
+  if (!state.chats.length) {
+    box.innerHTML = `<div class="empty-hint">还没有导入任何聊天记录</div>`;
+  } else {
+    box.innerHTML = state.chats.map(c => `
+      <div class="chatitem ${c.id === state.chatId ? "on" : ""}" data-id="${esc(c.id)}">
+        <span class="nm">${esc(c.name)}</span>
+        <span class="ct">${c.message_count}</span>
+      </div>`).join("");
+    box.querySelectorAll(".chatitem").forEach(el =>
+      el.addEventListener("click", () => selectChat(el.dataset.id)));
+  }
+  const opts = state.chats.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
+  $("#v-chat").innerHTML = `<option value="">不保存</option>` + opts;
+
+  if (state.chatId && !state.chats.some(c => c.id === state.chatId)) state.chatId = null;
+  if (!state.chatId && state.chats.length) state.chatId = state.chats[0].id;
+  reflectChat();
+}
+
+function reflectChat() {
+  const has = !!state.chatId;
+  const c = state.chats.find(x => x.id === state.chatId);
+  $("#cp-nochat").classList.toggle("hidden", has);
+  $("#cp-main").classList.toggle("hidden", !has);
+  $("#mem-nochat").classList.toggle("hidden", has);
+  $("#mem-main").classList.toggle("hidden", !has);
+  $("#cp-chatname").textContent = c ? `${c.name} · ${c.message_count} 条` : "";
+  $("#mem-id").textContent = c ? c.id : "";
+  if (has) { loadPersona(); loadFacts(); loadMessages(); }
+}
+
+function selectChat(id) {
+  state.chatId = id;
+  state.bundle = null;
+  $("#cp-result").innerHTML = "";
+  $$("#chatlist .chatitem").forEach(el => el.classList.toggle("on", el.dataset.id === id));
+  reflectChat();
+}
+
+// ================================================================ 指挥台
+
+function analysisHTML(b) {
+  const a = b.analysis, s = b.strategy;
+  const d = a.interest_delta;
+  const dcls = d > 0 ? "delta-up" : d < 0 ? "delta-down" : "delta-zero";
+  const dtxt = d > 0 ? `+${d}` : `${d}`;
+  const dirText = d > 0 ? "比上次更热络" : d < 0 ? "比上次冷淡" : "与上次持平";
+  return `
+  <div class="grid2">
+    <div class="card">
+      <h3>对方状态分析</h3>
+      <div class="analysis">
+        <div class="gauge">
+          <div class="emo">${esc(a.emotion || "—")}</div>
+          <div class="bar"><i style="width:${(a.emotion_intensity || 0) * 10}%"></i></div>
+          <div class="lbl">情绪强度 ${a.emotion_intensity}/10</div>
+          <div class="lbl" style="margin-top:8px">兴趣变化 <span class="${dcls}">${dtxt}</span></div>
+          <div class="lbl">${esc(dirText)}</div>
+        </div>
+        <div>
+          <div class="kv"><b>意图</b>${esc(a.intent || "—")}</div>
+          <div class="kv"><b>潜台词</b><span class="muted">${esc(a.subtext || "—")}</span></div>
+          ${a.risk ? `<div class="note" style="margin-top:10px">${esc(a.risk)}</div>` : ""}
+        </div>
+      </div>
+      <div style="margin-top:14px">
+        <div class="small dim" style="margin-bottom:4px">观测到的信号（可在历史里核对）</div>
+        <ul class="obslist">${(a.signals || []).map(x => `<li>${esc(x)}</li>`).join("") || "<li>—</li>"}</ul>
+      </div>
+      ${(a.topics || []).length ? `<div class="chips">${a.topics.map(t => `<span class="chip inf">${esc(t)}</span>`).join("")}</div>` : ""}
+    </div>
+
+    <div class="card">
+      <h3>本轮策略 <span class="tag">${esc(s.stage || a.stage_guess || "")}</span></h3>
+      <div class="kv"><b>目标</b>${esc(s.goal_this_turn || "—")}</div>
+      <div class="kv"><b>语气</b>${esc(s.tone || "—")}</div>
+      ${(s.must_do || []).length ? `<div class="mini"><b>要做到</b>${s.must_do.map(x => `<span class="chip">${esc(x)}</span>`).join(" ")}</div>` : ""}
+      ${(s.must_not || []).length ? `<div class="mini"><b>要避免</b>${s.must_not.map(x => `<span class="chip">${esc(x)}</span>`).join(" ")}</div>` : ""}
+    </div>
+  </div>`;
+}
+
+function scoresHTML(o) {
+  const rows = [
+    ["自然度", o.scores.naturalness, "#5b9dff"],
+    ["共情", o.scores.warmth, "#a78bfa"],
+    ["推进力", o.scores.progress, "#35c68a"],
+    ["风险", o.scores.risk, "#f0554d"],
+  ];
+  return `<div class="sbars">${rows.map(([n, v, c]) => `
+    <div class="sbar">
+      <span>${n}</span>
+      <span class="t"><i style="width:${Math.round(v * 100)}%;background:${c}"></i></span>
+      <span class="n">${(v * 100).toFixed(0)}</span>
+    </div>`).join("")}</div>`;
+}
+
+function optionHTML(o, idx) {
+  const dirPill = { "升温": "ok", "持平": "info", "降温": "bad" }[o.prediction?.direction] || "info";
+  return `
+  <div class="opt ${idx === 0 ? "best" : ""}" data-oid="${esc(o.id)}">
+    <div class="opthead">
+      <span class="pill">${esc(o.id)}</span>
+      <span class="sty">${esc(o.style)}</span>
+      <span class="spacer"></span>
+      <span class="pill ${dirPill}">${esc(o.prediction?.direction || "—")} ${o.prediction?.confidence ? Math.round(o.prediction.confidence * 100) + "%" : ""}</span>
+      <span class="score">${o.total.toFixed(1)}</span>
+    </div>
+    <div class="optbody">
+      <div class="opttext">${esc(o.text)}</div>
+      <div class="mini"><b>为什么这么回</b>${esc(o.rationale || "—")}</div>
+      <div class="mini"><b>预期效果</b>${esc(o.expected_effect || "—")}</div>
+      <div class="mini"><b>风险</b><span class="muted">${esc(o.risk || "—")}</span></div>
+      ${scoresHTML(o)}
+      ${o.score_notes?.length ? `<div class="mini dim" style="margin-top:8px">打分依据：${o.score_notes.map(esc).join(" · ")}</div>` : ""}
+      <div class="optacts">
+        <button class="btn sm primary act-copy" data-text="${esc(o.text)}">复制这条</button>
+        <button class="btn sm act-sim">推演走向</button>
+      </div>
+      <div class="simbox"></div>
+    </div>
+  </div>`;
+}
+
+function renderBundle(b) {
+  const warn = (b.warnings || []).length
+    ? `<div class="note">${b.warnings.map(esc).join("<br>")}</div>` : "";
+  const trace = b.trace || {};
+  const total = (b.options || []).length;
+  $("#cp-result").innerHTML = warn + analysisHTML(b) + `
+    <div class="card">
+      <h3>建议回复 <span class="tag">${total} 选 1 · 按综合分排序</span></h3>
+      <p class="small muted" style="margin-bottom:12px">
+        分数是本地启发式算的（长度、是否踩雷区、有没有 AI 腔、呼应了对方的话没有），
+        用来排序，不是绝对值。差 0.3 分不用太在意。
+      </p>
+      ${(b.options || []).map(optionHTML).join("") || `<p class="small muted">没有生成建议。</p>`}
+    </div>`;
+
+  $("#cp-trace").textContent = trace.total_ms
+    ? `耗时 ${trace.total_ms}ms（检索 ${trace.context_ms || 0} · 分析 ${trace.analyze_ms || 0} · 建议 ${trace.suggest_ms || 0}）· ${trace.llm} · 召回 ${trace.retrieved} 条`
+    : "";
+
+  $$("#cp-result .act-copy").forEach(btn => btn.addEventListener("click", async () => {
+    const t = btn.dataset.text;
+    try { await navigator.clipboard.writeText(t); btn.textContent = "已复制 ✓"; }
+    catch { btn.textContent = "复制失败"; }
+    setTimeout(() => { btn.textContent = "复制这条"; }, 1400);
+  }));
+
+  $$("#cp-result .act-sim").forEach(btn => btn.addEventListener("click", async () => {
+    const box = btn.closest(".opt");
+    const oid = box.dataset.oid;
+    const opt = (state.bundle.options || []).find(o => o.id === oid);
+    if (!opt) return;
+    const target = box.querySelector(".simbox");
+    busy(btn, true, "推演中…");
+    try {
+      const tree = await api(`/api/chats/${encodeURIComponent(state.chatId)}/simulate`, {
+        method: "POST",
+        body: JSON.stringify({ option_id: oid, option_text: opt.text, peer_message: $("#cp-msg").value.trim() }),
+      });
+      target.innerHTML = simHTML(tree);
+    } catch (e) {
+      target.innerHTML = `<div class="note err">${esc(e.message)}</div>`;
+    } finally { busy(btn, false); }
+  }));
+}
+
+function simHTML(t) {
+  if (!t.branches?.length) return `<div class="note err">没有产出推演结果。</div>`;
+  const branches = t.branches.map(br => {
+    const cls = { likely: "ok", possible: "info", unlikely: "warn" }[br.likelihood] || "info";
+    const zh = { likely: "最可能", possible: "有可能", unlikely: "不太可能" }[br.likelihood] || br.likelihood;
+    const tp = { "升温": "ok", "持平": "info", "降温": "bad" }[br.temperature] || "info";
+    return `
+    <div class="branch">
+      <h4>
+        <span class="pill ${cls}">${zh} ${Math.round(br.probability * 100)}%</span>
+        ${esc(br.label)}
+        <span class="pill ${tp}">${esc(br.temperature)}</span>
+      </h4>
+      <div class="steps">${br.steps.map(s => `
+        <div class="step ${s.speaker}">
+          <span class="who">${s.speaker === "peer" ? "对方" : "你"}</span>
+          <div><div class="tx">${esc(s.text)}</div>${s.note ? `<div class="nt">${esc(s.note)}</div>` : ""}</div>
+        </div>`).join("")}</div>
+      <div class="outcome"><b>结局</b> ${esc(br.outcome)}</div>
+    </div>`;
+  }).join("");
+  return `
+  <div style="margin-top:14px">
+    <div class="small dim" style="margin-bottom:8px">发出「${esc(t.option_text)}」之后的走向推演</div>
+    ${branches}
+    ${t.advice ? `<div class="note ok"><b>综合建议</b><br>${esc(t.advice)}</div>` : ""}
+    <div class="note" style="border-color:#5a4620">${esc(t.disclaimer)}</div>
+  </div>`;
+}
+
+$("#cp-go").addEventListener("click", async () => {
+  const msg = $("#cp-msg").value.trim();
+  if (!msg) { alert("先把对方刚发的话贴进来"); return; }
+  busy("#cp-go", true, "分析中…");
+  $("#cp-result").innerHTML = `<div class="card"><span class="spin"></span> <span class="small muted">正在检索记忆、分析对方状态、生成建议…</span></div>`;
+  try {
+    state.bundle = await api(`/api/chats/${encodeURIComponent(state.chatId)}/suggest`, {
+      method: "POST",
+      body: JSON.stringify({ peer_message: msg, persist: $("#cp-persist").checked }),
+    });
+    renderBundle(state.bundle);
+    loadChats();
+  } catch (e) {
+    $("#cp-result").innerHTML = `<div class="note err">${esc(e.message)}</div>`;
+  } finally { busy("#cp-go", false); }
+});
+
+$("#cp-last").addEventListener("click", async () => {
+  if (!state.chatId) return;
+  try {
+    const r = await api(`/api/chats/${encodeURIComponent(state.chatId)}/messages?limit=40`);
+    const peers = r.messages.filter(m => m.role === "peer");
+    if (peers.length) $("#cp-msg").value = peers[peers.length - 1].text;
+  } catch (e) { alert(e.message); }
+});
+
+// ================================================================ 记忆
+
+async function loadPersona() {
+  try {
+    const p = await api(`/api/chats/${encodeURIComponent(state.chatId)}/persona`);
+    $("#p-goal").value = p.goal || "";
+    $("#p-stage").value = p.stage || "";
+    $("#p-taboos").value = p.taboos || "";
+    $("#p-mystyle").value = p.my_style || "";
+    $("#p-profile").value = p.peer_profile || "";
+  } catch { /* 忽略 */ }
+}
+
+async function loadFacts() {
+  try {
+    const facts = await api(`/api/chats/${encodeURIComponent(state.chatId)}/facts`);
+    $("#f-count").textContent = facts.length + " 条";
+    if (!facts.length) {
+      $("#facts").innerHTML = `<span class="muted">还没有抽取过事实。点上面的「抽取事实并生成画像」。</span>`;
+      return;
+    }
+    $("#facts").innerHTML = facts.map(f => `
+      <div class="row" style="justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)">
+        <span><span class="pill">${esc(f.subject)}</span> <b>${esc(f.key)}</b> ${esc(f.value)}</span>
+        <span class="row" style="gap:6px">
+          <span class="dim mono">${(f.confidence * 100).toFixed(0)}%</span>
+          <button class="btn sm ghost danger f-del" data-id="${f.id}">×</button>
+        </span>
+      </div>`).join("");
+    $$("#facts .f-del").forEach(b => b.addEventListener("click", async () => {
+      await api(`/api/chats/${encodeURIComponent(state.chatId)}/facts/${b.dataset.id}`, { method: "DELETE" });
+      loadFacts();
+    }));
+  } catch { /* 忽略 */ }
+}
+
+async function loadMessages() {
+  try {
+    const c = state.chats.find(x => x.id === state.chatId);
+    $("#mem-stats").innerHTML = c ? `
+      <span class="pill info">${c.message_count} 条消息</span>
+      <span class="pill">对方 ${c.peer_count}</span>
+      <span class="pill">我 ${c.me_count}</span>
+      <span class="pill ${c.indexed ? "ok" : "warn"}">已索引 ${c.indexed}</span>
+      <span class="pill">${esc((c.first_ts || "").slice(0, 10))} → ${esc((c.last_ts || "").slice(0, 10))}</span>
+      <span class="pill">对方：${esc(c.peer_name || "未识别")}</span>` : "";
+    const r = await api(`/api/chats/${encodeURIComponent(state.chatId)}/messages?limit=100`);
+    $("#mem-msgs").innerHTML = r.messages.map(m => `
+      <div class="msg ${m.role}">
+        <span class="t">${esc((m.ts || "").slice(5, 16))}</span>
+        <span class="w">${esc(m.role === "me" ? "我" : m.sender)}</span>
+        <span class="c">${esc(m.text)}</span>
+      </div>`).join("") || `<span class="muted small">没有消息</span>`;
+    $("#mem-msgs").scrollTop = $("#mem-msgs").scrollHeight;
+  } catch (e) { $("#mem-msgs").textContent = e.message; }
+}
+
+$("#mem-index").addEventListener("click", async () => {
+  busy("#mem-index", true, "建索引…");
+  try {
+    const r = await api(`/api/chats/${encodeURIComponent(state.chatId)}/index`, { method: "POST" });
+    toast("#mem-msg", `新增 ${r.added} 条，共索引 ${r.indexed} 条（维度 ${r.dim}）`, "ok");
+    loadChats();
+  } catch (e) { toast("#mem-msg", e.message, "err"); }
+  finally { busy("#mem-index", false); }
+});
+
+$("#mem-profile").addEventListener("click", async () => {
+  busy("#mem-profile", true, "抽取中…");
+  try {
+    const r = await api(`/api/chats/${encodeURIComponent(state.chatId)}/profile`, { method: "POST" });
+    toast("#mem-msg", `抽到 ${r.facts_extracted} 条新事实（共 ${r.facts_total} 条）`, "ok");
+    if (r.warnings?.length) toast("#mem-msg", r.warnings.join("; "), "err");
+    loadPersona(); loadFacts();
+  } catch (e) { toast("#mem-msg", e.message, "err"); }
+  finally { busy("#mem-profile", false); }
+});
+
+$("#mem-export").addEventListener("click", async () => {
+  try {
+    const data = await api(`/api/chats/${encodeURIComponent(state.chatId)}/export`);
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `chatwing-${state.chatId}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (e) { toast("#mem-msg", e.message, "err"); }
+});
+
+$("#mem-del").addEventListener("click", async () => {
+  if (!confirm("确定删除这条会话及其全部消息？不可恢复。")) return;
+  try {
+    await api(`/api/chats/${encodeURIComponent(state.chatId)}`, { method: "DELETE" });
+    state.chatId = null;
+    await loadChats();
+    loadHealth();
+  } catch (e) { toast("#mem-msg", e.message, "err"); }
+});
+
+$("#p-save").addEventListener("click", async () => {
+  busy("#p-save", true, "保存中…");
+  try {
+    await api(`/api/chats/${encodeURIComponent(state.chatId)}/persona`, {
+      method: "PUT",
+      body: JSON.stringify({
+        goal: $("#p-goal").value, stage: $("#p-stage").value,
+        taboos: $("#p-taboos").value, my_style: $("#p-mystyle").value,
+        peer_profile: $("#p-profile").value,
+      }),
+    });
+    toast("#p-msg", "已保存", "ok");
+  } catch (e) { toast("#p-msg", e.message, "err"); }
+  finally { busy("#p-save", false); }
+});
+
+$("#f-add").addEventListener("click", async () => {
+  const key = $("#f-key").value.trim(), value = $("#f-val").value.trim();
+  if (!key || !value) { toast("#mem-msg", "类别和内容都要填", "err"); return; }
+  try {
+    await api(`/api/chats/${encodeURIComponent(state.chatId)}/facts`, {
+      method: "POST", body: JSON.stringify({ key, value }),
+    });
+    $("#f-key").value = ""; $("#f-val").value = "";
+    loadFacts();
+  } catch (e) { toast("#mem-msg", e.message, "err"); }
+});
+
+// ================================================================ 导入
+
+function previewHTML(p) {
+  const probes = p.probes.map(x => `
+    <tr><td>${esc(x.display_name)}</td><td class="mono">${x.confidence.toFixed(2)}</td>
+    <td class="dim">${esc(x.note || "")}</td></tr>`).join("");
+  const rows = p.sample.map(m => `
+    <tr><td class="dim mono">${esc((m.ts || "").slice(0, 16))}</td>
+    <td>${esc(m.sender)}</td><td>${esc(m.text.slice(0, 60))}</td></tr>`).join("");
+  return `
+  <div class="card">
+    <h3>解析预览 <span class="tag">适配器：${esc(p.adapter)}</span> <span class="tag">共 ${p.total_parsed} 条</span></h3>
+    ${p.warnings?.length ? `<div class="note">${p.warnings.map(esc).join("<br>")}</div>` : ""}
+    <div class="small dim" style="margin:8px 0 6px">适配器匹配度</div>
+    <table class="t">${probes}</table>
+    <div class="small dim" style="margin:14px 0 6px">识别到的说话人：${p.speakers.map(s => `<span class="chip">${esc(s)}</span>`).join(" ")}</div>
+    <div class="small dim" style="margin:14px 0 6px">前 ${p.sample.length} 条</div>
+    <table class="t">${rows}</table>
+  </div>`;
+}
+
+async function doPreview() {
+  const f = $("#imp-file").files[0];
+  if (!f) { toast("#imp-msg", "先选一个文件", "err"); return; }
+  const fd = new FormData();
+  fd.append("file", f);
+  if ($("#imp-adapter").value) fd.append("adapter", $("#imp-adapter").value);
+  const me = $("#imp-mename").value.trim();
+  if (me) fd.append("options", JSON.stringify({ me_names: me.split(/[,，]/).map(s => s.trim()).filter(Boolean) }));
+  busy("#imp-preview", true, "解析中…");
+  try {
+    const p = await api("/api/import/preview", { method: "POST", body: fd });
+    $("#imp-result").innerHTML = previewHTML(p);
+    toast("#imp-msg", "预览完成，确认无误后点「确认导入」", "ok");
+  } catch (e) { toast("#imp-msg", e.message, "err"); }
+  finally { busy("#imp-preview", false); }
+}
+
+async function doImport() {
+  const f = $("#imp-file").files[0];
+  if (!f) { toast("#imp-msg", "先选一个文件", "err"); return; }
+  const fd = new FormData();
+  fd.append("file", f);
+  if ($("#imp-adapter").value) fd.append("adapter", $("#imp-adapter").value);
+  if ($("#imp-name").value.trim()) fd.append("chat_name", $("#imp-name").value.trim());
+  const me = $("#imp-mename").value.trim();
+  if (me) fd.append("options", JSON.stringify({ me_names: me.split(/[,，]/).map(s => s.trim()).filter(Boolean) }));
+  busy("#imp-go", true, "导入中…");
+  try {
+    const r = await api("/api/import", { method: "POST", body: fd });
+    $("#imp-result").innerHTML = `
+      <div class="card">
+        <h3>导入完成</h3>
+        <div class="row">
+          <span class="pill ok">新增 ${r.inserted} 条</span>
+          <span class="pill">跳过重复 ${r.skipped} 条</span>
+          <span class="pill info">适配器 ${esc(r.adapter)}</span>
+          <span class="pill">会话 ${esc(r.chat_id)}</span>
+        </div>
+        ${r.warnings?.length ? `<div class="note">${r.warnings.map(esc).join("<br>")}</div>` : ""}
+      </div>`;
+    toast("#imp-msg", "导入成功", "ok");
+    state.chatId = r.chat_id;
+    await loadChats();
+    loadHealth();
+    goView("memory");
+  } catch (e) { toast("#imp-msg", e.message, "err"); }
+  finally { busy("#imp-go", false); }
+}
+
+$("#imp-preview").addEventListener("click", doPreview);
+$("#imp-go").addEventListener("click", doImport);
+
+$("#paste-go").addEventListener("click", async () => {
+  const text = $("#paste-text").value;
+  if (text.trim().length < 10) { toast("#paste-msg", "文本太短", "err"); return; }
+  busy("#paste-go", true, "导入中…");
+  try {
+    const r = await api("/api/import/text", {
+      method: "POST",
+      body: JSON.stringify({ text, chat_name: $("#paste-name").value.trim() || "粘贴导入" }),
+    });
+    toast("#paste-msg", `成功导入 ${r.inserted} 条`, "ok");
+    state.chatId = r.chat_id;
+    await loadChats();
+    loadHealth();
+  } catch (e) { toast("#paste-msg", e.message, "err"); }
+  finally { busy("#paste-go", false); }
+});
+
+// ================================================================ 通话
+
+async function loadDevices() {
+  try {
+    const list = await api("/api/voice/devices");
+    const loops = list.filter(d => d.kind === "loopback");
+    const mics = list.filter(d => d.kind === "microphone");
+    const opt = (arr, def) => [`<option value="auto">${def}</option>`]
+      .concat(arr.map(d => `<option value="${esc(d.id)}">${esc(d.name)}${d.is_default ? "（默认）" : ""}</option>`)).join("");
+    $("#v-peer").innerHTML = opt(loops, loops.length ? "自动（默认扬声器回环）" : "没有找到回环设备");
+    $("#v-me").innerHTML = opt(mics, mics.length ? "自动（默认麦克风）" : "没有找到麦克风");
+    if (!list.length) {
+      $("#v-status").innerHTML = `<span class="delta-up">没有检测到音频设备 —— 可能没装 soundcard，或系统没有可用设备。</span>`;
+    } else {
+      $("#v-status").textContent = `检测到 ${loops.length} 个回环设备、${mics.length} 个麦克风`;
+    }
+  } catch (e) { $("#v-status").textContent = e.message; }
+}
+
+$("#v-reload").addEventListener("click", loadDevices);
+
+$("#v-start").addEventListener("click", async () => {
+  busy("#v-start", true, "启动中…");
+  try {
+    const st = await api("/api/voice/start", {
+      method: "POST",
+      body: JSON.stringify({
+        chat_id: $("#v-chat").value || null,
+        peer_device: $("#v-peer").value,
+        me_device: $("#v-me").value,
+      }),
+    });
+    $("#v-stop").disabled = false;
+    $("#v-status").innerHTML = `<span class="delta-down">采集中（${st.channels.join(" + ")}）· ${esc(st.engine)}</span>`;
+  } catch (e) {
+    $("#v-status").innerHTML = `<span class="delta-up">${esc(e.message)}</span>`;
+  } finally { busy("#v-start", false); }
+});
+
+$("#v-stop").addEventListener("click", async () => {
+  try {
+    const st = await api("/api/voice/stop", { method: "POST" });
+    $("#v-stop").disabled = true;
+    $("#v-status").textContent = `已停止，共转写 ${st.segments} 段`;
+  } catch (e) { $("#v-status").innerHTML = `<span class="delta-up">${esc(e.message)}</span>`; }
+});
+
+$("#v-manual-go").addEventListener("click", async () => {
+  const text = $("#v-manual").value.trim();
+  if (!text) return;
+  try {
+    await api("/api/voice/ingest", {
+      method: "POST",
+      body: JSON.stringify({ text, channel: $("#v-manual-ch").value, chat_id: $("#v-chat").value || null }),
+    });
+    $("#v-manual").value = "";
+  } catch (e) { $("#v-status").innerHTML = `<span class="delta-up">${esc(e.message)}</span>`; }
+});
+
+$("#v-clear").addEventListener("click", () => {
+  state.subs = 0; $("#v-count").textContent = "0 段";
+  $("#v-subs").innerHTML = `<div class="empty-hint">还没有转写内容。</div>`;
+});
+
+function pushSub(d) {
+  const box = $("#v-subs");
+  if (state.subs === 0) box.innerHTML = "";
+  state.subs++;
+  $("#v-count").textContent = state.subs + " 段";
+  const el = document.createElement("div");
+  el.className = "sub " + (d.channel === "me" ? "me" : "");
+  el.innerHTML = `
+    <span class="ch">${d.channel === "me" ? "我" : "对方"}</span>
+    <div><div class="txt">${esc(d.text)}</div>
+    <div class="meta">${esc((d.ts || "").slice(11, 19))} · 段长 ${(d.duration_ms / 1000).toFixed(1)}s · #${d.seq}</div></div>`;
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+}
+
+function connectSSE() {
+  const es = new EventSource("/api/voice/stream");
+  es.onmessage = (ev) => {
+    let d; try { d = JSON.parse(ev.data); } catch { return; }
+    if (d.type === "transcript") pushSub(d);
+    else if (d.type === "level") {
+      const bar = $(d.channel === "me" ? "#v-lv-me" : "#v-lv-peer");
+      if (bar) bar.style.width = Math.min(100, Math.round((d.rms || 0) * 700)) + "%";
+    } else if (d.type === "error") {
+      $("#v-status").innerHTML = `<span class="delta-up">${esc(d.message)}</span>`;
+    } else if (d.type === "voice_status") {
+      $("#v-stop").disabled = !d.running;
+      if (!d.running) $("#v-start").disabled = false;
+    }
+  };
+  es.onerror = () => { /* EventSource 会自动重连 */ };
+}
+
+// ================================================================ 设置
+
+const SETTING_FIELDS = [
+  "llm_provider", "llm_base_url", "llm_api_key", "llm_model", "llm_temperature",
+  "ollama_host", "ollama_model",
+  "embedder", "embed_model", "embed_base_url", "embed_api_key",
+  "asr_engine", "whisper_model", "asr_language", "asr_base_url", "asr_api_key", "asr_model",
+  "vad_threshold",
+];
+
+async function loadSettings() {
+  try {
+    const r = await api("/api/settings");
+    for (const k of SETTING_FIELDS) {
+      const el = $("#s-" + k);
+      if (el && r.values[k] !== undefined && r.values[k] !== null) el.value = r.values[k];
+    }
+  } catch (e) { toast("#s-msg", e.message, "err"); }
+}
+
+$("#s-save").addEventListener("click", async () => {
+  const patch = {};
+  for (const k of SETTING_FIELDS) {
+    const el = $("#s-" + k);
+    if (el) patch[k] = el.value;
+  }
+  busy("#s-save", true, "保存中…");
+  try {
+    await api("/api/settings", { method: "PUT", body: JSON.stringify(patch) });
+    toast("#s-msg", "已保存并生效", "ok");
+    loadHealth();
+  } catch (e) { toast("#s-msg", e.message, "err"); }
+  finally { busy("#s-save", false); }
+});
+
+$("#s-reset").addEventListener("click", async () => {
+  try {
+    await api("/api/settings/reset", { method: "POST" });
+    toast("#s-msg", "已清除运行时覆盖", "ok");
+    await loadSettings(); loadHealth();
+  } catch (e) { toast("#s-msg", e.message, "err"); }
+});
+
+async function testProvider(which, btn, msgEl) {
+  busy(btn, true, "测试中…");
+  try {
+    const r = await api(`/api/settings/test?which=${which}`, { method: "POST" });
+    toast(msgEl, `${r.ok ? "✓" : "✗"} ${r.name} — ${r.message}`, r.ok ? "ok" : "err");
+  } catch (e) { toast(msgEl, e.message, "err"); }
+  finally { busy(btn, false); }
+}
+
+$("#s-test-llm").addEventListener("click", () => testProvider("llm", "#s-test-llm", "#s-llm-msg"));
+$("#s-test-embed").addEventListener("click", () => testProvider("embedder", "#s-test-embed", "#s-embed-msg"));
+$("#s-test-asr").addEventListener("click", () => testProvider("asr", "#s-test-asr", "#s-asr-msg"));
+
+$("#s-list-models").addEventListener("click", async () => {
+  busy("#s-list-models", true, "拉取中…");
+  try {
+    const r = await api("/api/settings/models");
+    if (!r.models.length) { toast("#s-llm-msg", r.note || "没有拿到模型列表", "err"); }
+    else {
+      $("#s-models").innerHTML = r.models.slice(0, 80).map(m =>
+        `<span class="chip" style="cursor:pointer" data-m="${esc(m)}">${esc(m)}</span>`).join("");
+      $$("#s-models .chip").forEach(c => c.addEventListener("click", () => {
+        $("#s-llm_model").value = c.dataset.m;
+      }));
+      toast("#s-llm-msg", `拿到 ${r.models.length} 个模型，点一下即可填入`, "ok");
+    }
+  } catch (e) { toast("#s-llm-msg", e.message, "err"); }
+  finally { busy("#s-list-models", false); }
+});
+
+// ================================================================ 启动
+
+(async function init() {
+  await loadHealth();
+  await loadChats();
+  await loadSettings();
+  await loadDevices();
+  connectSSE();
+  setInterval(loadHealth, 30000);
+})();
+</script>
+</body>
+</html>

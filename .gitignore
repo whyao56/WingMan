@@ -1,0 +1,50 @@
+# ---- 运行时数据：绝对不要提交 ----
+# 注意写法：忽略目录内容而不是目录本身，否则下面的 !.gitkeep 不生效
+backend/data/*
+!backend/data/.gitkeep
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.vec
+
+# ---- 聊天记录 / 音频 / 导出文件：属于隐私 ----
+samples/private/
+*.mht
+*.eml
+*.wav
+*.mp3
+*.m4a
+*.flac
+
+# ---- 环境与密钥 ----
+.env
+.env.local
+*.key
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Node / 前端 ----
+node_modules/
+dist/
+.vite/
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ---- 本地实验 ----
+scratch/
+notes-local/
