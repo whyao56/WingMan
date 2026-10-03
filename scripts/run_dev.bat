@@ -1,5 +1,5 @@
 @echo off
-REM ChatWing 开发启动脚本（Windows）
+REM WingMan 开发启动脚本（Windows）
 REM 自动建虚拟环境、装依赖、起服务。
 setlocal
 cd /d "%~dp0..\backend"

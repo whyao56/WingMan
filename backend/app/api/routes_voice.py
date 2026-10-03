@@ -20,7 +20,7 @@ from ..bus import bus
 from ..context import get_ctx
 from ..schemas import AudioDevice, TranscriptSegment, VoiceStatus
 
-log = logging.getLogger("chatwing.api.voice")
+log = logging.getLogger("wingman.api.voice")
 router = APIRouter(prefix="/api/voice", tags=["voice"])
 
 _seq = 0

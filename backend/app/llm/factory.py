@@ -14,7 +14,7 @@ from .mock import MockProvider
 from .ollama import OllamaProvider
 from .openai_compat import OpenAICompatProvider
 
-log = logging.getLogger("chatwing.llm")
+log = logging.getLogger("wingman.llm")
 
 
 def build_llm(ctx: Any) -> ChatProvider:

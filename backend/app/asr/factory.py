@@ -10,7 +10,7 @@ from .cloud import CloudASR
 from .local_whisper import LocalWhisperASR
 from .mock import MockASR
 
-log = logging.getLogger("chatwing.asr")
+log = logging.getLogger("wingman.asr")
 
 
 def build_asr(ctx: Any) -> ASREngine:

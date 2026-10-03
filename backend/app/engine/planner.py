@@ -13,7 +13,7 @@ from ..schemas import PeerAnalysis, Strategy
 from . import prompts
 from .context import ContextPack
 
-log = logging.getLogger("chatwing.engine.planner")
+log = logging.getLogger("wingman.engine.planner")
 
 STAGES = ("陌生期", "熟悉期", "暧昧期", "推进期", "稳定期")
 

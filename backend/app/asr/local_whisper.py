@@ -23,7 +23,7 @@ import numpy as np
 
 from .base import ASREngine, ASRResult
 
-log = logging.getLogger("chatwing.asr.whisper")
+log = logging.getLogger("wingman.asr.whisper")
 
 _model_lock = threading.Lock()
 _model_cache: dict[tuple[str, str, str], Any] = {}

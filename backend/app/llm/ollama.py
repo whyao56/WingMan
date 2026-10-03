@@ -16,7 +16,7 @@ import httpx
 
 from .base import ChatProvider, LLMError
 
-log = logging.getLogger("chatwing.llm.ollama")
+log = logging.getLogger("wingman.llm.ollama")
 
 
 class OllamaProvider(ChatProvider):

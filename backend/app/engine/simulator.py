@@ -20,7 +20,7 @@ from ..schemas import SimBranch, SimStep, SimTree
 from . import prompts
 from .context import ContextPack
 
-log = logging.getLogger("chatwing.engine.simulator")
+log = logging.getLogger("wingman.engine.simulator")
 
 LIKELIHOOD_PROB = {"likely": 0.62, "possible": 0.26, "unlikely": 0.12}
 MAX_BRANCHES = 3

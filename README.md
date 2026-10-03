@@ -1,12 +1,12 @@
-# ChatWing · 聊天僚机
+# WingMan · 聊天僚机
 
-[![CI](https://github.com/whyao56/chatwing/actions/workflows/ci.yml/badge.svg)](https://github.com/whyao56/chatwing/actions/workflows/ci.yml)
+[![CI](https://github.com/whyao56/wingman/actions/workflows/ci.yml/badge.svg)](https://github.com/whyao56/wingman/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.13-blue.svg)](https://www.python.org/)
 
 > 把聊天记录交给大模型记忆，通话时实时听懂对方，然后告诉你**该怎么回**。
 
-ChatWing 是一个本地优先的「对话参谋」系统。它做三件事：
+WingMan 是一个本地优先的「对话参谋」系统。它做三件事：
 
 1. **记忆** —— 导入你与某个人的聊天记录（QQ / 微信 / 通用文件），构建长期记忆与人物画像；
 2. **听懂** —— 通话时双通道采集（系统回环听对方 + 麦克风听自己），实时转写成文字；
@@ -43,7 +43,7 @@ ChatWing 是一个本地优先的「对话参谋」系统。它做三件事：
 
 ```bash
 # 1. 装依赖（Python 3.11+）
-cd chatwing/backend
+cd wingman/backend
 python -m venv .venv
 .venv/Scripts/activate          # Windows
 # source .venv/bin/activate     # macOS / Linux
@@ -107,7 +107,7 @@ python -m uvicorn app.main:app --reload --port 8787
 ## 目录结构
 
 ```
-chatwing/
+wingman/
 ├── backend/
 │   ├── app/
 │   │   ├── adapters/     # 聊天记录接入插件（QQ / 微信 / 通用）

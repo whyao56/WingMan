@@ -13,8 +13,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # ---------------------------------------------------------------- 路径常量
 
-BACKEND_DIR = Path(__file__).resolve().parent.parent  # chatwing/backend
-PROJECT_DIR = BACKEND_DIR.parent                       # chatwing
+BACKEND_DIR = Path(__file__).resolve().parent.parent  # wingman/backend
+PROJECT_DIR = BACKEND_DIR.parent                       # wingman
 DATA_DIR = BACKEND_DIR / "data"
 FRONTEND_DIR = PROJECT_DIR / "frontend"
 SAMPLES_DIR = PROJECT_DIR / "samples"
@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     # ---- 派生 ----
     @property
     def db_path(self) -> Path:
-        return DATA_DIR / "chatwing.db"
+        return DATA_DIR / "wingman.db"
 
 
 @lru_cache(maxsize=1)

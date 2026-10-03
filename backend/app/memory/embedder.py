@@ -20,7 +20,7 @@ from typing import Any, Sequence
 
 import numpy as np
 
-log = logging.getLogger("chatwing.memory.embed")
+log = logging.getLogger("wingman.memory.embed")
 
 _WS = re.compile(r"\s+")
 _PUNCT = re.compile(r"[^\w\u4e00-\u9fff]+")

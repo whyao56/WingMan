@@ -11,7 +11,7 @@ from typing import Any
 from .config import DATA_DIR, EDITABLE_KEYS, Settings, get_settings
 from .store import Store
 
-log = logging.getLogger("chatwing")
+log = logging.getLogger("wingman")
 
 
 class AppContext:

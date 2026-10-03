@@ -16,7 +16,7 @@ from typing import Any
 from ..schemas import Fact, Msg, Persona, ProfileBuildResult
 from .retriever import HybridRetriever
 
-log = logging.getLogger("chatwing.memory.profiler")
+log = logging.getLogger("wingman.memory.profiler")
 
 FACT_BATCH_LINES = 60
 FACT_MAX_LINES = 600

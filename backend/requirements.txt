@@ -1,4 +1,4 @@
-# ---- ChatWing 后端核心依赖 ----
+# ---- WingMan 后端核心依赖 ----
 fastapi>=0.110
 uvicorn[standard]>=0.27
 pydantic>=2.6

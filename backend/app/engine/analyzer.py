@@ -14,7 +14,7 @@ from ..schemas import PeerAnalysis
 from . import prompts
 from .context import ContextPack
 
-log = logging.getLogger("chatwing.engine.analyzer")
+log = logging.getLogger("wingman.engine.analyzer")
 
 
 def _str_list(value: Any, limit: int) -> list[str]:

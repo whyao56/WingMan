@@ -27,7 +27,7 @@ from ..schemas import PeerAnalysis, Prediction, ReplyOption, Scores, Strategy
 from . import prompts
 from .context import ContextPack
 
-log = logging.getLogger("chatwing.engine.suggestor")
+log = logging.getLogger("wingman.engine.suggestor")
 
 STYLES = ("接梗调侃", "真诚共情", "好奇引导", "顺势推进", "保守稳妥")
 

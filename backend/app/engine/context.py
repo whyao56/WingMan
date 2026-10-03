@@ -22,7 +22,7 @@ from typing import Any
 from ..memory.retriever import HybridRetriever, Retrieved
 from ..schemas import ChatInfo, Fact, Persona, Summary
 
-log = logging.getLogger("chatwing.engine.context")
+log = logging.getLogger("wingman.engine.context")
 
 MAX_FACTS = 60
 MAX_SUMMARIES = 5

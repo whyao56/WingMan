@@ -25,10 +25,10 @@ PEER_LINE = "哈哈哈今天好累啊"
 
 
 def _fresh_ctx():
-    """用临时数据库，避免污染真实的 backend/data/chatwing.db。"""
+    """用临时数据库，避免污染真实的 backend/data/wingman.db。"""
     from app import config
 
-    tmpdir = Path(tempfile.mkdtemp(prefix="chatwing_test_"))
+    tmpdir = Path(tempfile.mkdtemp(prefix="wingman_test_"))
     config.DATA_DIR = tmpdir
     config.get_settings.cache_clear()
 
@@ -148,7 +148,7 @@ async def run_local_score_checks() -> None:
 
 def main() -> int:
     print("=" * 64)
-    print("ChatWing 冒烟测试（Mock Provider，无需 API Key）")
+    print("WingMan 冒烟测试（Mock Provider，无需 API Key）")
     print("=" * 64)
 
     print("\n[1/2] 本地打分器边界用例 …")

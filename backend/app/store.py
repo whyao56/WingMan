@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -22,7 +23,7 @@ import numpy as np
 
 from .schemas import ChatInfo, Fact, Msg, Persona, Summary
 
-log = logging.getLogger("chatwing.store")
+log = logging.getLogger("wingman.store")
 
 # ---------------------------------------------------------------- Schema
 
@@ -132,12 +133,48 @@ def _to_np(blob: bytes, dim: int) -> np.ndarray:
     return np.frombuffer(blob, dtype=np.float32, count=dim).copy()
 
 
+# 项目原名 ChatWing，数据库文件曾叫 chatwing.db。改名后要让老数据跟过来，
+# 否则用户会看到「数据全没了」——其实只是换了个文件名没找着。
+_LEGACY_DB_NAMES: tuple[str, ...] = ("chatwing.db",)
+_DB_SIDECAR_SUFFIXES: tuple[str, ...] = ("-journal", "-wal", "-shm")
+
+
+def _migrate_legacy_db_file(db_path: Path) -> bool:
+    """把老名字的库文件改名为新名字。返回是否真的搬过。
+
+    只在「新文件不存在」时才搬，避免覆盖用户已经写好的新库。
+    同目录下 rename 是原子的；万一跨设备失败，退化为复制并保留原件。
+    """
+    if db_path.exists():
+        return False
+    for legacy_name in _LEGACY_DB_NAMES:
+        legacy = db_path.with_name(legacy_name)
+        if not legacy.exists():
+            continue
+        try:
+            legacy.rename(db_path)
+        except OSError:
+            shutil.copy2(legacy, db_path)
+            legacy.unlink(missing_ok=True)
+        for suffix in _DB_SIDECAR_SUFFIXES:
+            src = legacy.with_name(legacy.name + suffix)
+            if src.exists():
+                src.rename(db_path.with_name(db_path.name + suffix))
+        log.warning(
+            "检测到旧版数据库文件 %s，已自动更名为 %s（数据保留）",
+            legacy_name, db_path.name,
+        )
+        return True
+    return False
+
+
 class Store:
     """同步的 SQLite 封装。API 层是异步的，用时用 asyncio.to_thread 包一下即可。"""
 
     def __init__(self, db_path: Path):
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        _migrate_legacy_db_file(self.db_path)
         self._lock = threading.RLock()
 
     # ------------------------------------------------------------ 连接

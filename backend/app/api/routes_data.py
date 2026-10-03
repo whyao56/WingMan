@@ -19,7 +19,7 @@ from ..schemas import (
     ChatInfo, Fact, ImportPreview, ImportResult, Persona, ProfileBuildResult,
 )
 
-log = logging.getLogger("chatwing.api.data")
+log = logging.getLogger("wingman.api.data")
 router = APIRouter(prefix="/api", tags=["data"])
 
 
@@ -52,7 +52,7 @@ async def import_preview(
 ) -> ImportPreview:
     """只解析不入库，让用户先确认适配器选得对不对。"""
     suffix = Path(file.filename or "upload.txt").suffix or ".txt"
-    tmp = Path(tempfile.mkdtemp(prefix="chatwing_preview_")) / f"upload{suffix}"
+    tmp = Path(tempfile.mkdtemp(prefix="wingman_preview_")) / f"upload{suffix}"
     try:
         tmp.write_bytes(await file.read())
         return await asyncio.to_thread(
@@ -73,7 +73,7 @@ async def import_records(
 ) -> ImportResult:
     ctx = get_ctx()
     suffix = Path(file.filename or "upload.txt").suffix or ".txt"
-    tmp = Path(tempfile.mkdtemp(prefix="chatwing_import_")) / f"upload{suffix}"
+    tmp = Path(tempfile.mkdtemp(prefix="wingman_import_")) / f"upload{suffix}"
     try:
         tmp.write_bytes(await file.read())
         result = await asyncio.to_thread(

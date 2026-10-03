@@ -2,11 +2,11 @@
 
 用法（先启动服务，再另开一个终端跑）：
 
-    cd chatwing/backend
+    cd wingman/backend
     python -m uvicorn app.main:app --port 8787
 
     # 另开终端
-    cd chatwing/backend
+    cd wingman/backend
     python ../scripts/e2e_check.py
     # 也可以指定地址：python ../scripts/e2e_check.py http://127.0.0.1:8787
 

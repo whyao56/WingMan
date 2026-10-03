@@ -281,7 +281,7 @@ def import_text(
     suffix: str = ".txt",
 ) -> ImportResult:
     """把用户直接粘进来的文本当记录导入。内部写临时文件复用同一条解析链路。"""
-    tmp = Path(tempfile.gettempdir()) / f"chatwing_paste_{hashlib.md5(text.encode('utf-8', 'ignore')).hexdigest()[:8]}{suffix}"
+    tmp = Path(tempfile.gettempdir()) / f"wingman_paste_{hashlib.md5(text.encode('utf-8', 'ignore')).hexdigest()[:8]}{suffix}"
     tmp.write_text(text, encoding="utf-8")
     try:
         return import_file(

@@ -13,7 +13,7 @@ import numpy as np
 
 from .base import ASREngine, ASRResult, wav_bytes
 
-log = logging.getLogger("chatwing.asr.cloud")
+log = logging.getLogger("wingman.asr.cloud")
 
 
 class CloudASR(ASREngine):

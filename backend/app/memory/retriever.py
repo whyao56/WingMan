@@ -25,7 +25,7 @@ import numpy as np
 from ..schemas import Msg
 from .embedder import Embedder
 
-log = logging.getLogger("chatwing.memory.retriever")
+log = logging.getLogger("wingman.memory.retriever")
 
 W_SEMANTIC = 0.60
 W_KEYWORD = 0.25

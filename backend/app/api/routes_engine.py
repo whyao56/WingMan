@@ -17,7 +17,7 @@ from ..engine import pipeline, simulator
 from ..engine.context import build_context
 from ..schemas import SimTree, SuggestionBundle
 
-log = logging.getLogger("chatwing.api.engine")
+log = logging.getLogger("wingman.api.engine")
 router = APIRouter(prefix="/api", tags=["engine"])
 
 

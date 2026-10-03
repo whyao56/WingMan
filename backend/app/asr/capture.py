@@ -48,7 +48,7 @@ from ..bus import bus
 from ..schemas import AudioDevice, TranscriptSegment, VoiceStatus
 from .base import rms
 
-log = logging.getLogger("chatwing.asr.capture")
+log = logging.getLogger("wingman.asr.capture")
 
 
 def _soundcard() -> Any:
@@ -261,7 +261,7 @@ class ChannelWorker(threading.Thread):
         segmenter: VADSegmenter,
         blocksize_ms: float = 30.0,
     ) -> None:
-        super().__init__(daemon=True, name=f"chatwing-capture-{channel}")
+        super().__init__(daemon=True, name=f"wingman-capture-{channel}")
         self.session = session
         self.channel = channel
         self.mic = mic

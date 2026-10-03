@@ -12,7 +12,7 @@ import logging
 from collections import deque
 from typing import Any
 
-log = logging.getLogger("chatwing.bus")
+log = logging.getLogger("wingman.bus")
 
 
 class EventBus:

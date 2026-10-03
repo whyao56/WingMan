@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ChatWing 开发启动脚本（macOS / Linux / Git Bash）
+# WingMan 开发启动脚本（macOS / Linux / Git Bash）
 # 自动建虚拟环境、装依赖、起服务。
 
 set -euo pipefail

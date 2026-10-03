@@ -25,7 +25,7 @@ from .config import FRONTEND_DIR, get_settings
 from .context import get_ctx
 from .llm.base import LLMError
 
-logger = logging.getLogger("chatwing")
+logger = logging.getLogger("wingman")
 
 
 def _setup_logging(level: str) -> None:
@@ -49,7 +49,7 @@ async def lifespan(app: FastAPI):
     bus.bind_loop(asyncio.get_running_loop())
 
     counts = ctx.store.counts()
-    logger.info("ChatWing v%s 启动中…", __version__)
+    logger.info("WingMan v%s 启动中…", __version__)
     logger.info("数据文件：%s", ctx.store.db_path)
     logger.info(
         "已有数据：%d 条消息 / %d 条事实 / %d 个会话",
@@ -72,11 +72,11 @@ async def lifespan(app: FastAPI):
         if session and session.running:
             logger.info("停止语音采集…")
             await asyncio.to_thread(session.stop)
-        logger.info("ChatWing 已退出")
+        logger.info("WingMan 已退出")
 
 
 app = FastAPI(
-    title="ChatWing · 聊天僚机",
+    title="WingMan · 聊天僚机",
     description="本地优先的对话参谋系统：记忆聊天记录、听懂通话、给出可推演的回复建议。",
     version=__version__,
     lifespan=lifespan,

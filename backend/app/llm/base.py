@@ -13,7 +13,7 @@ import re
 from abc import ABC, abstractmethod
 from typing import Any
 
-log = logging.getLogger("chatwing.llm")
+log = logging.getLogger("wingman.llm")
 
 
 class LLMError(RuntimeError):

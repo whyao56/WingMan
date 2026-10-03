@@ -15,7 +15,7 @@ from ..schemas import Msg, SuggestionBundle
 from . import analyzer, planner, suggestor
 from .context import build_context
 
-log = logging.getLogger("chatwing.engine.pipeline")
+log = logging.getLogger("wingman.engine.pipeline")
 
 
 def store_peer_message(store: Any, chat_id: str, text: str) -> int | None:

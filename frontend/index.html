@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ChatWing · 聊天僚机</title>
+<title>WingMan · 聊天僚机</title>
 <style>
 :root{
   --bg:#0e1116; --panel:#151a22; --panel2:#1b212b; --panel3:#212836;
@@ -893,7 +893,7 @@ $("#mem-export").addEventListener("click", async () => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `chatwing-${state.chatId}.json`;
+    a.download = `wingman-${state.chatId}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
   } catch (e) { toast("#mem-msg", e.message, "err"); }

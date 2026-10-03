@@ -13,7 +13,7 @@ import httpx
 
 from .base import ChatProvider, LLMError
 
-log = logging.getLogger("chatwing.llm.openai")
+log = logging.getLogger("wingman.llm.openai")
 
 
 class OpenAICompatProvider(ChatProvider):
@@ -53,7 +53,7 @@ class OpenAICompatProvider(ChatProvider):
         h = {
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "User-Agent": "ChatWing/0.1",
+            "User-Agent": "WingMan/0.1",
         }
         if self.api_key:
             h["Authorization"] = f"Bearer {self.api_key}"
