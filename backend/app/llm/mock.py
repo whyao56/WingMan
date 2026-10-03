@@ -214,13 +214,26 @@ _FACT_PATTERNS: tuple[tuple[str, str, float], ...] = (
 
 _LINE_ID = re.compile(r"#(\d+)\|")
 
+# 同一个 key 下最多保留几条。事实抽取的总量上限也要放开：
+# 早期版本只留 1 条/键 + 总量 20，会把「喜欢猫」「喜欢火锅」这种
+# 同类但不同内容的事实压掉一半。
+MAX_FACTS_PER_KEY = 4
+MAX_FACTS_TOTAL = 30
+
 # 抽出来的值常带着句尾语气词或标点（"猫的" "看展吗"），
 # 以及一些明显不构成事实的泛化词（"认真的" "这样的"）。
 _TAIL_PARTICLES = "的了吗啊呀吧呢嘛哦嗯哈啦嘞哇诶唉"
 _FACT_BLACKLIST = {
     "认真的", "真的", "对的", "错的", "这样的", "那样的", "什么的", "一个人",
     "自己", "这种", "那种", "一样", "回事", "意思", "事情", "东西", "时候",
+    # 清掉句尾语气词后可能残留的单字/双字功能词
+    "的", "了", "吗", "吧", "呢", "啊", "呀", "哦", "嗯", "是", "在", "有",
+    "什么", "怎么", "这样", "那样", "这些", "那些", "一个", "多少",
 }
+
+# 这些键允许单字取值：中文里「喜欢猫」「爱吃辣」本身就是完整事实。
+# 其他键的单字结果基本是语气词残渣，丢弃更安全。
+_SHORT_VALUE_KEYS = {"喜欢", "讨厌", "爱吃", "养的宠物"}
 
 
 def clean_fact_value(value: str) -> str:
@@ -245,7 +258,11 @@ def extract_facts_from_context(user_text: str) -> list[dict[str, Any]]:
             if not m:
                 continue
             value = clean_fact_value(m.group(1))
-            if not value or value in _FACT_BLACKLIST or len(value) < 2:
+            if not value or value in _FACT_BLACKLIST:
+                continue
+            # 注意：不要用「长度 < 2」一刀切 —— "我超喜欢猫的" 清成 "猫" 后
+            # 只有 1 个字，但它是真事实。改由键的白名单来决定。
+            if len(value) < 2 and key not in _SHORT_VALUE_KEYS:
                 continue
             k = (speaker, f"{key}:{value}")
             if k in found:
@@ -257,13 +274,21 @@ def extract_facts_from_context(user_text: str) -> list[dict[str, Any]]:
                 "confidence": conf,
                 "evidence": mid.group(1) if mid else "",
             }
-    # 同 key 只保留证据最多 / 置信度最高的那条，避免「喜欢」刷屏
-    by_key: dict[tuple[str, str], dict[str, Any]] = {}
+    # 同 key 分组保留前 N 条（按置信度）。
+    #
+    # 这里**不能**只保留 1 条：「我超爱吃火锅的」和「我超喜欢猫的」都会被
+    # "喜欢" 命中，只留一条会让画像凭空丢掉「她喜欢猫」这种关键信息。
+    # 而且 found 的键本身就是 (speaker, key:value)，重复项早已合并，
+    # 这层压缩只该起到"防止单一 key 刷屏"的作用，不该丢不同内容的事实。
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for f in found.values():
-        kk = (f["subject"], f["key"])
-        if kk not in by_key or f["confidence"] > by_key[kk]["confidence"]:
-            by_key[kk] = f
-    return list(by_key.values())[:20]
+        grouped.setdefault((f["subject"], f["key"]), []).append(f)
+
+    out: list[dict[str, Any]] = []
+    for items in grouped.values():
+        items.sort(key=lambda d: -d["confidence"])
+        out.extend(items[:MAX_FACTS_PER_KEY])
+    return out[:MAX_FACTS_TOTAL]
 
 
 # ---------------------------------------------------------------- Provider

@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -21,9 +22,31 @@ import numpy as np
 
 from .schemas import ChatInfo, Fact, Msg, Persona, Summary
 
+log = logging.getLogger("chatwing.store")
+
 # ---------------------------------------------------------------- Schema
 
-SCHEMA = """
+# facts 表的唯一键必须带上 value。
+#
+# 「喜欢」是一对多关系：喜欢猫、喜欢火锅、喜欢陶艺是三条并列的事实。
+# 早期版本唯一键写成 (chat_id, subject, key)，配合 INSERT OR REPLACE，
+# 会让后抽到的事实**静默覆盖**先抽到的 —— 「她喜欢猫」就这么消失了，
+# 而且不报任何错。单独抽成常量是因为升级老库时要复用这段 DDL 重建表。
+FACTS_DDL = """
+CREATE TABLE IF NOT EXISTS facts (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id     TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+    subject     TEXT NOT NULL DEFAULT 'peer',
+    key         TEXT NOT NULL,
+    value       TEXT NOT NULL,
+    confidence  REAL NOT NULL DEFAULT 0.6,
+    evidence    TEXT DEFAULT '',
+    updated_at  TEXT DEFAULT '',
+    UNIQUE (chat_id, subject, key, value)
+);
+"""
+
+SCHEMA = f"""
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 
@@ -59,17 +82,7 @@ CREATE TABLE IF NOT EXISTS embeddings (
     vec         BLOB NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS facts (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    chat_id     TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
-    subject     TEXT NOT NULL DEFAULT 'peer',
-    key         TEXT NOT NULL,
-    value       TEXT NOT NULL,
-    confidence  REAL NOT NULL DEFAULT 0.6,
-    evidence    TEXT DEFAULT '',
-    updated_at  TEXT DEFAULT '',
-    UNIQUE (chat_id, subject, key)
-);
+{FACTS_DDL}
 
 CREATE TABLE IF NOT EXISTS summaries (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -149,6 +162,37 @@ class Store:
             # executescript 会隐式提交，且 PRAGMA foreign_keys 在每个新连接上都要重设
         with self.conn() as c:
             c.execute("PRAGMA foreign_keys = ON")
+        self._migrate_facts_unique()
+
+    def _migrate_facts_unique(self) -> None:
+        """把老库 facts 表的唯一约束从 (chat_id, subject, key) 升到四列。
+
+        SQLite 不支持改动约束，只能重建表。新约束比旧约束更宽松
+        （老库每个 key 只存得下一条），所以数据不会丢。
+        直接读 sqlite_master 里的原始 DDL 来判断版本，比试探索引更明确。
+        """
+        with self.conn() as c:
+            row = c.execute(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'facts'"
+            ).fetchone()
+            if row is None:
+                return
+            ddl = " ".join((row["sql"] or "").split())
+            if "chat_id, subject, key, value" in ddl:
+                return  # 已经是新约束
+
+            c.execute("ALTER TABLE facts RENAME TO facts_legacy")
+            c.execute(FACTS_DDL)
+            c.execute(
+                """
+                INSERT OR IGNORE INTO facts
+                    (id, chat_id, subject, key, value, confidence, evidence, updated_at)
+                SELECT id, chat_id, subject, key, value, confidence, evidence, updated_at
+                FROM facts_legacy
+                """
+            )
+            c.execute("DROP TABLE facts_legacy")
+            log.info("facts 表已升级：同 key 现在可以并存多个不同的 value")
 
     # ------------------------------------------------------------ chats
 
@@ -412,13 +456,18 @@ class Store:
         return len(facts)
 
     def upsert_fact(self, chat_id: str, fact: Fact) -> None:
+        """单条事实的插入或更新。
+
+        冲突目标必须与表上的唯一键完全一致，否则 SQLite 会直接抛
+        "ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint"。
+        """
         with self.conn() as c:
             c.execute(
                 """
                 INSERT INTO facts (chat_id, subject, key, value, confidence, evidence, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(chat_id, subject, key) DO UPDATE SET
-                    value = excluded.value, confidence = excluded.confidence,
+                ON CONFLICT(chat_id, subject, key, value) DO UPDATE SET
+                    confidence = excluded.confidence,
                     evidence = excluded.evidence, updated_at = excluded.updated_at
                 """,
                 (chat_id, fact.subject, fact.key, fact.value,
