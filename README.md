@@ -1,5 +1,9 @@
 # ChatWing · 聊天僚机
 
+[![CI](https://github.com/whyao56/chatwing/actions/workflows/ci.yml/badge.svg)](https://github.com/whyao56/chatwing/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.13-blue.svg)](https://www.python.org/)
+
 > 把聊天记录交给大模型记忆，通话时实时听懂对方，然后告诉你**该怎么回**。
 
 ChatWing 是一个本地优先的「对话参谋」系统。它做三件事：
