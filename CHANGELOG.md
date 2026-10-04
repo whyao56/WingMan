@@ -33,9 +33,11 @@
 
 - 用户入口统一为根目录 `wingman.cmd`；`scripts/` 下的开发调试脚本仍然保留。
 - 依赖新增**精确版本锁定** `backend/requirements.lock.txt`（含传递依赖，启动器安装的就是它）；
-  核心依赖在 **Python 3.11 上实测安装通过**；**Python 3.13 只做过依赖解析验证**
-  （`pip --dry-run --only-binary=:all:`，结论记在 `requirements.lock.txt` 的 "Resolution re-checked" 一段），
-  **没有在 3.13 上真实安装过**（开发机没有 3.13）。`backend/requirements.txt` 保留为人类可读的依赖下限声明。
+  核心依赖在 **Python 3.11 上实测安装通过**；**Python 3.13 已在 CI（GitHub Actions, Ubuntu）上用同一份锁定集
+  真实安装并跑通冒烟测试** —— run [37214337358](https://github.com/whyao56/WingMan/actions/runs/37214337358)，
+  `3.11` 与 `3.13` 两个 job 均 success（更早的证据是 `pip --dry-run --only-binary=:all:` 解析，记在
+  `requirements.lock.txt` 的 "Resolution re-checked" 一段）；**开发机（中文 Windows）没有 3.13 解释器，
+  本机仍未在 3.13 上真跑过**。`backend/requirements.txt` 保留为人类可读的依赖下限声明。
 - 控制台输出统一为 UTF-8（65001）：启动器负责切换，并在**所有退出路径**恢复你原来的代码页；
   面向用户的 `.cmd` / `.bat` 是纯 ASCII、PowerShell 引导脚本是 UTF-8 带 BOM；终端渲染不了中文时自动降级为纯 ASCII 输出。
 - README 的「快速开始」重写为使用者的 3 步；架构、合规、踩坑记录等既有内容完整保留。
@@ -54,6 +56,8 @@
   录音与数据处理边界以 [docs/COMPLIANCE.md](docs/COMPLIANCE.md) 为准。
 - **不做自动回复 / 自动代聊**：系统只产出建议，发送始终由用户本人确认。
 - 前端仍是单文件 `frontend/index.html`，零构建，没有工程化重写（见 ROADMAP 阶段 2）。
-- 仅在中文 Windows + Python 3.11 上人工验收（真装 + 端到端跑通）；
-  Python 3.13 只做到依赖解析验证，未真装；CI 工作流（Ubuntu）虽已配置 Python 3.11 / 3.13 冒烟矩阵，
-  但本仓库尚未 push，**CI 还没有在真实环境下执行过** —— 其他平台与 3.13 结论均未验证。
+- 仅在中文 Windows + Python 3.11 上做人工验收（真装 + 端到端跑通）；macOS / Linux 桌面未做人工验收。
+- Python 3.13 的结论来自 CI、不是本机：`CI` 工作流（Ubuntu）已在真实环境执行并通过 ——
+  run [37214337358](https://github.com/whyao56/WingMan/actions/runs/37214337358) 的 `3.11` / `3.13` 两个 job 均 success
+  （用 `backend/requirements.lock.txt` 真实安装，并跑通冒烟测试与编码防护步骤）；
+  **开发机没有 3.13 解释器，本机未在 3.13 上真跑过**。
