@@ -28,12 +28,13 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          # 与启动器（wingman.cmd / scripts/bootstrap.ps1）用同一份锁定集
+          cache-dependency-path: backend/requirements.lock.txt
 
-      - name: 安装依赖
+      - name: 安装依赖（锁定集：与本地启动器完全一致）
         run: |
           python -m pip install --upgrade pip
-          pip install -r backend/requirements.txt
+          pip install -r backend/requirements.lock.txt
 
       - name: 后端语法检查
         run: python -m compileall -q backend/app backend/tests scripts
@@ -41,6 +42,19 @@ jobs:
       - name: 端到端冒烟测试（Mock Provider，无需任何 API Key）
         working-directory: backend
         run: python tests/test_smoke.py
+
+      - name: 冒烟测试的编码防护（无编码环境变量 + 纯 ASCII 流都不得崩溃）
+        working-directory: backend
+        run: |
+          # 真正的 GBK(cp936) 控制台只能中文 Windows 本机验（见 docs/TROUBLESHOOTING.md），
+          # Linux 抓不到；这里守住能在 CI 里守住的两件事：
+          #   1) 调用方不设置任何编码环境变量时也能跑通（不依赖 PYTHONIOENCODING / PYTHONUTF8）
+          #   2) 输出流连中文都表示不了时必须可读降级，且不得出现非 ASCII 字节（乱码）
+          env -u PYTHONIOENCODING -u PYTHONUTF8 LANG=C LC_ALL=C python tests/test_smoke.py > /tmp/wingman_smoke_noenv.txt
+          tail -3 /tmp/wingman_smoke_noenv.txt
+          PYTHONIOENCODING=ascii PYTHONUTF8=0 python tests/test_smoke.py > /tmp/wingman_smoke_ascii.txt
+          tail -3 /tmp/wingman_smoke_ascii.txt
+          python -c "import sys; data=open('/tmp/wingman_smoke_ascii.txt','rb').read(); bad=[b for b in data if b>127 or (b<32 and b not in (9,10,13))]; print('ascii-fallback bytes=%d non-ascii/control=%d' % (len(data), len(bad))); sys.exit(1 if bad else 0)"
 
       - name: 前端 JS 语法检查
         run: |

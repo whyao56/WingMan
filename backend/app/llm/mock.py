@@ -309,6 +309,21 @@ class MockProvider(ChatProvider):
         payload = self._dispatch(tag, user)
         return json.dumps(payload, ensure_ascii=False, indent=2)
 
+    async def ping(self) -> tuple[bool, str]:
+        """连通性自检：Mock 是内置演示引擎，本身就是「可用」的。
+
+        基类的 ping() 会真发一次 complete()，而 MockProvider.chat_raw 是按 system
+        首行的 [TASK:XXX] 标记分派的；「测试连通」用的 system 没有标记（task_tag
+        返回 UNKNOWN），会被分派表当成错误 → 控制台上显示红叉，新用户会以为坏了。
+        这里直接返回成功语义 + 解释文案：说明当前是演示引擎、去哪里接真实模型。
+        真实 provider 的 ping()（真调一次）不受影响，仍由基类实现。
+        """
+        return True, (
+            "演示引擎（内置规则）已就绪：不需要 API Key，输出仅用于跑通流程、看效果。"
+            "要接真实模型：在「设置」里把 Provider 换成 OpenAI 兼容或 Ollama，"
+            "填好 base_url / api_key / model 后再次点「测试连通」。"
+        )
+
     # ------------------------------------------------------ 分派
 
     def _dispatch(self, tag: str, user: str) -> dict[str, Any]:

@@ -83,6 +83,45 @@ app = FastAPI(
 )
 
 _settings = get_settings()
+
+
+class JsonCharsetMiddleware:
+    """给所有 `application/json` 响应补上 `charset=utf-8`。
+
+    背景：FastAPI/Starlette 的默认 JSON 响应头只有 `application/json`。中文用户在
+    cp936 的 cmd 里按文档用 curl 排错时，curl 会按本地代码页解码，`/api/health`
+    里的中文 note 就成了乱码。这里只在响应头层面补 charset：
+      * 不改响应体字段、不改状态码、不碰其它 content-type（StaticFiles 的 text/html
+        与 CORS 响应头都不受影响）；
+      * 用纯 ASGI 中间件实现（不用 BaseHTTPMiddleware），因此流式响应与静态文件
+        的行为保持不变。
+    """
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_charset(message) -> None:
+            if message.get("type") == "http.response.start":
+                headers = list(message.get("headers") or [])
+                for index, (name, value) in enumerate(headers):
+                    if name.lower() == b"content-type":
+                        lowered = value.lower()
+                        if lowered.startswith(b"application/json") and b"charset" not in lowered:
+                            headers[index] = (name, value + b"; charset=utf-8")
+                        break
+                message["headers"] = headers
+            await send(message)
+
+        await self.app(scope, receive, send_with_charset)
+
+
+# 先注册 charset 中间件、再注册 CORS：后注册的在外层，CORS 仍然能覆盖所有响应
+app.add_middleware(JsonCharsetMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in _settings.cors_origins.split(",") if o.strip()] or ["*"],
