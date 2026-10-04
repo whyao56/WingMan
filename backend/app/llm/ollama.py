@@ -18,6 +18,34 @@ from .base import ChatProvider, LLMError
 
 log = logging.getLogger("wingman.llm.ollama")
 
+# 本机 Ollama 走回环时不能被系统代理劫持（否则报「网关错误 502」而不是「连不上 Ollama」）。
+_LOOPBACK_HOSTS = frozenset({"localhost", "::1"})
+
+
+def _trust_env_for(url: str) -> bool:
+    """这个地址要不要继承环境代理（httpx 的 trust_env）。回环一律 False。
+
+    httpx 默认 trust_env=True 会继承 HTTP_PROXY 环境变量与 Windows 注册表里的系统代理；
+    本机代理软件开全局模式时，发往 127.0.0.1:11434 的请求会被代理接管 —— Ollama 明明在跑，
+    应用却报「网关错误（502）/连不上」。非回环地址保持 True，不影响用户走代理访问云端。
+    （与 llm/openai_compat.py、memory/embedder.py、asr/cloud.py 里的同名实现保持一致，
+      测试 test_loopback_proxy.py 会断言四份行为相同。）
+    """
+    raw = (url or "").strip().lower()
+    if "://" in raw:
+        raw = raw.split("://", 1)[1]                        # 去掉 scheme
+    authority = raw.split("/", 1)[0].rsplit("@", 1)[-1]     # 去掉 user:pass@
+    if authority.startswith("["):                           # [::1]:11434 这种 IPv6 字面量
+        host = authority.split("]", 1)[0][1:]
+    elif authority.count(":") == 1:
+        host = authority.rsplit(":", 1)[0]                  # host:port
+    else:
+        host = authority                                    # 没写端口，或没写方括号的 IPv6
+    host = host.strip().rstrip(".")
+    if not host:
+        return True
+    return not (host in _LOOPBACK_HOSTS or host.startswith("127."))
+
 
 class OllamaProvider(ChatProvider):
     name = "ollama"
@@ -60,7 +88,8 @@ class OllamaProvider(ChatProvider):
 
         url = f"{self.host}/api/chat"
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(timeout=self.timeout,
+                                         trust_env=_trust_env_for(self.host)) as client:
                 resp = await client.post(url, json=payload)
         except httpx.ConnectError as exc:
             raise LLMError(
@@ -87,7 +116,8 @@ class OllamaProvider(ChatProvider):
 
     async def list_models(self) -> list[str]:
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=10.0,
+                                         trust_env=_trust_env_for(self.host)) as client:
                 resp = await client.get(f"{self.host}/api/tags")
             if resp.status_code >= 400:
                 return []

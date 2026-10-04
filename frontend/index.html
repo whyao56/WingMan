@@ -452,15 +452,15 @@ table.t tr:hover td{background:var(--panel2)}
         <div class="grid2">
           <label class="f"><span>模式</span>
             <select id="s-embedder">
-              <option value="auto">auto（有云端配置就用云端，否则本地哈希）</option>
+              <option value="auto">auto（能复用云端 embedding 就用云端，否则本地哈希）</option>
               <option value="cloud">cloud（OpenAI 兼容 /v1/embeddings）</option>
               <option value="hash">hash（纯本地，零依赖）</option>
             </select></label>
           <label class="f"><span>模型名</span>
             <input type="text" id="s-embed_model" placeholder="text-embedding-3-small" /></label>
-          <label class="f"><span>Base URL（留空复用主模型）</span>
+          <label class="f"><span>Base URL（留空：OpenAI 兼容时复用主模型端点；Ollama 时退化为本地哈希向量）</span>
             <input type="text" id="s-embed_base_url" /></label>
-          <label class="f"><span>API Key（留空复用主模型）</span>
+          <label class="f"><span>API Key（留空则沿用主模型 Key；Ollama 场景用不到）</span>
             <input type="password" id="s-embed_api_key" /></label>
         </div>
         <button class="btn sm" id="s-test-embed">测试向量化</button>

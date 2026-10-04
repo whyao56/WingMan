@@ -11,7 +11,7 @@ WingMan **不配任何模型也能跑通全流程**，但那时用的是内置�
 |---|---|---|---|
 | **Mock**（默认） | 什么都不用 | 规则模板，能自圆其说，但不懂你说的话 | 完全在本机 |
 | **OpenAI 兼容云 API** | 一个服务商的 `base_url` + `API Key` + 模型名 | 最好，推荐先用这个试 | 你发的消息与检索出的历史上下文会**上传到服务商** |
-| **Ollama 本地模型** | 本机装 Ollama + 拉一个模型（几个 GB） | 比云端弱一些，够用 | 推理在本机；但**向量化默认会跟随主模型走云端**（见第 6 节） |
+| **Ollama 本地模型** | 本机装 Ollama + 拉一个模型（几个 GB） | 比云端弱一些，够用 | 推理在本机；向量化默认退化为**本地哈希向量**（检索质量一般，想让检索更准就显式配 `EMBED_BASE_URL` 指向你的 embedding 服务，见第 7 节） |
 
 支持一切 OpenAI 兼容协议的服务：DeepSeek、通义、Kimi、智谱、硅基流动、OpenAI、各类中转站、vLLM、LM Studio……
 只要它提供 `/v1/chat/completions`。切换是**控制台里改一下、点保存**的事，不用改代码、不用重启。
@@ -126,7 +126,7 @@ curl.exe -s http://127.0.0.1:8787/api/health
 | 请求过于频繁或额度用尽（429） | 限速或余额不足 |
 | 服务端错误（500）/ 网关错误（502）/ 服务不可用（503） | 服务商那边的问题，稍后重试；中转服务不稳定很常见 |
 | 请求超时（120s） | 网络慢或服务商卡住；可换更小的模型试试 |
-| 网络错误：… | 本机网络/代理问题，见 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) 的依赖与代理一节 |
+| 网络错误：… / 网关错误（502）连本机服务也报 | 本机网络/代理问题，分两种场景：装依赖走代理看 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) 第 3 节；**调用模型时请求被代理劫持（包括系统代理截走发往 127.0.0.1 的请求）看第 12 节** |
 | 响应不是 JSON / 响应里没有 choices | 该地址不是 OpenAI 兼容接口，或返回了网页（常见于把网页地址当 API 填） |
 
 ---
@@ -269,11 +269,14 @@ WingMan 离线 OpenAI 兼容 stub 已就绪（不联网，不需要真实密钥�
 |---|---|
 | Mock | 不出本机 |
 | 云端 LLM | **会随每次请求上传到该服务商**（这就是用云端的取舍） |
-| Ollama + 向量模型设为 `hash` | 推理与向量化都在本机 |
-| Ollama，但向量模型保持 `auto` 且填了云端 Key | 推理在本机，**向量化仍会走云端** |
+| Ollama + 向量模型留 `auto`（没填 `EMBED_BASE_URL`） | 推理与向量化都在本机：`auto` 在本机模型下**退化为本地哈希向量**，不会走云端 |
+| Ollama，但你显式填了 `EMBED_BASE_URL`（指向云端 embedding 服务） | 推理在本机，**向量化会走云端** |
 
-最后一行是最容易踩的坑：想让数据尽量不出本机，要把三处都设好 —— Provider 选 `Ollama`、
-「向量模型」选 `hash`、「语音识别」选 `mock` 或本地 whisper。**只要有一处指向云端，那部分数据就会上传。**
+注意：想让向量化上云，只有一个入口 —— 显式配置 `EMBED_BASE_URL`（或控制台「向量模型 → Base URL」）。
+（`auto` 复用主模型端点只发生在 **OpenAI 兼容云服务**这种 Provider 上：`backend/app/memory/embedder.py` 的工厂里
+`llm_provider` 必须是 `openai_compat` / `openai` / `cloud` / `api` 之一；`ollama` 不在其中。）
+想让数据尽量不出本机：Provider 选 `Ollama`、「向量模型」选 `hash`（或留 `auto` 且不填 `EMBED_BASE_URL`）、
+「语音识别」选 `mock` 或本地 whisper。**只要有一处指向云端，那部分数据就会上传。**
 
 另外三条边界（引自 COMPLIANCE，别忽略）：
 
@@ -307,7 +310,8 @@ WingMan 离线 OpenAI 兼容 stub 已就绪（不联网，不需要真实密钥�
 | 温度 | `LLM_TEMPERATURE` | `0.8` | 越高越发散 |
 | Ollama 地址 | `OLLAMA_HOST` | `http://127.0.0.1:11434` | |
 | Ollama 模型 | `OLLAMA_MODEL` | `qwen2.5:7b` | |
-| 向量模型模式 | `EMBEDDER` | `auto` | `auto` / `cloud` / `hash` |
+| 向量模型模式 | `EMBEDDER` | `auto` | `auto` / `cloud` / `hash`。`auto`：有可用的 embedding 端点（显式填了 `EMBED_BASE_URL`，或 Provider 是 OpenAI 兼容云服务）就走云端，否则退化为本地 `hash` |
+| 向量模型 → Base URL | `EMBED_BASE_URL` | 空 | 想让 Ollama 场景的检索更准，就把它指向你的 embedding 服务（例：`http://127.0.0.1:1234/v1`）；留空时 `auto` 会退化为本地 `hash` |
 | 语音引擎 | `ASR_ENGINE` | `mock` | `mock` / `local` / `cloud` |
 
 （`.env` 是可选的：不建也能跑，所有配置都能在控制台里改。）

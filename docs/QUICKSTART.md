@@ -93,7 +93,8 @@ $env:PORT="8899"
 ## 出问题了？
 
 1. 先跑一次 `wingman.cmd --doctor`：它会体检仓库完整性、Python 版本与位数、虚拟环境、依赖完整性、数据目录和端口，
-   给出结论与修复建议（不创建、不安装、不启动任何东西）。
+   给出结论与修复建议（不修改配置、不建库、不动你的数据、也不启动服务；唯一会留下的是 Python 自动生成的
+   `__pycache__` 字节码缓存）。
    > 服务已经在跑时，还可以查 `GET /api/health/details` 看配置来源与各 provider 状态（见 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) 第 10 节）。
 2. 再看 **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)**：端口被占、Python 版本、依赖装不上、中文乱码、没有音频设备、Mock 输出像废话……常见情况都在里面。
 

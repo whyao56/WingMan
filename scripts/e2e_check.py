@@ -134,6 +134,30 @@ def check(cond: bool, good: str, evil: str) -> bool:
     return bool(cond)
 
 
+def server_detail(r) -> str:
+    """从非 200 响应里取出能读的「服务端说了什么」。
+
+    模型不可用时（base_url 指错、代理劫持、Key 无效），后端会返回
+    `{"detail": "生成建议失败：…", "kind": "llm_error"}`。这条 detail 才是用户排错要看的
+    东西；直接取 `["analysis"]` 会抛 KeyError，把「哪一步失败、为什么」埋掉。
+    """
+    try:
+        body = r.json()
+    except Exception:
+        return (r.text or "")[:200]
+    if isinstance(body, dict):
+        detail = body.get("detail") or body.get("message")
+        if detail:
+            kind = body.get("kind")
+            return f"{detail}（{kind}）" if kind else str(detail)
+    return (r.text or "")[:200]
+
+
+def unexpected_shape(r) -> str:
+    """HTTP 200 但响应体不是预期结构时，给一段原始片段。"""
+    return (r.text or "")[:200]
+
+
 def main() -> int:
     # trust_env=False 很重要：设了 HTTP_PROXY / http_proxy 环境变量时，
     # httpx 默认把请求发给代理，代理会用「绝对地址」形式转发，
@@ -197,10 +221,24 @@ def main() -> int:
 
     # ---------------------------------------------------- 3 索引 + 画像
     step("重建索引 + 抽取画像")
-    idx = c.post(U(f"/api/chats/{chat_id}/index")).json()
+    r = c.post(U(f"/api/chats/{chat_id}/index"))
+    if r.status_code != 200:
+        bad(f"第 3 步「重建索引」失败：HTTP {r.status_code} —— {server_detail(r)}")
+        return 1
+    idx = r.json()
+    if not isinstance(idx, dict) or "indexed" not in idx:
+        bad(f"第 3 步「重建索引」返回了非预期结构（缺少 indexed）：{unexpected_shape(r)}")
+        return 1
     ok(f"索引：{idx['indexed']} 条，维度 {idx['dim']}，模型 {idx['model']}")
 
-    prof = c.post(U(f"/api/chats/{chat_id}/profile")).json()
+    r = c.post(U(f"/api/chats/{chat_id}/profile"))
+    if r.status_code != 200:
+        bad(f"第 3 步「抽取画像」失败：HTTP {r.status_code} —— {server_detail(r)}")
+        return 1
+    prof = r.json()
+    if not isinstance(prof, dict) or "facts_total" not in prof:
+        bad(f"第 3 步「抽取画像」返回了非预期结构（缺少 facts_total）：{unexpected_shape(r)}")
+        return 1
     check(prof["facts_total"] > 0, f"抽取到 {prof['facts_total']} 条事实",
           "一条事实都没抽到")
     facts = c.get(U(f"/api/chats/{chat_id}/facts")).json()
@@ -222,8 +260,15 @@ def main() -> int:
 
     # ---------------------------------------------------- 5 分析 + 建议
     step("核心：分析 + 建议")
-    sug = c.post(U(f"/api/chats/{chat_id}/suggest"),
-                 json={"peer_message": PEER_LINE, "persist": True}).json()
+    r = c.post(U(f"/api/chats/{chat_id}/suggest"),
+               json={"peer_message": PEER_LINE, "persist": True})
+    if r.status_code != 200:
+        bad(f"第 5 步「分析 + 建议」失败：HTTP {r.status_code} —— {server_detail(r)}")
+        return 1
+    sug = r.json()
+    if not isinstance(sug, dict) or "analysis" not in sug or "options" not in sug:
+        bad(f"第 5 步「分析 + 建议」返回了非预期结构（缺少 analysis/options）：{unexpected_shape(r)}")
+        return 1
     a = sug["analysis"]
     ok(f"情绪：{a['emotion']}（强度 {a['emotion_intensity']}/10，兴趣变化 {a['interest_delta']:+d}）")
     ok(f"意图：{a['intent'][:60]}")
@@ -250,9 +295,16 @@ def main() -> int:
     # ---------------------------------------------------- 6 推演
     step("推演：这条回复之后会怎么走")
     top = sug["options"][0]
-    tree = c.post(U(f"/api/chats/{chat_id}/simulate"),
-                  json={"option_id": top["id"], "option_text": top["text"],
-                        "peer_message": PEER_LINE}).json()
+    r = c.post(U(f"/api/chats/{chat_id}/simulate"),
+               json={"option_id": top["id"], "option_text": top["text"],
+                     "peer_message": PEER_LINE})
+    if r.status_code != 200:
+        bad(f"第 6 步「推演」失败：HTTP {r.status_code} —— {server_detail(r)}")
+        return 1
+    tree = r.json()
+    if not isinstance(tree, dict) or "branches" not in tree:
+        bad(f"第 6 步「推演」返回了非预期结构（缺少 branches）：{unexpected_shape(r)}")
+        return 1
     check(len(tree["branches"]) >= 2, f"推演出 {len(tree['branches'])} 个分支",
           "分支太少")
     for b in tree["branches"]:

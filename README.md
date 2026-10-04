@@ -1,6 +1,5 @@
 # WingMan · 聊天僚机
 
-[![CI](https://github.com/whyao56/wingman/actions/workflows/ci.yml/badge.svg)](https://github.com/whyao56/wingman/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.13-blue.svg)](https://www.python.org/)
 
@@ -63,7 +62,7 @@ PowerShell 里第 2 步要写成 `.\wingman.cmd`（否则提示找不到命令�
 | ✅ 现在就能用 | 导入（QQ / 微信 / 通用 JSON、CSV）→ 向量索引 → 事实与画像 → 分析 → 建议 → 推演 的完整链路；零 Key 用 Mock 跑通；OpenAI 兼容云服务与 Ollama 可切换；单文件控制台；实时字幕的 SSE 接口 |
 | ⚠️ 未做端到端验证 | 真实通话采集、云端 / 本地 ASR 的实际效果（需要你在自己设备上试；采集必须手动点「开始采集」） |
 | ⬜ 尚未实现 | 流式 ASR、AEC 回声消除、事实人工校对 UI、前端工程化、自动回复（明确不做，见 COMPLIANCE） |
-| 验证过的环境 | 中文 Windows + Python 3.11；CI 覆盖 Python 3.11 / 3.13（仅冒烟测试） |
+| 验证过的环境 | 中文 Windows + Python 3.11（实测安装 + 端到端人工验收）；Python 3.13 只做了依赖解析验证（dry-run），**未真装**；CI 工作流（Ubuntu）已配置 3.11 / 3.13 冒烟矩阵，但仓库尚未 push，CI 还未在真实环境执行过 |
 
 ---
 
@@ -189,9 +188,10 @@ backend\.venv\Scripts\python.exe scripts\e2e_check.py
 这种畸形路径就 404 了。脚本里已经用 `trust_env=False` 绕开，
 如果你自己写调用脚本，记得同样处理。
 
-**中文名的示例文件上传失败**
-某些 HTTP 客户端在 multipart 的 filename 里处理非 ASCII 有问题。
-把文件复制一份改成英文名再上传即可，内容不受影响。
+**上传中文名的文件失败（旧版本的问题，现已支持）**
+早期版本在 multipart 的 filename 里处理非 ASCII 有问题；**现在已支持中文名上传** ——
+按 [QUICKSTART](docs/QUICKSTART.md) 第 3 步直接传 `samples\qq_sample_小鹿.txt` 即可（端到端检查实测全绿）。
+如果你的环境里仍然失败（极少见），把文件复制一份改成英文名再上传即可，内容不受影响。
 
 **「通话」页说没有检测到音频设备**
 `wingman.cmd --with-asr` 装采集依赖（`soundcard`）。

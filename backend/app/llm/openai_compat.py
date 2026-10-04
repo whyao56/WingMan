@@ -15,6 +15,38 @@ from .base import ChatProvider, LLMError
 
 log = logging.getLogger("wingman.llm.openai")
 
+# 本机回环服务（离线 stub、Ollama、LM Studio、本机中转）不能被系统代理劫持。
+_LOOPBACK_HOSTS = frozenset({"localhost", "::1"})
+
+
+def _trust_env_for(url: str) -> bool:
+    """这个地址要不要继承环境代理（httpx 的 trust_env）。
+
+    回环地址一律 False。原因：httpx 默认 trust_env=True 会继承 HTTP_PROXY 环境变量
+    **以及 Windows 注册表里的系统代理**。本机代理软件开全局模式、或公司代理存在时，
+    发往 127.0.0.1 的请求会被代理接管 —— 本机 Ollama / 离线 stub 直接不可用，
+    而且错误会伪装成「网关错误（502）」，用户根本查不到原因
+    （scripts/e2e_check.py 早就用 trust_env=False 绕开同一个坑）。
+    非回环地址保持 True：用户可能确实要靠代理访问云端 API。
+
+    同一份判断在 ollama.py / memory/embedder.py / asr/cloud.py 各有一份（本任务的写范围
+    不允许新增共用模块）；backend/tests/test_loopback_proxy.py 有用例专门断言四份行为一致。
+    """
+    raw = (url or "").strip().lower()
+    if "://" in raw:
+        raw = raw.split("://", 1)[1]                        # 去掉 scheme
+    authority = raw.split("/", 1)[0].rsplit("@", 1)[-1]     # 去掉 user:pass@
+    if authority.startswith("["):                           # [::1]:11434 这种 IPv6 字面量
+        host = authority.split("]", 1)[0][1:]
+    elif authority.count(":") == 1:
+        host = authority.rsplit(":", 1)[0]                  # host:port
+    else:
+        host = authority                                    # 没写端口，或没写方括号的 IPv6
+    host = host.strip().rstrip(".")
+    if not host:
+        return True
+    return not (host in _LOOPBACK_HOSTS or host.startswith("127."))
+
 
 class OpenAICompatProvider(ChatProvider):
     name = "openai_compat"
@@ -73,7 +105,8 @@ class OpenAICompatProvider(ChatProvider):
 
         url = f"{self.base_url}/chat/completions"
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(timeout=self.timeout,
+                                         trust_env=_trust_env_for(self.base_url)) as client:
                 resp = await client.post(url, json=payload, headers=self._headers())
         except httpx.TimeoutException as exc:
             raise LLMError(f"请求超时（{self.timeout:.0f}s）：{exc}") from exc
@@ -85,7 +118,8 @@ class OpenAICompatProvider(ChatProvider):
             log.info("端点不接受 response_format，自动降级重试：%s", resp.text[:160])
             self._json_mode_ok = False
             payload.pop("response_format", None)
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(timeout=self.timeout,
+                                         trust_env=_trust_env_for(self.base_url)) as client:
                 resp = await client.post(url, json=payload, headers=self._headers())
 
         if resp.status_code >= 400:
@@ -137,7 +171,8 @@ class OpenAICompatProvider(ChatProvider):
         if not self.base_url:
             return []
         try:
-            async with httpx.AsyncClient(timeout=20.0) as client:
+            async with httpx.AsyncClient(timeout=20.0,
+                                         trust_env=_trust_env_for(self.base_url)) as client:
                 resp = await client.get(f"{self.base_url}/models", headers=self._headers())
             if resp.status_code >= 400:
                 return []

@@ -278,7 +278,7 @@ function Show-Help {
     Say (Resolve-Text '  （无参数）       安装（如需要）并启动，默认端口 8787，自动打开浏览器' '  (no option)      install if needed, start, default port 8787, open browser')
     Say (Resolve-Text '  --port N         指定端口（1024-65535），例如 --port 8788' '  --port N         use port N (1024-65535)')
     Say (Resolve-Text '  --setup-only     只做安装与自检，不启动服务，退出码 0' '  --setup-only     install and verify only, do not start')
-    Say (Resolve-Text '  --doctor         只做体检，不创建、不安装、不启动' '  --doctor         health check only, changes nothing')
+    Say (Resolve-Text '  --doctor         只做体检：不改配置、不建库、不启动服务（仅生成 __pycache__ 缓存）' '  --doctor         health check only (no config/db/service; leaves __pycache__)')
     Say (Resolve-Text '  --with-asr       额外装语音（ASR）可选依赖；失败不影响主服务' '  --with-asr       also install optional ASR deps; failure is non-fatal')
     Say (Resolve-Text '  --no-browser     启动后不自动打开浏览器' '  --no-browser     do not open the browser')
     Say (Resolve-Text '  --help           显示这份帮助' '  --help           show this help')
@@ -1346,11 +1346,13 @@ function Invoke-Run {
 
 function Invoke-Doctor {
     Say ''
-    SayInfo ("{0} {1}" -f $script:Sym.Info, (Resolve-Text '体检（不会创建、安装、启动任何东西）' 'diagnose only (creates/installs/starts nothing)'))
+    SayInfo ("{0} {1}" -f $script:Sym.Info, (Resolve-Text '体检（不修改配置、不建库、不动你的数据、不启动服务）' 'diagnose only (no config/db/data changes, no service)'))
+    SayDim (Resolve-Text '      唯一会留下的是 Python 自动生成的 __pycache__ 字节码缓存' '      the only leftover is Python''s auto-generated __pycache__ bytecode cache')
     Say ''
 
     $failPreflight = 0
     $failDeps = 0
+    $failData = 0
     $warnCount = 0
 
     # ---- 仓库完整性
@@ -1442,26 +1444,33 @@ function Invoke-Doctor {
         SayFieldBad (Resolve-Text '依赖完整性' 'deps') (Resolve-Text '无法校验（还没有虚拟环境）' 'cannot verify (no venv yet)') 'deps'
     }
 
-    # ---- 数据目录
+    # ---- 数据目录与路径（这类问题属于「环境」，不算依赖问题，建议也不能指向 --setup-only）
     if (Test-Path -LiteralPath $script:DataDir) {
-        $probe = Join-Path $script:DataDir '.wingman-write-test'
-        $writable = $false
-        try {
-            [System.IO.File]::WriteAllText($probe, 'ok')
-            $writable = $true
-            Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
-        }
-        catch { $writable = $false }
-        $dbPath = Join-Path $script:DataDir 'wingman.db'
-        $dbText = (Resolve-Text '首次启动会自动创建' 'created on first start')
-        if (Test-Path -LiteralPath $dbPath) { $dbText = (Resolve-Text '已存在' 'exists') }
-        if ($writable) {
-            SayFieldOk (Resolve-Text '数据目录' 'data dir') (Resolve-Text ("可写（$($script:DataDir)），数据库：$dbText") ("writable ($($script:DataDir)), db: $dbText")) 'data dir'
+        if (-not (Test-Path -LiteralPath $script:DataDir -PathType Container)) {
+            $failData++
+            SayFieldBad (Resolve-Text '数据目录' 'data dir') (Resolve-Text ("backend\data 存在但不是目录（同名文件？）") ("backend\data exists but is not a directory (same-name file?)")) 'data dir'
+            Say (Resolve-Text '        修：把 backend\data 这个同名文件删掉或改名，让它恢复成目录后重试（--setup-only 修不了这个）' '        fix: delete/rename that same-name file so backend\data is a directory again, then retry (--setup-only cannot fix this)')
         }
         else {
-            $failDeps++
-            SayFieldBad (Resolve-Text '数据目录' 'data dir') (Resolve-Text '不可写' 'not writable') 'data dir'
-            Say (Resolve-Text '        修：检查目录权限，或让安全软件放行 backend\data' '        fix: check permissions / antivirus')
+            $probe = Join-Path $script:DataDir '.wingman-write-test'
+            $writable = $false
+            try {
+                [System.IO.File]::WriteAllText($probe, 'ok')
+                $writable = $true
+                Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
+            }
+            catch { $writable = $false }
+            $dbPath = Join-Path $script:DataDir 'wingman.db'
+            $dbText = (Resolve-Text '首次启动会自动创建' 'created on first start')
+            if (Test-Path -LiteralPath $dbPath) { $dbText = (Resolve-Text '已存在' 'exists') }
+            if ($writable) {
+                SayFieldOk (Resolve-Text '数据目录' 'data dir') (Resolve-Text ("可写（$($script:DataDir)），数据库：$dbText") ("writable ($($script:DataDir)), db: $dbText")) 'data dir'
+            }
+            else {
+                $failData++
+                SayFieldBad (Resolve-Text '数据目录' 'data dir') (Resolve-Text '目录存在但不可写（只读 / 权限 / 被占用）' 'directory exists but is not writable (read-only / permissions / locked)') 'data dir'
+                Say (Resolve-Text '        修：检查 backend\data 的写权限；只读或被别的东西占用（安全软件、同步盘、编辑器）请解除后重试（--setup-only 修不了这个）' '        fix: check write permissions; clear read-only/locks (antivirus, sync drives, editors) and retry (--setup-only cannot fix this)')
+            }
         }
     }
     else {
@@ -1485,13 +1494,24 @@ function Invoke-Doctor {
 
     Say ''
     if ($failPreflight -gt 0) {
-        SayErr ("{0} {1}" -f $script:Sym.Bad, (Resolve-Text ("体检未通过：$failPreflight 项前置问题" + $(if ($failDeps -gt 0) { "，另有 $failDeps 项依赖问题" } else { '' })) ("Health check failed: $failPreflight preflight issue(s)")))
-        SayDim (Resolve-Text '体检不会改动任何东西；请按上面的「修」逐条处理后重试' 'Nothing was modified; fix the items above and retry')
+        $extraZh = ''
+        $extraEn = ''
+        if ($failDeps -gt 0) { $extraZh += "，另有 $failDeps 项依赖问题"; $extraEn += ", plus $failDeps dependency issue(s)" }
+        if ($failData -gt 0) { $extraZh += "，另有 $failData 项数据目录/路径问题"; $extraEn += ", plus $failData data-dir/path issue(s)" }
+        SayErr ("{0} {1}" -f $script:Sym.Bad, (Resolve-Text ("体检未通过：$failPreflight 项前置问题" + $extraZh) ("Health check failed: $failPreflight preflight issue(s)" + $extraEn)))
+        SayDim (Resolve-Text '体检不会改动你的配置与数据；请按上面的「修」逐条处理后重试' 'Your config and data were not modified; fix the items above and retry')
         Exit-Now $script:ExitPreflight $true
     }
-    elseif ($failDeps -gt 0) {
-        SayErr ("{0} {1}" -f $script:Sym.Bad, (Resolve-Text ("依赖尚未就绪：$failDeps 项") ("Dependencies not ready: $failDeps issue(s)")))
-        Say (Resolve-Text '下一步：wingman.cmd --setup-only' 'Next: wingman.cmd --setup-only')
+    elseif ($failDeps -gt 0 -or $failData -gt 0) {
+        # 依赖问题与环境问题分开报，建议各自对症：数据目录类问题跑 --setup-only 没有用
+        if ($failDeps -gt 0) {
+            SayErr ("{0} {1}" -f $script:Sym.Bad, (Resolve-Text ("依赖尚未就绪：$failDeps 项") ("Dependencies not ready: $failDeps issue(s)")))
+            Say (Resolve-Text '下一步：wingman.cmd --setup-only' 'Next: wingman.cmd --setup-only')
+        }
+        if ($failData -gt 0) {
+            SayErr ("{0} {1}" -f $script:Sym.Bad, (Resolve-Text ("数据目录/路径有问题：$failData 项") ("Data directory / path problem(s): $failData")))
+            Say (Resolve-Text '下一步：确认 backend\data 是目录且有写权限；只读或被占用请解除后重试（这类问题 --setup-only 修不了）' 'Next: make sure backend\data is a directory and writable; clear read-only/locks and retry (--setup-only cannot fix this)')
+        }
         Exit-Now $script:ExitDeps $true
     }
     else {
