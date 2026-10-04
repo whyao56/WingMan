@@ -12,6 +12,59 @@ WingMan 是一个本地优先的「对话参谋」系统。它做三件事：
 2. **听懂** —— 通话时双通道采集（系统回环听对方 + 麦克风听自己），实时转写成文字；
 3. **参谋** —— 收到新消息后，分析对方情绪与意图，给出多个可选回复，并**推演每条回复会把聊天带向哪里**。
 
+> **它只给建议，不代你发消息。** 不做无人值守的自动回复 —— 原因见 [docs/COMPLIANCE.md](docs/COMPLIANCE.md)。
+
+---
+
+## 快速开始（3 步）
+
+需要 Windows 10/11 与 **Python 3.11+**（安装时勾选 *Add python.exe to PATH*）。不需要 Node，不需要 API Key。
+
+```bat
+REM 第 1 步：下载并解压（也可以 git clone）
+REM        https://github.com/whyao56/WingMan/archive/refs/heads/main.zip
+
+REM 第 2 步：在仓库根目录启动（或直接双击 wingman.cmd）
+wingman.cmd
+
+REM 第 3 步：浏览器打开控制台后 →「导入」上传 samples\qq_sample_小鹿.txt
+REM        →「指挥台」点「取会话里最后一条对方消息」→「分析并给建议」
+```
+
+PowerShell 里第 2 步要写成 `.\wingman.cmd`（否则提示找不到命令）。
+首次运行会自动创建 Python 环境、安装依赖（几分钟，看网速），然后启动服务并自动打开 <http://127.0.0.1:8787>。
+
+**不配模型也能跑通全流程** —— 未配置时会用内置的 Mock（规则引擎）。
+但请注意：**Mock 的输出只是「流程演示」，不是真实智能**。接入真实模型见 **[docs/MODELS.md](docs/MODELS.md)**。
+
+不想一步步来？完整版见 **[docs/QUICKSTART.md](docs/QUICKSTART.md)**；卡住了见 **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)**。
+
+### 启动器参数
+
+| 命令 | 作用 |
+|---|---|
+| `wingman.cmd` | 准备环境（首次）+ 启动 + 打开浏览器 |
+| `wingman.cmd --port 8899` | 换端口（默认 8787） |
+| `wingman.cmd --no-browser` | 不自动打开浏览器 |
+| `wingman.cmd --setup-only` | 只准备环境，不启动服务 |
+| `wingman.cmd --doctor` | 只做启动前自检，逐项打印结果与修复建议 |
+| `wingman.cmd --with-asr` | 额外安装语音依赖（可选，失败不影响主服务） |
+| `wingman.cmd --help` | 用法 |
+
+---
+
+## 版本与状态
+
+- **当前版本：v0.1.0**（版本号定义在 `backend/app/__init__.py`，变更记录见 [CHANGELOG.md](CHANGELOG.md)）
+- **状态：脚手架可用（阶段 0「能跑通」已完成）**；阶段 1「能用」与阶段 2「好用」尚未实现，详见 [docs/ROADMAP.md](docs/ROADMAP.md)。
+
+| | 说明 |
+|---|---|
+| ✅ 现在就能用 | 导入（QQ / 微信 / 通用 JSON、CSV）→ 向量索引 → 事实与画像 → 分析 → 建议 → 推演 的完整链路；零 Key 用 Mock 跑通；OpenAI 兼容云服务与 Ollama 可切换；单文件控制台；实时字幕的 SSE 接口 |
+| ⚠️ 未做端到端验证 | 真实通话采集、云端 / 本地 ASR 的实际效果（需要你在自己设备上试；采集必须手动点「开始采集」） |
+| ⬜ 尚未实现 | 流式 ASR、AEC 回声消除、事实人工校对 UI、前端工程化、自动回复（明确不做，见 COMPLIANCE） |
+| 验证过的环境 | 中文 Windows + Python 3.11；CI 覆盖 Python 3.11 / 3.13（仅冒烟测试） |
+
 ---
 
 ## 它长什么样
@@ -39,29 +92,18 @@ WingMan 是一个本地优先的「对话参谋」系统。它做三件事：
 
 ---
 
-## 快速开始
+## 文档
 
-```bash
-# 1. 装依赖（Python 3.11+）
-cd wingman/backend
-python -m venv .venv
-.venv/Scripts/activate          # Windows
-# source .venv/bin/activate     # macOS / Linux
-pip install -r requirements.txt
-
-# 2. 起服务
-python -m uvicorn app.main:app --reload --port 8787
-
-# 3. 打开控制台
-#    http://127.0.0.1:8787
-```
-
-**不需要任何 API Key 也能跑通全流程** —— 未配置模型时会自动使用内置的 Mock Provider，
-走完「导入 → 画像 → 分析 → 建议 → 推演」整条链路，方便你先看懂它怎么工作。
-
-想接真模型时，在控制台「设置」里填 `base_url` / `api_key` / `model` 即可，
-支持一切 **OpenAI 兼容协议**的云端服务（DeepSeek、通义、Kimi、硅基流动、OpenAI…），
-也支持 **Ollama** 本地模型（数据不出本机）。
+| 文档 | 内容 |
+|---|---|
+| [docs/QUICKSTART.md](docs/QUICKSTART.md) | 3 步上手：下载 → 启动 → 看到第一条建议 |
+| [docs/MODELS.md](docs/MODELS.md) | 接真实模型：OpenAI 兼容云 API / Ollama、怎么确认接上了、密钥与隐私边界 |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | 排错手册：退出码含义、端口占用、Python 版本、依赖装不上、中文乱码、无音频设备…… |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 系统架构、模块职责、数据模型、接口契约 |
+| [docs/ENGINE_DESIGN.md](docs/ENGINE_DESIGN.md) | 参谋引擎的算法与 Prompt 设计（这是项目的灵魂） |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | 迭代路线：从脚手架到能用、好用 |
+| [docs/COMPLIANCE.md](docs/COMPLIANCE.md) | 数据合规、隐私边界、使用红线 |
+| [CHANGELOG.md](CHANGELOG.md) | 版本变更记录 |
 
 ---
 
@@ -93,40 +135,53 @@ python -m uvicorn app.main:app --reload --port 8787
 
 ---
 
-## 文档
-
-| 文档 | 内容 |
-|---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 系统架构、模块职责、数据模型、接口契约 |
-| [docs/ENGINE_DESIGN.md](docs/ENGINE_DESIGN.md) | 参谋引擎的算法与 Prompt 设计（这是项目的灵魂） |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | 迭代路线：从脚手架到能用、好用 |
-| [docs/COMPLIANCE.md](docs/COMPLIANCE.md) | 数据合规、隐私边界、使用红线 |
-
----
-
 ## 目录结构
 
 ```
-wingman/
+WingMan/
+├── wingman.cmd                  # 唯一用户入口：一键启动 / 装环境 / 自检
 ├── backend/
 │   ├── app/
-│   │   ├── adapters/     # 聊天记录接入插件（QQ / 微信 / 通用）
-│   │   ├── memory/       # 存储、向量化、检索、人物画像
-│   │   ├── llm/          # 大模型接入（云 / 本地 / Mock）
-│   │   ├── asr/          # 语音识别 + 双通道音频采集
-│   │   ├── engine/       # 分析 → 建议 → 推演 核心引擎
-│   │   └── api/          # HTTP 接口
-│   ├── tests/
-│   └── data/             # 运行时数据（已 gitignore）
-├── frontend/index.html   # 单文件控制台，零构建
-├── samples/              # 示例聊天记录，可直接导入试跑
-├── scripts/              # 启动脚本 / 演示数据生成
+│   │   ├── adapters/            # 聊天记录接入插件（QQ / 微信 / 通用）
+│   │   ├── memory/              # 存储、向量化、检索、人物画像
+│   │   ├── llm/                 # 大模型接入（云 / 本地 / Mock）
+│   │   ├── asr/                 # 语音识别 + 双通道音频采集
+│   │   ├── engine/              # 分析 → 建议 → 推演 核心引擎
+│   │   └── api/                 # HTTP 接口
+│   ├── tests/                   # 冒烟测试（Mock，无需 Key）
+│   ├── requirements.txt         # 依赖下限声明（人类可读）
+│   ├── requirements.lock.txt    # 精确版本锁定（启动器安装的就是它）
+│   └── data/                    # 运行时数据（已 gitignore）
+├── frontend/index.html          # 单文件控制台，零构建
+├── samples/                     # 虚构的示例聊天记录，可直接导入试跑
+├── scripts/                     # 启动 / 自检 / 端到端验证脚本
 └── docs/
 ```
+
+### 开发者：手动跑测试
+
+```bat
+REM 准备环境（不启动服务；环境建在 backend\.venv）
+wingman.cmd --setup-only
+
+REM 内核链路冒烟测试（Mock，无需任何 Key）
+backend\.venv\Scripts\python.exe backend\tests\test_smoke.py
+
+REM 端到端 HTTP 检查（需要服务已经在运行）
+backend\.venv\Scripts\python.exe scripts\e2e_check.py
+```
+
+> `e2e_check.py` 会**往当前数据库里写数据**（导入示例会话、写入设定、注入一段语音）。
+> 想保持数据干净，就另解压一份仓库、或者先把 `backend\data\wingman.db` 备份出来再跑。
 
 ---
 
 ## 常见问题
+
+> 这几条是最常遇到的；完整的排错手册在 **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)**。
+
+**端口 8787 被占用**
+换端口启动：`wingman.cmd --port 8899`。查是谁占着：`netstat -ano | findstr :8787`。
 
 **跑 `scripts/e2e_check.py` 时报 404**
 环境里设了 `HTTP_PROXY` / `http_proxy` 时，httpx 默认把请求发给代理，
@@ -139,9 +194,9 @@ wingman/
 把文件复制一份改成英文名再上传即可，内容不受影响。
 
 **「通话」页说没有检测到音频设备**
-`pip install -r requirements-asr.txt` 装 `soundcard`。
+`wingman.cmd --with-asr` 装采集依赖（`soundcard`）。
 如果装了还是不行，检查系统默认播放设备是否为当前实际在用的那个 ——
-回环设备是跟着「默认扬声器」走的。
+回环设备是跟着「默认扬声器」走的。没有麦克风也可以用「通话」页的手动注入演示链路。
 
 **Mock 模式下分析结果是废话**
 这是预期的。Mock 只是一套规则，用来验证流程能不能跑通。
