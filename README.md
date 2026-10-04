@@ -63,7 +63,7 @@ PowerShell 里第 2 步要写成 `.\wingman.cmd`（否则提示找不到命令�
 | ✅ 现在就能用 | 导入（QQ / 微信 / 通用 JSON、CSV）→ 向量索引 → 事实与画像 → 分析 → 建议 → 推演 的完整链路；零 Key 用 Mock 跑通；OpenAI 兼容云服务与 Ollama 可切换；单文件控制台；实时字幕的 SSE 接口 |
 | ⚠️ 未做端到端验证 | 真实通话采集、云端 / 本地 ASR 的实际效果（需要你在自己设备上试；采集必须手动点「开始采集」） |
 | ⬜ 尚未实现 | 流式 ASR、AEC 回声消除、事实人工校对 UI、前端工程化、自动回复（明确不做，见 COMPLIANCE） |
-| 验证过的环境 | 中文 Windows + Python 3.11（实测安装 + 端到端人工验收）；Python 3.13 已由 CI 在真实环境验证：GitHub Actions（Ubuntu）用同一份锁定集真实安装并跑通冒烟测试（[run 37214337358](https://github.com/whyao56/WingMan/actions/runs/37214337358)，`3.11` / `3.13` 两个 job 均 success），但**开发机没有 3.13、未在本机真跑**；macOS / Linux 桌面未做人工验收 |
+| 验证过的环境 | 中文 Windows + Python 3.11（实测安装 + 端到端人工验收）；Python 3.13 已由 CI 在真实环境验证：GitHub Actions（Ubuntu）用同一份锁定集真实安装并跑通冒烟测试（[run 37215141304](https://github.com/whyao56/WingMan/actions/runs/37215141304)，`3.11` / `3.13` 两个 job 均 success），但**开发机没有 3.13、未在本机真跑**；macOS / Linux 桌面未做人工验收 |
 
 ---
 
