@@ -777,6 +777,22 @@ def check_data_dir(state: State) -> Check:
                 hint_en=f"No action needed: {directory} is created automatically on first start.",
                 data=data,
             )
+        if not parent.is_dir():
+            return Check(
+                "data_dir", "数据目录", "data dir", STATUS_FAIL,
+                blocking=True,
+                detail=f"{directory} 不存在，上级目录 {parent} 也不存在（仓库路径不对？）",
+                hint=(
+                    f"看起来 {state.project_dir} 不是完整的 WingMan 仓库。"
+                    "请确认在仓库根目录运行，或用 --project-dir 指定正确路径；"
+                    "重新 git clone / 重新解压发行包也能解决。"
+                ),
+                hint_en=(
+                    f"{state.project_dir} does not look like a complete WingMan repository. "
+                    "Run from the repository root, pass --project-dir, or re-clone/re-extract."
+                ),
+                data=data,
+            )
         return Check(
             "data_dir", "数据目录", "data dir", STATUS_FAIL,
             blocking=True,
@@ -1638,9 +1654,10 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     if args.port is not None and not 0 <= args.port <= 65535:
-        _eprint(t(f"端口超出范围：{args.port}（合法范围 1-65535，0 表示跳过检查）",
-                  f"port out of range: {args.port}"))
-        return EXIT_INTERNAL
+        return _emit_internal_error(
+            args.json, t(f"端口超出范围：{args.port}（合法范围 1-65535，0 表示跳过检查）",
+                         f"port out of range: {args.port}")
+        )
 
     try:
         state = build_state(args)
