@@ -1,40 +1,28 @@
 @echo off
-REM WingMan 开发启动脚本（Windows）
-REM 自动建虚拟环境、装依赖、起服务。
-setlocal
-cd /d "%~dp0..\backend"
+rem ================================================================
+rem  WingMan - everyday launch script (Windows)
+rem
+rem  This is a thin alias for the single user entry point:
+rem      wingman.cmd
+rem  It exists for people who are used to scripts\run_dev.bat.
+rem
+rem  Safe defaults for end users:
+rem    * no --reload (a reloading server restarts randomly and shows
+rem      scary tracebacks; developers can opt in manually, see below)
+rem    * the launcher creates backend\.venv and installs
+rem      backend\requirements.lock.txt on first run
+rem    * the browser opens automatically (use --no-browser to skip)
+rem
+rem  Developers who want auto-reload:
+rem      backend\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8787
+rem
+rem  Any argument is forwarded to wingman.cmd, e.g.
+rem      scripts\run_dev.bat --port 8788
+rem      scripts\run_dev.bat --setup-only
+rem      scripts\run_dev.bat --doctor
+rem
+rem  Exit codes: 0 ok | 2 preflight refused | 3 dependency setup failed | 1 other
+rem ================================================================
 
-if "%PORT%"=="" set PORT=8787
-
-if not exist ".venv" (
-  echo -^> 创建虚拟环境 .venv
-  python -m venv .venv
-  if errorlevel 1 (
-    echo 创建虚拟环境失败，请确认已安装 Python 3.11+ 并加入 PATH。
-    exit /b 1
-  )
-)
-
-call ".venv\Scripts\activate.bat"
-
-echo -^> 安装依赖
-python -m pip install -q --upgrade pip
-python -m pip install -q -r requirements.txt
-if errorlevel 1 (
-  echo 依赖安装失败。
-  exit /b 1
-)
-
-if "%WITH_ASR%"=="1" (
-  echo -^> 安装语音依赖（可选）
-  python -m pip install -q -r requirements-asr.txt
-  if errorlevel 1 echo   ! 语音依赖安装失败，已跳过（不影响主服务）
-)
-
-echo.
-echo -^> 启动 http://127.0.0.1:%PORT%
-echo   控制台就是这个地址，按 Ctrl+C 停止
-echo.
-python -m uvicorn app.main:app --reload --host 127.0.0.1 --port %PORT%
-
-endlocal
+call "%~dp0..\wingman.cmd" %*
+exit /b %ERRORLEVEL%
