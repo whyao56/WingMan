@@ -1,12 +1,15 @@
 # 排错手册
 
-先做两件事，能解决大半问题：
+先做这几件事，能解决大半问题：
 
-1. 在仓库根目录跑一次自检：`wingman.cmd --doctor`（PowerShell 里写 `.\wingman.cmd --doctor`）。
-   它逐项检查 11 项（项目结构、Python 版本、后端依赖、数据目录、数据库、端口、前端控制台、示例数据、语音可选依赖、配置与 Provider），
-   每项给出 `[通过]` / `[提醒]` / `[阻断]` 和结论行，需要修的直接跟一句「修复建议」。
-   > 这是**启动前**检查：如果服务已经在运行，它会如实报告「端口被占用」，并告诉你可以直接打开浏览器用（不必再起一个）。
-2. 对照下面的**退出码**找到对应的那一节。
+1. 在仓库根目录跑一次体检：`wingman.cmd --doctor`（PowerShell 里写 `.\wingman.cmd --doctor`）。
+   它**不创建、不安装、不启动任何东西**，逐项报出：仓库完整性、Python 版本与位数、解释器路径、虚拟环境、
+   依赖锁与依赖完整性、数据目录、端口，最后给一句结论（体检通过 / 有 N 项必须先修 / 依赖尚未就绪）。
+   如果端口被占用，它会给出占用进程的 PID 与进程名，并提示用 `wingman.cmd --port 8788` 换端口
+   （如果占用的就是你自己已经启动的 WingMan，忽略这条即可 —— 浏览器直接打开就能用）。
+2. 想知道更细的（项目结构、数据库各表、示例数据、可选语音依赖、每个配置键的来源），
+   用独立自检脚本 `scripts\preflight.py`，见第 10 节。
+3. 对照下面的**退出码**找到对应的那一节。
 
 | 退出码 | 含义 | 有副作用吗 |
 |---|---|---|
@@ -215,8 +218,9 @@ wingman.cmd --with-asr
 
 **原因**：这是**预期行为**。默认的 Mock 是规则引擎，它只用来验证流程跑通，不懂语义。
 
-> 顺带一提：默认 Mock 下点「设置 → 测试连通」会显示 `✗ mock — Mock Provider 不认识任务标记 [TASK:UNKNOWN]…`。
-> 那是 Mock 的正常反应（它只认引擎内部的任务标记），**不代表环境坏了**；换成真模型后才会变成 ✓。详见 [MODELS.md](MODELS.md)。
+> 顺带一提：默认 Mock 下点「设置 → 测试连通」，它会直接告诉你当前是演示引擎，而不是报错：
+> `✓ mock — 演示引擎（内置规则）已就绪：不需要 API Key，输出仅用于跑通流程、看效果。要接真实模型：……`
+> 所以「测试连通 ✓」不等于接上了真模型 —— **判断依据是 provider 名字**（`mock` 还是 `openai_compat` / `ollama`）。详见 [MODELS.md](MODELS.md)。
 
 **处置**：接真模型，见 **[MODELS.md](MODELS.md)**。接好后用 ROADMAP 的命中率口径自查：拿 20 个你实际回复过的片段，看引擎给的选项里有没有你当时真选的那条，**超过 50%** 才算真的在理解（[ROADMAP.md](ROADMAP.md) 最后一节）。
 
@@ -234,41 +238,50 @@ copy "samples\qq_sample_小鹿.txt" sample.txt
 
 或者用「导入」页下半部分的「**或者直接粘贴文本**」：格式是每行 `2024-01-01 12:00:00 昵称`，下一行是内容，消息之间空一行。
 
-## 10. 想手动自查：`--doctor` 与 `/api/health`
+## 10. 想手动自查：`--doctor`、独立自检脚本 与 健康接口
 
-**`wingman.cmd --doctor`**：不启动服务，只做检查。输出长这样：
+有三条自查通道，用途不同，别搞混。
+
+### 10.1 `wingman.cmd --doctor`（启动器体检，最常用）
+
+不创建、不安装、不启动任何东西，只体检。真实输出长这样：
 
 ```
-============================================================
-WingMan 启动前自检 · preflight
-============================================================
-仓库目录  ：<你的解压目录>
-Python    ：3.11.9 · ...（项目虚拟环境）
-控制台    ：cp936（取决于你的终端）
-待查端口  ：8787（默认值）
+════════════════════════════════════════════════════════════════
+ WingMan 一键启动器
+════════════════════════════════════════════════════════════════
+      仓库目录        : <你的解压目录>
+      操作系统        : Microsoft Windows NT 10.0.x
+      控制台编码      : UTF-8 / chcp 65001（原 936，退出时恢复）
 
-[ 1/11] 项目结构              [通过] backend/app/main.py 与 backend/requirements.txt 都在
-[ 2/11] Python 版本           [通过] 3.11.9（需要 >= 3.11）· 项目虚拟环境
-...
-[11/11] 配置与 Provider      [提醒] 配置来源：.env 0 个、运行时覆盖 0 项 · provider：llm=mock；embedder=hash；asr=mock
-           修复建议：当前是默认的 Mock 配置：…… 要接真实模型，见 docs/MODELS.md …
-------------------------------------------------------------
-提醒（不阻断启动，N 项）
-...
-结论：可以启动（11 项检查：8 通过 / 3 提醒 / 0 阻断）
-下一步：在仓库根目录运行 wingman.cmd；需要语音能力就加 --with-asr。
-------------------------------------------------------------
+· 体检（不会创建、安装、启动任何东西）
+
+      仓库完整性      : backend/app/main.py、frontend/index.html、requirements.lock.txt 都在
+      探测结果：
+        py -3     → Python 3.11.9
+      Python          : 3.11.9（py -3，64 位）
+      解释器路径      : C:\Windows\py.exe
+      虚拟环境        : 存在，Python 3.11.9（<仓库>\backend\.venv\Scripts\python.exe）
+      依赖锁          : 25 个精确版本（backend\requirements.lock.txt）
+      依赖完整性      : 与锁文件一致，且 app.main 可导入（25 个包）
+      数据目录        : 可写（<仓库>\backend\data），数据库：已存在
+      端口            : 127.0.0.1:8787 可用
+
+✓ 体检通过：可以直接运行 wingman.cmd 启动服务
 ```
 
-> 上面的数字随你的机器变化：没装可选语音依赖、或还是默认的 Mock 配置，都会多出几条「提醒」——**提醒不阻断启动**，只有「阻断」项才需要先修。
+（措辞与行数随版本和你机器上的情况变化；例如 32 位 Python、未在实测范围内的 Python 版本会变成「提醒」，提醒不阻断启动。）
 
-退出码：`0` = 环境就绪；`2` = 有阻断项必须先修（**端口被占用也算 2**）；`3` = 虚拟环境/依赖还没准备好（按提示先跑 `wingman.cmd --setup-only`）；`1` = 自检自身没跑完。
-（直接跑下面的 `scripts\preflight.py` 时只有 `0` / `2` / `1` —— 它不负责装环境，所以没有 `3`。）
+退出码：`0` = 环境就绪；`2` = 有阻断项必须先修（**端口被占用也算 2**）；
+`3` = 虚拟环境/依赖还没准备好（按提示先跑 `wingman.cmd --setup-only`）；`1` = 其他错误。
 
-**进阶用法**（也可以直接用项目虚拟环境里的 Python 跑自检脚本，拿到机器可读输出）：
+### 10.2 `scripts\preflight.py`（独立自检脚本，适合脚本化）
+
+这是**另一套独立实现**（启动器的 `--doctor` 并不调用它），逐项检查项目结构、Python 版本、后端依赖、数据目录、
+数据库、端口、前端控制台、示例数据、可选语音依赖与配置/Provider，并给出修复建议。适合放进脚本或 CI 里消费：
 
 ```bat
-REM 机器可读的 JSON（纯 ASCII，任何代码页下都能解析；人类摘要走 stderr）
+REM 机器可读的 JSON（stdout 是纯 ASCII JSON，人类摘要走 stderr）
 backend\.venv\Scripts\python.exe scripts\preflight.py --json
 
 REM 服务已经在跑、只想跳过端口检查
@@ -278,10 +291,14 @@ REM 仓库被放在别处时指定根目录
 backend\.venv\Scripts\python.exe scripts\preflight.py --project-dir D:\somewhere\WingMan
 ```
 
+它的退出码只有 `0` / `2` / `1`（没有 `3` —— 它不负责装环境）。
 `--json` 里能拿到每一项检查的 `id` / `status` / `blocking` / `detail` / `hint`，以及 `env_files_hit`（命中了哪些 `.env`）、
-`runtime_override_keys`（控制台写入的运行时覆盖）和各 provider 的可用性 —— 这就是「配置来源」的可机器读版本。
+`runtime_override_keys` 与各 provider 的可用性。
 
-**`GET /api/health`**（服务运行中，看运行期实际生效的东西）：
+### 10.3 健康接口（服务运行中，看运行期实际生效的东西）
+
+**`GET /api/health`** —— 最小契约，只有四个字段：`version` / `db` / `counts` / `providers`。
+判断「现在跑的是不是真模型」就用它（见 [MODELS.md](MODELS.md) 第 2 节）：
 
 ```bat
 curl -s http://127.0.0.1:8787/api/health
@@ -291,11 +308,29 @@ curl -s http://127.0.0.1:8787/api/health
 curl.exe -s http://127.0.0.1:8787/api/health
 ```
 
-返回版本、数据库文件路径、消息/事实/会话计数，以及每个 provider 的 `name` / `available` / `note`（运行期实际用的是谁，一眼可见）。
+> 这个端点**故意保持最小、不许膨胀**：`scripts/e2e_check.py` 依赖它的契约。
 
-> 关于密钥：自检与健康输出里**不会出现密钥明文**。配置里的密钥一律以**掩码**出现
-> （长密钥形如 `sk-a******xyz`，短密钥统一显示为 `***`，长度也不外泄），
-> 另有 `xxx_set` / `"set": true` 之类的标志表示「配没配」。所以 `--doctor`、`--json`、`/api/health` 的输出可以直接贴给别人看。
+**`GET /api/health/details`** —— 结构化自证报告（只读）。想知道「每个配置到底从哪来」就查它：
+
+```bat
+curl -s http://127.0.0.1:8787/api/health/details
+```
+
+```powershell
+curl.exe -s http://127.0.0.1:8787/api/health/details
+```
+
+里面有：`paths`（project / backend / data / frontend / samples / db）、
+`env_files` 与 `env_files_hit`（实际命中了哪些 `.env`）、
+`runtime_override_keys`（控制台写入的运行时覆盖 —— **只列键名，不含值**）、
+`config`（每个配置键的 `source`：`runtime` / `env` / `dotenv` / `default`，以及掩码后的值）、
+`providers`（各 provider 的 `kind` / `name` / `available` / `note`）、
+`db`（路径、大小、各表计数）、`optional_deps`（soundcard / faster_whisper，带 `optional: true`）、
+`notes`（人可读的提醒）与 `ok`。
+
+> 关于密钥：以上任何输出里**都不会出现密钥明文**。密钥一律以**掩码**出现 ——
+> 长密钥形如 `sk-a******xyz`；在 `/api/health/details` 与自检输出中，**8 个字符以内的密钥固定显示为 `***`，长度也不外泄**；
+> 另有 `xxx_set` / `"set": true` 之类标志表示「配没配」。所以 `--doctor`、`--json` 与两个健康端点的输出都能直接贴给别人看。
 
 ## 11. 想彻底重来（重置环境 / 清空数据）
 

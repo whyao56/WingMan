@@ -39,15 +39,69 @@ _EMOJI = re.compile(
 )
 
 
+# prompts.py 的 user 模板在最后一个小节之后，还会跟一句**给模型的指令**
+# （「请分析这条消息。」「请给出本轮策略。」「请给出 4 条候选回复。」
+#   「请推演发出这句话之后，对话会怎么走。」）。
+#
+# 而小节提取用的正则终止符只有 `\n【` / `\n<<<` / 文本结尾，所以当某个【小节】
+# 正好是模板的最后一段时（单条分析的默认路径就是这样），这句指令会被当成小节内容：
+#
+#     extract_peer_message('【对方最新消息】\n哈哈哈今天好累啊\n\n请分析这条消息。')
+#       → '哈哈哈今天好累啊\n\n请分析这条消息。'
+#     keywords(..., 5) → ['今天好累', '分析这条', '析这条消', '请分析', '条消息']
+#
+# 后几个词接着就会被写进用户能看到的「潜台词」文案里。
+#
+# 修法：按**整行精确匹配**剥掉末尾的指令行。
+# 刻意不用「以『请』开头就删」这类模糊规则 —— 用户自己的话（「请我吃饭吧」）
+# 正是以「请」开头，模糊规则会误伤真实消息，那是比原缺陷更糟的问题。
+PROMPT_TAIL_LINES: tuple[str, ...] = (
+    "请分析这条消息。",
+    "请给出本轮策略。",
+    "请给出 4 条候选回复。",
+    "请推演发出这句话之后，对话会怎么走。",
+    "请综合出画像。",
+)
+
+
+def strip_prompt_tail(text: str) -> str:
+    """剥掉文本末尾的 prompt 指令行（以及它前面的空行）。
+
+    - 只做整行精确匹配，且只动**末尾**：正文中间出现同样的句子不受影响；
+    - 干净输入（没有可剥的行）原样返回（只做 strip），不重排换行；
+    - 用户消息本身以「请」开头（「请我吃饭吧」）不会被误伤 —— 它不等于任何指令行。
+    """
+    raw = text or ""
+    lines = raw.splitlines()
+    popped = False
+    while lines:
+        if not lines[-1].strip():
+            lines.pop()
+            popped = True
+            continue
+        if lines[-1].strip() in PROMPT_TAIL_LINES:
+            lines.pop()
+            popped = True
+            continue
+        break
+    if not popped:
+        return raw.strip()
+    return "\n".join(lines).strip()
+
+
 def extract_peer_message(user_text: str) -> str:
     """从 prompt 里抠出「对方最新消息」。"""
     m = re.search(r"【对方最新消息】\s*\n?(.*?)(?:\n【|\n<<<|$)", user_text, re.S)
     if m:
-        return m.group(1).strip().strip('"“”')
-    # 退化：取最后一段非空且不像元信息的文本
+        return strip_prompt_tail(m.group(1)).strip().strip('"“”')
+    # 退化：取最后一段非空且不像元信息的文本（指令行同样要跳过 —— 它不是对方的话）
     for line in reversed(user_text.splitlines()):
         t = line.strip()
-        if t and not t.startswith(("【", "#", "-", "[TASK")) and len(t) < 200:
+        if not t or t.startswith(("【", "#", "-", "[TASK")):
+            continue
+        if t in PROMPT_TAIL_LINES:
+            continue
+        if len(t) < 200:
             return t
     return ""
 
@@ -182,7 +236,7 @@ def read_taboo_section(user_text: str) -> list[str]:
     m = re.search(r"【(?:雷区|禁忌|must_not)】\s*\n?(.*?)(?:\n【|\n<<<|$)", user_text, re.S)
     if not m:
         return []
-    raw = m.group(1)
+    raw = strip_prompt_tail(m.group(1))
     parts = [p.strip(" -·•\t") for p in re.split(r"[,，、;；\n]+", raw) if p.strip()]
     return [p for p in parts if p and p not in ("无", "(空)", "暂无")]
 
@@ -191,7 +245,8 @@ def read_section(user_text: str, *names: str) -> str:
     for n in names:
         m = re.search(rf"【{re.escape(n)}】\s*\n?(.*?)(?:\n【|\n<<<|$)", user_text, re.S)
         if m:
-            return m.group(1).strip()
+            # 同样剥掉末尾指令行：若这个小节正好是模板最后一段，不剥就会被当成内容
+            return strip_prompt_tail(m.group(1))
     return ""
 
 

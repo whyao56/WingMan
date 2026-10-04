@@ -18,9 +18,10 @@
 - **启动前自检与可操作报错**：对 Python 版本过低、端口被占用、数据目录不可写、依赖安装失败四类问题给出中文修复建议；
   失败以区分性退出码结束（`0` 成功 / `2` 前置自检拒绝 / `3` 依赖准备失败 / `1` 其他），
   前置自检失败时不产生半成品环境。
-- **运行期自检通道**：`wingman.cmd --doctor` 逐项报告 Python 版本、依赖、端口、数据目录、配置来源与各 provider 可用性；
-  `GET /api/health` 提供结构化只读健康报告（版本、数据文件路径、计数、各 provider 的 `name`/`available`/`note`）。
-  **密钥在界面与接口中一律以掩码形式出现，不会回显明文。**
+- **运行期自检通道**：`wingman.cmd --doctor` 体检仓库完整性、Python 版本与位数、虚拟环境、依赖锁与依赖完整性、数据目录与端口；
+  `GET /api/health` 保持最小只读契约（版本 / 数据路径 / 计数 / provider 摘要，`scripts/e2e_check.py` 依赖它）；
+  新增 `GET /api/health/details` 结构化自证报告（逐键标注配置来源 `runtime`/`env`/`dotenv`/`default`、命中的 `.env`、
+  运行时覆盖的键名、完整路径、DB 统计、可选依赖与 notes）。**密钥在健康/自检输出中一律以掩码出现，不会回显明文。**
 - **新手上手文档**：[docs/QUICKSTART.md](docs/QUICKSTART.md)（3 步上手）、
   [docs/MODELS.md](docs/MODELS.md)（接真实模型与「怎么确认接上了」）、
   [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)（排错手册）。
@@ -41,6 +42,8 @@
 
 - 修复中文 Windows（GBK 控制台）下执行 `python tests/test_smoke.py` 会崩溃的问题
   （`UnicodeEncodeError: 'gbk' codec can't encode character '\u2713'`）。
+- 调整 Mock 模式下「测试连通」的返回：现在直接说明当前是内置演示引擎、并指引去哪里接真实模型
+  （此前会返回一条与故障难以区分的错误信息）。
 - 修复控制台中文乱码（包括 `.env.example` 等文本在 GBK 控制台下显示为乱码的问题）。
 
 ### 已知限制

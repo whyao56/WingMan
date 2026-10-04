@@ -35,14 +35,14 @@ WingMan **不配任何模型也能跑通全流程**，但那时用的是内置�
 - 成功：`✓ openai_compat — 正常`（后半段是模型回的内容）
 - 失败：`✗ openai_compat — <失败原因>`
 
-⚠️ **默认的 Mock 下点「测试连通」会显示 ✗ —— 这不是故障。**
-Mock 是规则引擎，只认引擎内部的任务标记，不认这种自由提问，于是它老实报错：
+**默认的 Mock 下点「测试连通」，会直接告诉你当前是演示引擎**（不再报错）：
 
 ```
-✗ mock — Mock Provider 不认识任务标记 [TASK:UNKNOWN]。请检查 prompts.py 是否正确设置了标记。
+✓ mock — 演示引擎（内置规则）已就绪：不需要 API Key，输出仅用于跑通流程、看效果。
+要接真实模型：在「设置」里把 Provider 换成 OpenAI 兼容或 Ollama，填好 base_url / api_key / model 后再次点「测试连通」。
 ```
 
-这恰好说明：**判断「现在用的是不是真模型」，依据是 provider 名字，不是有没有 ✓。**
+所以还是那句：**判断「现在用的是不是真模型」，依据是 provider 名字，不是有没有 ✓**（Mock 同样会显示 ✓）。
 
 **④ 直接问后端**（服务已在运行时）
 
@@ -68,13 +68,16 @@ curl.exe -s http://127.0.0.1:8787/api/health
 `llm` 的 `name` 是 `openai_compat`、`available` 为 `true` —— 这就证明**运行的不是 Mock，而且配置是完整的**。
 （`available` 说明配置齐了；要证明「真的连得上」，还要看上面第 ③ 条那个 ✓。）
 
+> `/api/health` 的字段是**刻意保持最小的**（只有 version / db / counts / providers）。
+> 想看配置来源、完整路径、可选依赖与 DB 统计，用 **`GET /api/health/details`**，见 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) 第 10 节。
+
 **⑤ 启动窗口的日志**（每次启动都会打印）
 每个组件一行，前面的 `OK ` / `!! ` 就是可用性；如果还是 Mock，这里会有一句明确的警告：
 「当前使用 Mock Provider，输出仅用于演示流程」。
 
-**⑥ 想一屏看全**：`wingman.cmd --doctor` 会逐项自检，并打印一行结论式的配置快照，
-形如「配置来源：.env 0 个、运行时覆盖 2 项 · provider：llm=openai_compat；embedder=hash；asr=mock」——
-这是判断「我到底配成了什么」最省事的办法（自检脚本 `scripts/preflight.py` 也能单独跑，细节见 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) 第 10 节）。
+**⑥ 想一屏看全**：`wingman.cmd --doctor` 会做一次启动器体检 ——
+仓库完整性、Python 版本与位数、虚拟环境、依赖锁与依赖完整性、数据目录、端口，最后给一句结论。
+想看「每个配置键的值到底从哪来」，用 `GET /api/health/details`（服务运行中）或 `scripts\preflight.py --json`（离线，机器可读）。
 
 ---
 
@@ -174,23 +177,63 @@ ollama pull qwen2.5:7b
 REM 1) 先把环境准备好（没跑过启动器时才需要）
 wingman.cmd --setup-only
 
-REM 2) 另开一个窗口，看它支持哪些参数：启动参数以 --help 为准
-backend\.venv\Scripts\python.exe scripts\openai_stub.py --help
+REM 2) 另开一个窗口启动 stub（默认监听 127.0.0.1:8791，可用 --port 换）
+backend\.venv\Scripts\python.exe scripts\openai_stub.py
+
+REM 想改端口 / 模型名 / 安静模式：
+REM   backend\.venv\Scripts\python.exe scripts\openai_stub.py --port 8801 --model my-model --quiet
+REM 看全部参数：
+REM   backend\.venv\Scripts\python.exe scripts\openai_stub.py --help
 ```
 
 ```powershell
 .\wingman.cmd --setup-only
-backend\.venv\Scripts\python.exe scripts\openai_stub.py --help
+backend\.venv\Scripts\python.exe scripts\openai_stub.py
 ```
 
-按 `--help` 给出的参数启动 stub，它会打印自己监听的地址和模型名。然后：
+stub 启动后会直接把它监听的地址、模型名，以及**该往 `.env` 里写什么**打印出来（实测输出）：
 
-1. 「设置」里按第 3.2 节填：Provider 选 `OpenAI 兼容云服务`，Base URL 填 stub 打印的地址，模型名填 stub 打印的模型名，API Key 随便填一个非空字符串（stub 不校验）。
-2. 点「**测试连通**」，应显示 `✓ openai_compat — …`。
+```
+================================================================
+WingMan 离线 OpenAI 兼容 stub 已就绪（不联网，不需要真实密钥）
+================================================================
+  base_url : http://127.0.0.1:8791/v1
+  api_key  : 任意非空字符串（测试用可直接填 wingman-stub）
+  model    : wingman-stub
+  端点     : POST /v1/chat/completions · GET /v1/models
+  地址     : http://127.0.0.1:8791    （停止：Ctrl+C）
+
+  在 .env 里这样填（或填到控制台「设置」）：
+    LLM_PROVIDER=openai_compat
+    LLM_BASE_URL=http://127.0.0.1:8791/v1
+    LLM_API_KEY=wingman-stub
+    LLM_MODEL=wingman-stub
+    # 离线 stub 没有 /v1/embeddings；不设下面这行，建索引会失败
+    EMBEDDER=hash
+================================================================
+  回复由 app.llm.mock.MockProvider 产生（任务标记 ANALYZE / STRATEGY / SUGGEST / SIMULATE / FACTS / PROFILE 走规则引擎，其余走一句话兜底回复）
+```
+
+> **为什么横幅里专门让你写 `EMBEDDER=hash`？**
+> 应用默认 `EMBEDDER=auto`，在配了 OpenAI 兼容主模型时会**复用主模型的端点**去做向量化
+> （`backend/app/memory/embedder.py:194-198`）；而 stub 按设计只提供 `/v1/chat/completions` 与 `/v1/models`，
+> **没有 `/v1/embeddings`**。所以不设这一行的话：导入可能仍然成功，但「记忆」页的「已索引」会停在 0，
+> 点「重建向量索引」会一直失败（stub 那边返回 404），这条毛病你修不好。
+> 设成 `hash` 之后向量化回到纯本地实现，索引立刻可用 —— 这也是「不联网也能把整条链路跑通」的前提。
+
+然后（走控制台这条路，不用手改 `.env`）：
+
+1. 「设置」里按第 3.2 节填：Provider 选 `OpenAI 兼容云服务`，
+   Base URL 填 `http://127.0.0.1:8791/v1`，模型名填 `wingman-stub`，
+   API Key 填一个**非空**字符串（比如 `wingman-stub`；stub 校验 Bearer，空 Key 会返回 401）；
+   同时到「**向量模型**」卡片把「模式」设为 `hash`（等价于 `.env` 里的 `EMBEDDER=hash`，原因见上面那条说明）。
+2. 点「**测试连通**」，应显示 `✓ openai_compat — 离线 stub 连通正常。`（这是实测结果）。
 3. 用第 2 节 ④ 的 `curl` 确认 `providers` 里 `llm` 是 `openai_compat` 且 `available` 为 `true` —— **这就是「没在跑 Mock」的证据**。
-4. 回「指挥台」点「分析并给建议」，返回的内容会带着 stub 的标记文案，说明请求确实发到了你配置的那个地址。
+4. 回「指挥台」点「分析并给建议」，请求会真的打到 stub 上（stub 窗口能看到 `POST /v1/chat/completions` 的日志），
+   说明你按文档填的那套配置确实生效了。
 
-> **说清楚**：这是**离线自检演示**，验证的是「配置链路 + 请求形状」正确，**不代表真实模型的智能水平**。
+> **说清楚**：这是**离线自检演示**，验证的是「配置链路 + 请求形状」正确；stub 的回复来自内置规则引擎
+> （不接任何外部服务，非引擎任务标记时给一句话兜底回复），**不代表真实模型的智能水平**。
 > 想知道效果好不好，必须接真实服务商或本地 Ollama 自己试。
 
 ---
@@ -214,8 +257,10 @@ backend\.venv\Scripts\python.exe scripts\openai_stub.py --help
 - 在控制台「设置」里保存的配置，存在 `backend\data\wingman.db` 里（运行时覆盖），**优先级最高**，重启仍在；
   完整的优先级是：**控制台保存的运行时覆盖 > 进程环境变量 > `.env` > 代码默认值**。
   想回到 `.env`：点「清除运行时覆盖（回到 .env）」。
-- **界面上和 API 响应里的密钥只以掩码形式出现**（形如 `sk-a******xyz`），并用 `llm_api_key_set` 这类标志告诉你「配没配」。
-  保存时如果字段里是掩码值，不会覆盖真实密钥。密钥明文不会出现在设置页、`/api/health`、`/api/settings` 或自检输出里。
+- **界面上和健康/自检输出里的密钥只以掩码出现**：长密钥形如 `sk-a******xyz`；
+  在 `/api/health/details` 与自检输出中，**8 个字符以内的密钥固定显示为 `***`，长度也不外泄**。
+  另有 `llm_api_key_set` / `"set": true` 之类的标志告诉你「配没配」；保存时如果字段里是掩码值，不会覆盖真实密钥。
+- 密钥**明文不会出现**在设置页、`/api/health`、`/api/health/details`、`/api/settings` 或任何自检输出里。
 - `.env` 已被 `.gitignore` 忽略 —— 不要把真实 Key 提交到任何仓库。
 
 **数据边界**（与 [COMPLIANCE.md](COMPLIANCE.md) 一致）
