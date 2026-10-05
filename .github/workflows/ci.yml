@@ -41,7 +41,9 @@ jobs:
       - name: 后端语法检查
         run: python -m compileall -q backend/app backend/tests scripts
 
-      - name: 单元测试（音频管线 / 引擎状态 / 量纲回归）
+      # 步骤名要跟着 tests/ 的实际内容走。这里曾叫「音频管线 / 引擎状态 / 量纲回归」，
+      # 语音撤下之后那个名字就只是一句谎 —— CI 绿着，名字却在描述一个不存在的模块。
+      - name: 单元测试（内核链路 / 引擎 / 采集层守卫）
         working-directory: backend
         run: python -m pytest tests/ -q
 
