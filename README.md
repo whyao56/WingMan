@@ -22,8 +22,8 @@ WingMan 是一个本地优先的「对话参谋」系统。它做三件事：
 
 | 下载 | 大小 | 适合 |
 |---|---|---|
-| **[`WingMan-0.2.0-win64.zip`](https://github.com/whyao56/WingMan/releases/download/v0.2.0/WingMan-0.2.0-win64.zip)** | 31 MB | 先用起来。语音走云端（自己填接口地址） |
-| **[`WingMan-full-0.2.0-win64.zip`](https://github.com/whyao56/WingMan/releases/download/v0.2.0/WingMan-full-0.2.0-win64.zip)** | 91 MB | 想让**语音识别完全在本机跑**，音频一帧都不出本机 |
+| **[`WingMan-0.2.1-win64.zip`](https://github.com/whyao56/WingMan/releases/download/v0.2.1/WingMan-0.2.1-win64.zip)** | 31 MB | 先用起来。语音走云端（自己填接口地址） |
+| **[`WingMan-full-0.2.1-win64.zip`](https://github.com/whyao56/WingMan/releases/download/v0.2.1/WingMan-full-0.2.1-win64.zip)** | 91 MB | 想让**语音识别完全在本机跑**，音频一帧都不出本机 |
 
 不确定就下**标准版** —— 聊天记录分析、人物画像、回复建议这些主要功能完全一样。
 
@@ -175,7 +175,7 @@ python -m uvicorn app.main:app --reload --port 8787
 
 ## 版本与状态
 
-- **当前版本：v0.2.0**（版本号定义在 `backend/app/__init__.py`，变更记录见 [CHANGELOG.md](CHANGELOG.md)）
+- **当前版本：v0.2.1**（版本号定义在 `backend/app/__init__.py`，变更记录见 [CHANGELOG.md](CHANGELOG.md)）
 - **状态：有成品包可用了。** [Releases](https://github.com/whyao56/WingMan/releases) 提供免安装的
   Windows 桌面版（双击即用，不需要 Python）；源码路线同样可用。
   **最大的缺口是建议内容本身** —— 默认的 Mock 引擎让整条链路跑得通，但给的建议还是规则生成的，
@@ -373,7 +373,7 @@ backend\.venv\Scripts\python.exe scripts\e2e_check.py
 前者请按顺序做两件事：
 1. 打开 `%LOCALAPPDATA%\WingMan\logs\wingman.log`，最后一段就是出错原因
 2. 命令行执行 `WingMan.exe --check`，它会生成一份人话报告并写到
-   `logs\selfcheck.txt`，可以直接发给别人看
+   `%LOCALAPPDATA%\WingMan\logs\selfcheck.txt`，可以直接发给别人看
 
 **语音识别出来是乱码 / 什么都不出来**
 

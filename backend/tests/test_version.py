@@ -9,6 +9,7 @@ exe 自检会打印 `WingMan v0.1.0`，下载页写着 v0.2.0，两边对不上�
 """
 from __future__ import annotations
 
+import glob
 import os
 import re
 
@@ -91,3 +92,33 @@ def test_no_stale_hardcoded_download_links(rel: str) -> None:
     found = set(re.findall(r"releases/download/v([0-9.]+)/", text))
     stale = {f for f in found if f != v}
     assert not stale, f"{rel} 里有过期下载链接：v{', v'.join(sorted(stale))}（当前 v{v}）"
+
+
+def _docs_mentioning_selfcheck() -> list[str]:
+    rels = ["README.md", "scripts/make_release.py", "docs/DESKTOP.md",
+            "docs/TROUBLESHOOTING.md"]
+    rels += sorted(
+        os.path.relpath(p, REPO).replace(os.sep, "/")
+        for p in glob.glob(os.path.join(REPO, "docs", "releases", "*.md"))
+    )
+    return rels
+
+
+def test_selfcheck_report_is_not_described_as_program_dir() -> None:
+    """自检报告别再说成写在「程序目录」。
+
+    它实际落在**数据目录** ``%LOCALAPPDATA%\\WingMan\\logs\\selfcheck.txt``。
+    早先几处文案（含打给用户的 zip 使用说明）写的是「程序目录」——
+    用户双击出问题、照着说明去程序目录找，找不到那个文件，
+    只会得出「自检根本没跑 / 这软件坏了」的结论。
+
+    一个指错位置的文件名，和功能坏了给人的感觉是一样的，所以钉住它。
+    """
+    for rel in _docs_mentioning_selfcheck():
+        text = _read(rel)
+        for m in re.finditer(r"selfcheck\.txt", text):
+            before = text[max(0, m.start() - 16):m.start()]
+            assert "程序目录" not in before, (
+                f"{rel} 把自检报告说成写在「程序目录」——"
+                r"它实际在数据目录 %LOCALAPPDATA%\WingMan\logs\，用户照着找不到"
+            )

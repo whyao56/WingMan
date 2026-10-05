@@ -11,9 +11,12 @@
   Release 附件就是官方为此设计的出口：可下载、有稳定 URL、可校验、不污染历史。
 
 用法：
-    python scripts/make_release.py --version 0.2.0 --tag v0.2.0 --check
-    python scripts/make_release.py --version 0.2.0 --tag v0.2.0 --dry-run
-    python scripts/make_release.py --version 0.2.0 --tag v0.2.0
+    python scripts/make_release.py --check       # 只打包、打印校验和，不上传
+    python scripts/make_release.py --dry-run     # 再加一步模拟上传
+    python scripts/make_release.py               # 真发版（建 tag、传附件、发布）
+
+版本号默认从 backend/app/__init__.py 里读 —— 这个脚本本身就是为「防止版本号漂移」
+而写的，自己的默认值再硬编码一个版本就自相矛盾了。要覆盖用 --version 0.2.1 --tag v0.2.1。
 
 前置条件：先跑过 `python scripts/build_exe.py` 和 `--with-asr`，并归位成
 dist/WingMan 与 dist/WingMan-full（见 docs/DESKTOP.md 的发布检查清单）。
@@ -27,6 +30,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.error
@@ -79,7 +83,7 @@ NOTE = """WingMan · 聊天僚机 {version}
 ------------
 先在命令行里跑一次自检，它会直接告诉你缺什么：
     WingMan.exe --check
-结果同时写在程序目录的 logs\\selfcheck.txt。
+结果同时写在数据目录的 logs\\selfcheck.txt（就是上面「数据存在哪」那个目录）。
 
 开源地址：https://github.com/{repo}
 """
@@ -95,6 +99,24 @@ def sha256(path: str) -> str:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def current_version() -> str:
+    """从代码里读当前版本号。
+
+    为什么不直接写个默认值：这个脚本的存在意义就是「让版本号别再漂移」，
+    它自己的默认值再硬编码一个版本，下次升版本时就会第一个过期 ——
+    而且过期得不明显（不加 --version 时会打出一个版本号与代码不符的包）。
+    """
+    path = os.path.join(ROOT, "backend", "app", "__init__.py")
+    try:
+        with open(path, encoding="utf-8") as f:
+            m = re.search(r'__version__\s*=\s*"([^"]+)"', f.read())
+    except OSError as e:  # noqa: BLE001
+        raise SystemExit(f"读不出版本号：{e}")
+    if not m:
+        raise SystemExit(f'{path} 里找不到 __version__ = "x.y.z"')
+    return m.group(1)
 
 
 def token() -> str:
@@ -168,7 +190,8 @@ def pack_one(src: str, top: str, version: str, repo: str, out_dir: str):
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="把打好包的 exe 发布成 GitHub Release")
-    ap.add_argument("--version", default="0.2.0", help="版本号，用于文件名，如 0.2.0")
+    ap.add_argument("--version", default=None,
+                    help="版本号，默认取 backend/app/__init__.py 里的 __version__")
     ap.add_argument("--tag", default=None, help="tag 名，默认 v<version>")
     ap.add_argument("--repo", default=None, help="owner/name，默认取 origin 的地址")
     ap.add_argument("--notes", default=None, help="发行说明文件，默认 docs/releases/<tag>.md")
@@ -178,7 +201,8 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true", help="打包 + 模拟上传，不真的调 API")
     args = ap.parse_args()
 
-    tag = args.tag or f"v{args.version}"
+    version = args.version or current_version()
+    tag = args.tag or f"v{version}"
     repo = args.repo
     if not repo:
         url = subprocess.run(["git", "remote", "get-url", "origin"], cwd=ROOT,
@@ -187,7 +211,7 @@ def main() -> int:
     notes_path = args.notes or os.path.join(ROOT, "docs", "releases", f"{tag}.md")
     out_dir = os.path.join(ROOT, "release")
 
-    print(f"仓库 {repo} · tag {tag} · 版本 {args.version}\n")
+    print(f"仓库 {repo} · tag {tag} · 版本 {version}\n")
 
     if not os.path.isfile(notes_path):
         print(f"!! 找不到发行说明 {notes_path}")
@@ -200,9 +224,9 @@ def main() -> int:
         if not os.path.isdir(src):
             print(f"!! 缺产物 {rel}，先跑 scripts/build_exe.py")
             return 2
-        top = tpl.format(version=args.version)
+        top = tpl.format(version=version)
         print(f"== 打包 {label}：{rel}")
-        zpath, size, digest, n = pack_one(src, top, args.version, repo, out_dir)
+        zpath, size, digest, n = pack_one(src, top, version, repo, out_dir)
         print(f"   {n} 个文件 -> {os.path.basename(zpath)}  {human(size)}")
         print(f"   SHA256 {digest}\n")
         built.append((os.path.basename(zpath), zpath, size, digest))

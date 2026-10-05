@@ -422,8 +422,12 @@ def _run_asr_test(wav: str, seconds: float, source: str = "microphone") -> int:
 def _run_check() -> int:
     """`--check`：不启动服务，只跑自检。
 
-    结果同时写进 ``logs/selfcheck.txt`` —— 窗口版 exe 没有 stdout，
+    结果同时写进**数据目录**的 ``logs/selfcheck.txt``
+    （``%LOCALAPPDATA%\\WingMan\\logs``）—— 窗口版 exe 没有 stdout，
     用户想反馈问题只能靠这个文件。
+
+    这里特意点明「数据目录」：早先几处文案写成「程序目录」，用户照着去找不到，
+    容易以为自检根本没跑起来 —— 一个找不到的文件比没有文件更让人困惑。
     """
     from .context import get_ctx
 
