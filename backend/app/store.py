@@ -776,7 +776,8 @@ class Store:
                 continue
             channels.append(PersonChannel(
                 chat_id=info.id, channel=info.channel, platform=info.platform,
-                name=info.name, source=info.source,
+                name=info.name, peer_name=info.peer_name, me_name=info.me_name,
+                source=info.source,
                 message_count=info.message_count, peer_count=info.peer_count,
                 me_count=info.me_count, first_ts=info.first_ts, last_ts=info.last_ts,
                 indexed=info.indexed,

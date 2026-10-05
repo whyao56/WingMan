@@ -270,6 +270,14 @@ class PersonChannel(BaseModel):
     channel: str = "generic"
     platform: str = ""
     name: str = ""
+    # 渠道两端的称呼。`name` 是渠道的显示名，多数时候等于 `peer_name`，
+    # 但调用方（半自动采集 `_resolve_names`）要**分别**拿到「对方」和「我」
+    # 的称呼来认人。以前这里没有这两个字段，读的人以为有 ——
+    # 于是崩在运行期（`AttributeError: 'PersonChannel' object has no attribute 'peer_name'`），
+    # 而且只在「person 已绑好 chat」时触发，第一次创建时反而不炸。
+    # 补上字段是**兼容**改动（前端在用的响应模型，只加不删）。
+    peer_name: str = ""
+    me_name: str = ""
     source: str = "import"
     message_count: int = 0
     peer_count: int = 0

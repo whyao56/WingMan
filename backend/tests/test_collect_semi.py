@@ -607,6 +607,38 @@ def test_start_and_stop_really_wire_the_watcher_and_leave_nothing_behind() -> No
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_start_works_when_the_person_already_has_a_channel() -> None:
+    """回归：这个人**已经绑好渠道**时，再点一次「开始监听」不能崩。
+
+    踩过的坑（`'PersonChannel' object has no attribute 'peer_name'`）：
+    `_resolve_names` 会遍历 `person_detail().channels` 去补全「认得出是谁」的名字，
+    却读了这个模型上根本不存在的 `peer_name` / `me_name`。
+    于是出现一条很反直觉的规律 ——
+    **第一次创建（person 还不存在，守卫短路）不炸，第二次选中（person 已绑好 chat）必炸**。
+    原来的用例要么绕过 `_resolve_names`（`_started` 直接赋值），要么用了没有 chat 的
+    person（`channels == []`，循环体一次都不进），所以一直没抓到。
+
+    这条用例走**真 `start()`**，前置条件正是那条崩过的路径：
+    建 person → 把 chat 绑到它名下 → 再 start。
+    """
+    tmp = _tmp_dir()
+    try:
+        store, cb, semi = _modules(tmp)
+        pid = store.create_person("小鹿")
+        store.upsert_chat("qq:haha", "qq", "小鹿", peer_name="小鹿", me_name="我",
+                          channel="qq", source="collect", person_id=pid)
+
+        sc = semi.get_semi()
+        try:
+            state = sc.start(store, client="qq", peer_name="小鹿", person_id=pid)
+            assert state.active
+            assert "小鹿" in sc._peer_names, sc._peer_names
+        finally:
+            sc.stop()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main() -> int:
     import traceback
 
