@@ -277,6 +277,7 @@ class SemiCollector:
                 chat_id=chat_id, platform=self.state.client, sender=sender,
                 role=it.role, ts=_parse_iso(it.ts), text=it.text,
                 msg_type=it.msg_type, ext_id=None, ts_source=it.ts_source or "exact",
+                captured_at=_capture_iso(cap.at),
             ))
 
         if not rows:
@@ -545,6 +546,21 @@ def _parse_iso(value: str) -> datetime:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt
+
+
+def _capture_iso(at: float) -> str:
+    """把 `Capture.at`（epoch 秒）转成 ISO 的**采集时刻**。
+
+    与消息自身的 `ts` 分开存：这个值是「我何时抓的」，不是「消息何时发生的」。
+    剪贴板没带时间时，界面要能同时展示「采集于」和「消息时间」，
+    所以两者都得留。
+    """
+    if not at:
+        return ""
+    try:
+        return datetime.fromtimestamp(at).astimezone().isoformat(timespec="seconds")
+    except (OverflowError, OSError, ValueError):  # pragma: no cover - 极端坏值
+        return ""
 
 
 def _dedupe(names: list[str]) -> list[str]:

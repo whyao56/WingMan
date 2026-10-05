@@ -29,8 +29,12 @@ class Msg(BaseModel):
     text: str
     msg_type: str = "text"
     ext_id: str | None = None
-    # 时间来源：exact（原始记录带的时间）| assumed（抓取时刻顶替）| manual（人工填写）
+    # 时间来源：exact（原始记录带的时间）| clipboard（复制文本里的真实时刻）|
+    # inferred（由上下文补全日期）| assumed（采集时刻顶替）| manual（人工填写）
     ts_source: str = "exact"
+    # 采集时刻：这条消息是什么时候被采进库的。与 `ts` 分开存 ——
+    # 它是「我何时抓的」，不是「这条消息发生在何时」。空表示没记录。
+    captured_at: str = ""
 
     def to_row(self) -> tuple:
         return (
@@ -43,6 +47,7 @@ class Msg(BaseModel):
             self.text,
             self.ext_id,
             self.ts_source,
+            self.captured_at,
         )
 
     def brief(self, limit: int = 200) -> str:

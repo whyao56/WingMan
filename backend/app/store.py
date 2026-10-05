@@ -45,10 +45,17 @@ log = logging.getLogger("wingman.store")
 # 早期版本唯一键写成 (chat_id, subject, key)，配合 INSERT OR REPLACE，
 # 会让后抽到的事实**静默覆盖**先抽到的 —— 「她喜欢猫」就这么消失了，
 # 而且不报任何错。单独抽成常量是因为升级老库时要复用这段 DDL 重建表。
+#
+# `chat_id` 允许为空：**对象级事实**没有具体的渠道（「她怕黑」这件事
+# 不属于某一段微信聊天），存成 chat_id 为空、person_id 非空。
+# 渠道级事实照旧带 chat_id。这两种归属都要能被唯一键保护 ——
+# 但 SQLite 里 NULL 互不相等，chat_id 为空的行靠 UNIQUE(chat_id,…) 等于没有约束，
+# 所以另外补一条**部分唯一索引**（见 `_ensure_facts_person_index`）。
 FACTS_DDL = """
 CREATE TABLE IF NOT EXISTS facts (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    chat_id     TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+    chat_id     TEXT REFERENCES chats(id) ON DELETE CASCADE,
+    person_id   TEXT,
     subject     TEXT NOT NULL DEFAULT 'peer',
     key         TEXT NOT NULL,
     value       TEXT NOT NULL,
@@ -177,6 +184,67 @@ CREATE TABLE IF NOT EXISTS collect_cursors (
 );
 
 CREATE INDEX IF NOT EXISTS idx_cursor_person ON collect_cursors (person_id);
+
+-- ---------------------------------------------------------------- 输出留存
+--
+-- 「有动作就有痕迹」：指挥台的输出、导入、采集、批量编辑都要能回看。
+-- 这些表里存的是模型生成的**回复原文**，属于隐私数据 ——
+-- 和消息一样落在 DATA_DIR，不外传；导出/删除要能覆盖到。
+CREATE TABLE IF NOT EXISTS engine_runs (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    person_id     TEXT DEFAULT '',
+    chat_ids      TEXT DEFAULT '',   -- JSON 数组
+    peer_message  TEXT DEFAULT '',
+    analysis      TEXT DEFAULT '',   -- JSON
+    strategy      TEXT DEFAULT '',   -- JSON
+    options       TEXT DEFAULT '',    -- JSON
+    trace         TEXT DEFAULT '',   -- JSON
+    created_at    TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_engine_runs_person  ON engine_runs (person_id);
+CREATE INDEX IF NOT EXISTS idx_engine_runs_created ON engine_runs (created_at);
+
+CREATE TABLE IF NOT EXISTS sim_runs (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id       INTEGER DEFAULT 0,   -- 关联 engine_runs.id（0 = 没带上一次运行）
+    option_id    TEXT DEFAULT '',
+    option_text  TEXT DEFAULT '',
+    branches     TEXT DEFAULT '',     -- JSON
+    advice       TEXT DEFAULT '',
+    created_at   TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sim_runs_run ON sim_runs (run_id);
+
+CREATE TABLE IF NOT EXISTS activity_log (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts         TEXT NOT NULL,
+    kind       TEXT NOT NULL,      -- import | collect_auto | collect_semi | edit | profile
+    person_id  TEXT DEFAULT '',
+    chat_id    TEXT DEFAULT '',
+    summary    TEXT DEFAULT '',
+    detail     TEXT DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_activity_person ON activity_log (person_id);
+CREATE INDEX IF NOT EXISTS idx_activity_chat   ON activity_log (chat_id);
+CREATE INDEX IF NOT EXISTS idx_activity_ts     ON activity_log (ts);
+
+-- ---------------------------------------------------------------- 对象级人物设定
+--
+-- 人物的心愿/雷区/阶段目标是「人」的属性，不是某一段聊天的属性：
+-- 在微信里想约她看展，不会因为换到 QQ 聊天就变成另一个目标。
+-- 现有 `personas`（chat 级）保留作「渠道级覆盖」，界面只暴露对象级这一张。
+CREATE TABLE IF NOT EXISTS person_personas (
+    person_id     TEXT PRIMARY KEY REFERENCES persons(id) ON DELETE CASCADE,
+    goal          TEXT DEFAULT '',
+    my_style      TEXT DEFAULT '',
+    peer_profile  TEXT DEFAULT '',
+    taboos        TEXT DEFAULT '',
+    stage         TEXT DEFAULT '',
+    updated_at    TEXT DEFAULT ''
+);
 """
 
 
@@ -199,6 +267,14 @@ _CHANNEL_BY_PLATFORM = {
 
 def _channel_from_platform(platform: str) -> str:
     return _CHANNEL_BY_PLATFORM.get((platform or "").strip().lower(), "generic")
+
+
+# 「对象级事实」的判定条件。它同时是部分唯一索引的 WHERE、也是写入时的冲突目标 ——
+# 两处必须**逐字相同**，否则 SQLite 会认为它们指向不同的索引。
+# 渠道级事实带 chat_id，天然被排除；只有 chat_id 留空且有 person_id 的才算对象级。
+_FACTS_PERSON_SCOPE = (
+    "person_id IS NOT NULL AND person_id <> '' AND (chat_id IS NULL OR chat_id = '')"
+)
 
 
 def _fingerprint_of(rows: Sequence[dict[str, Any]]) -> str:
@@ -288,9 +364,14 @@ class Store:
         with self.conn() as c:
             c.execute("PRAGMA foreign_keys = ON")
         self._migrate_facts_unique()
+        self._migrate_facts_person()
         self._migrate_person_columns()
         self._migrate_message_columns()
         self._backfill_persons()
+        # 回填事实归属必须在 `_backfill_persons` 之后：先让每个 chat 都有归属的人，
+        # 这里才回填得到值。
+        self._backfill_fact_person()
+        self._ensure_facts_person_index()
 
     # ------------------------------------------------------------ 结构迁移
 
@@ -336,20 +417,31 @@ class Store:
             log.info("已为 %d 个会话补上渠道标记", len(rows))
 
     def _migrate_message_columns(self) -> None:
-        """给 messages 补上 `ts_source`。
+        """给 messages 补上 `ts_source` 与 `captured_at`。
 
-        采集（尤其是从剪贴板采集）经常拿不到消息的原始时间，只能用抓取时刻顶替。
-        顶替不是问题，**顶替了不说才是问题** —— 所以这一列必须单独存，
-        而不是靠「时间看起来对不对」去猜。老库补成 'exact'：
+        `ts_source`：采集（尤其是从剪贴板采集）经常拿不到消息的原始时间，
+        只能用采集时刻顶替。顶替不是问题，**顶替了不说才是问题** —— 所以这一列
+        必须单独存，而不是靠「时间看起来对不对」去猜。老库补成 'exact'：
         那些行都是导入来的、时间来自原始记录。
+
+        `captured_at`：**采集时刻**，与消息自身的 `ts` 分开存。
+        它是「我在什么时候把这条抓进库里」，不是「这条消息发生在什么时候」。
+        剪贴板没带时间时用采集时刻冒充 `ts` 会让时间轴失真；
+        把两者分开，界面才能同时展示「采集于」与「消息时间」。
+        老库这一列为空 —— 历史数据没记过采集时刻，不编造。
         """
         have = self._columns("messages")
-        if "ts_source" in have:
-            return
+        added: list[str] = []
         with self.conn() as c:
-            c.execute("ALTER TABLE messages ADD COLUMN ts_source TEXT DEFAULT 'exact'")
-            c.execute("UPDATE messages SET ts_source = 'exact' WHERE ts_source IS NULL")
-        log.info("messages 已加列 ts_source（老数据一律标为 exact）")
+            if "ts_source" not in have:
+                c.execute("ALTER TABLE messages ADD COLUMN ts_source TEXT DEFAULT 'exact'")
+                c.execute("UPDATE messages SET ts_source = 'exact' WHERE ts_source IS NULL")
+                added.append("ts_source（老数据一律标为 exact）")
+            if "captured_at" not in have:
+                c.execute("ALTER TABLE messages ADD COLUMN captured_at TEXT")
+                added.append("captured_at（历史数据留空，不编造采集时刻）")
+        if added:
+            log.info("messages 已加列：%s", "、".join(added))
 
     def _backfill_persons(self) -> None:
         """给还没归属的 chat 各建一个「人」并挂上去。
@@ -400,6 +492,90 @@ class Store:
             )
             c.execute("DROP TABLE facts_legacy")
             log.info("facts 表已升级：同 key 现在可以并存多个不同的 value")
+
+    def _migrate_facts_person(self) -> None:
+        """给 facts 补上 `person_id`，并把 `chat_id` 放开为可空。
+
+        两件事必须一起做：对象级事实没有具体渠道，`chat_id` 得留空；
+        而老库这一列是 `NOT NULL`，不放开就存不进去。SQLite 不支持 ALTER 改约束，
+        只能重建表 —— 用新 DDL 重建，`person_id` 先留空，
+        稍后由 `_backfill_fact_person` 按 chats 回填。
+        直接读 sqlite_master 的原始 DDL 判断版本，比试探索引更明确。
+        """
+        with self.conn() as c:
+            row = c.execute(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'facts'"
+            ).fetchone()
+            if row is None:
+                return
+            ddl = " ".join((row["sql"] or "").split())
+            if "person_id" in ddl:
+                return  # 已是新结构
+            c.execute("ALTER TABLE facts RENAME TO facts_legacy")
+            c.execute(FACTS_DDL)
+            c.execute(
+                """
+                INSERT OR IGNORE INTO facts
+                    (id, chat_id, person_id, subject, key, value, confidence, evidence, updated_at)
+                SELECT id, chat_id, NULL, subject, key, value, confidence, evidence, updated_at
+                FROM facts_legacy
+                """
+            )
+            c.execute("DROP TABLE facts_legacy")
+        log.info("facts 表已升级：加列 person_id，chat_id 放开为可空（支持对象级事实）")
+
+    def _backfill_fact_person(self) -> None:
+        """把已有事实的 person_id 按 `chats.person_id` 回填。
+
+        为什么不一上来就在 DDL 里写死：`facts.chat_id` 指向 chats，
+        而 person 归属是 chats 上的字段。回填 = 一次 join 更新，
+        比在插入时到处传 person_id 可靠（漏一处就漂移）。
+        """
+        with self.conn() as c:
+            n = c.execute(
+                """
+                UPDATE facts SET person_id = (
+                    SELECT c.person_id FROM chats c WHERE c.id = facts.chat_id
+                )
+                WHERE (person_id IS NULL OR person_id = '')
+                  AND chat_id IS NOT NULL AND chat_id <> ''
+                """
+            ).rowcount
+        if n:
+            log.info("已为 %d 条事实回填 person_id", n)
+
+    def _ensure_facts_person_index(self) -> None:
+        """给「对象级事实」补一条部分唯一索引，并先清掉重复行。
+
+        为什么不靠 `UNIQUE(chat_id, subject, key, value)`：SQLite 里 NULL 互不相等，
+        chat_id 为空的行彼此永不冲突 —— 对象级事实会失去唯一性保护，
+        同一条被抽两次就存两条，而且是静默的。部分唯一索引把「对象级」这一子集
+        单独约束起来。**建索引前必须先删重复**（保留 id 最小的一条），
+        否则 CREATE UNIQUE INDEX 直接失败、整个启动流程挂掉。
+        """
+        with self.conn() as c:
+            removed = c.execute(
+                f"""
+                DELETE FROM facts
+                WHERE ({_FACTS_PERSON_SCOPE})
+                  AND id NOT IN (
+                      SELECT MIN(id) FROM facts
+                      WHERE ({_FACTS_PERSON_SCOPE})
+                      GROUP BY person_id, subject, key, value
+                  )
+                """
+            ).rowcount
+            c.execute(
+                f"""
+                CREATE UNIQUE INDEX IF NOT EXISTS ux_facts_person
+                  ON facts(person_id, subject, key, value)
+                  WHERE {_FACTS_PERSON_SCOPE}
+                """
+            )
+        if removed:
+            log.warning(
+                "建对象级事实唯一索引前清掉了 %d 条重复行（保留 id 最小的一条）", removed
+            )
 
     # ------------------------------------------------------------ chats
 
@@ -757,6 +933,9 @@ class Store:
         with self.conn() as c:
             c.execute("UPDATE chats SET person_id = NULL WHERE person_id = ?", (person_id,))
             c.execute("DELETE FROM collect_cursors WHERE person_id = ?", (person_id,))
+            # 对象级人物设定随人一起走；对象级事实由调用方决定是否保留（这里不动 facts）。
+            # 不依赖 ON DELETE CASCADE：连接默认没开 foreign_keys，指望级联会漏删。
+            c.execute("DELETE FROM person_personas WHERE person_id = ?", (person_id,))
             c.execute("DELETE FROM persons WHERE id = ?", (person_id,))
 
     def person_detail(self, person_id: str) -> PersonDetail | None:
@@ -954,8 +1133,8 @@ class Store:
             c.executemany(
                 """
                 INSERT OR IGNORE INTO messages
-                    (chat_id, platform, sender, role, ts, msg_type, text, ext_id, ts_source)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (chat_id, platform, sender, role, ts, msg_type, text, ext_id, ts_source, captured_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 rows,
             )
