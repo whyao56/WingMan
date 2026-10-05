@@ -29,8 +29,8 @@ wingman/
 │  │  ├─ desktop.py         302  桌面壳：pywebview 窗口 + 后台线程跑 uvicorn + --check 自检
 │  │  ├─ config.py          204  路径/设置/KEEP_ALIVE_S、DATA_DIR、LOG_DIR、RESOURCE_DIR
 │  │  ├─ context.py         156  单例上下文（store/embedder/retriever/llm/settings）
-│  │  ├─ store.py          1257  ★ 全部 SQLite 读写（9 张表）+ 迁移
-│  │  ├─ schemas.py         319  ★ 全部 Pydantic 模型
+│  │  ├─ store.py          1877  ★ 全部 SQLite 读写（13 张表）+ 迁移
+│  │  ├─ schemas.py         394  ★ 全部 Pydantic 模型
 │  │  ├─ selfcheck.py       275  8 项体检
 │  │  ├─ api/
 │  │  │  ├─ __init__.py      17  路由注册顺序 admin→data→persons→collect→engine→health
@@ -53,7 +53,7 @@ wingman/
 │  │  ├─ adapters/          导入适配器（qq.py / wechat.py / generic.py / registry.py）
 │  │  ├─ memory/            embedder(HashEmbedder 兜底/Cloud) + retriever(混合检索) + profiler
 │  │  └─ engine/            analyzer / planner / suggestor / simulator / context / prompts
-│  ├─ tests/                17 个测试文件，全量 159 passed + 1 skipped
+│  ├─ tests/                18 个测试文件，全量 178 passed + 1 skipped（S0 后；基线为 159+1）
 │  ├─ data/                 运行时 SQLite（.gitignore；含 collect_cache/）
 │  └─ logs/wingman.log
 ├─ frontend/index.html      2787 単文件前端
@@ -73,35 +73,48 @@ DDL：`FACTS_DDL` `48-60`、`SCHEMA` `62-180`；建表 `init()` `284-293`。
 | 表 | 行 | 列 | 说明 |
 |---|---|---|---|
 | `chats` | `66-73`（补列 `302-336`） | id PK, platform, name, peer_name, me_name, created_at, **person_id**, **channel**, **source** | 「一个渠道上的一段记录」。`channel ∈ qq/wechat/call/offline/generic`（由 platform 映射，`190-201`）；`source ∈ import/collect` |
-| `messages` | `75-91` | id PK AI, chat_id FK(CASCADE), platform, sender, role(me/peer/system), ts, msg_type, text, ext_id, **ts_source** | **UNIQUE(chat_id, sender, ts, text)** 是幂等键（`90`）+ `INSERT OR IGNORE` |
+| `messages` | `75-91` | id PK AI, chat_id FK(CASCADE), platform, sender, role(me/peer/system), ts, msg_type, text, ext_id, **ts_source**, **captured_at** | **UNIQUE(chat_id, sender, ts, text)** 是幂等键 + `INSERT OR IGNORE`。`captured_at`=**采集时刻**（S0 新增），与消息自身的 `ts` 分开存 |
 | `embeddings` | `96-101` | message_id PK, model, dim, vec BLOB | float32 原始字节 |
-| `facts` | `48-60` | id, chat_id FK, subject(peer/me/relationship), key, value, confidence, evidence, updated_at | UNIQUE 是**四列**（chat_id, subject, key, value） |
+| `facts` | `48-60` | id, chat_id FK(**可空**), **person_id**, subject(peer/me/relationship), key, value, confidence, evidence, updated_at | UNIQUE 是**四列**（chat_id, subject, key, value）；`chat_id` 可为空（**对象级事实**没有具体渠道，S0 放开），对象级子集另有部分唯一索引 `ux_facts_person` |
 | `summaries` | `105-113` | id, chat_id, kind(daily/weekly/milestone), period, content, created_at | L2 记忆 |
-| `personas` | `115-123` | **chat_id PK**, goal, my_style, peer_profile, taboos, stage, updated_at | ★ **画像挂在 chat 上，不挂 person** |
+| `personas` | `115-123` | **chat_id PK**, goal, my_style, peer_profile, taboos, stage, updated_at | ★ 渠道级画像（保留作覆盖） |
+| `person_personas` | SCHEMA 尾 | **person_id PK**, goal, my_style, peer_profile, taboos, stage, updated_at | ★ **对象级人物设定**（S0 新增，界面只暴露这一层） |
 | `kv` | `125-128` | key PK, value | 运行时设置覆盖 |
-| `persons` | `136-149` | id PK(`p_`+12hex), name, aliases(JSON), relation, desired_relation, stage_goal, notes, created_at, updated_at | ★ 人物是一等实体，但前端几乎没接（只用了 `GET /api/persons`） |
+| `persons` | `136-149` | id PK(`p_`+12hex), name, aliases(JSON), relation, desired_relation, stage_goal, notes, created_at, updated_at | ★ 人物是一等实体 |
 | `collect_cursors` | `158-177` | id, platform, account, peer_key, person_id, chat_id, last_ts, last_ext_id, fingerprint, merged_count, collected_from, last_run_at, status, message | UNIQUE(platform, account, peer_key) |
+| `engine_runs` | SCHEMA 尾 | id, person_id, chat_ids(JSON), peer_message, analysis/strategy/options/trace(JSON), created_at | ★ 指挥台输出留存（S0 新增） |
+| `sim_runs` | SCHEMA 尾 | id, run_id, option_id, option_text, branches(JSON), advice, created_at | ★ 推演留存（S0 新增），`run_id` 关联 `engine_runs.id` |
+| `activity_log` | SCHEMA 尾 | id, ts, kind(import/collect_auto/collect_semi/edit/profile), person_id, chat_id, summary, detail | ★ 动作痕迹（S0 新增） |
 
-**没有**任何「输出留存」表 —— 指挥台的建议/推演**返回即丢**（见 §7）。
+> S0（对象中心后端打底）新增了 `person_personas` / `engine_runs` / `sim_runs` / `activity_log` 四张表
+> 与 `messages.captured_at`、`facts.person_id` 两列，共 **13 张表**。见文末 §12。
 
 ### 必须记住的不变量（踩了会静默出错）
 
 1. **chat 必须有人**：`upsert_chat` 末尾强制 `ensure_person_for_chat`（`store.py:449`；规则「有归属就用、没有就按『对方称呼 > 会话名』新建」，`451-479`）。新写入路径漏了这条，人物列表就是空的。
 2. **chat_id 生成规则有两套**：导入 `{platform}-{slug}-{md5[:6]}`（`adapters/registry.py:153-158`）、采集 `{client}:{account}:{peer_key}`（`collect/pipeline.py:277-284`）。**不要新造第三套**。
-3. **消息没有增删改**：store 只有 `insert_messages`(946) / `list_messages`(964) / `all_messages`(1017)。想「二次编辑聊天记录」必须新增方法（见 PLAN）。
-4. **facts / personas 都以 chat_id 为归属键**，人物级别的事实与画像**目前不存在**。
-5. **persona 与 persons 未打通**：`persons` 的关系字段只由用户手填，模型永远不写。
+3. **消息可增删改（S0 起）**：`update_message` / `delete_messages` / `insert_manual_message`。
+   幂等键仍是 `UNIQUE(chat_id, sender, ts, text)` —— 编辑撞键时 store **返回结构化错误**
+   （`{ok:False, error:"duplicate"}`），接口据此给 409，**不要**改成 500。
+4. **对象级事实的唯一性靠部分唯一索引**：`facts.chat_id` 现在可空，SQLite 里 NULL 互不相等，
+   所以对象级事实（`chat_id` 为空）必须靠 `ux_facts_person`（`person_id, subject, key, value`
+   且 `chat_id IS NULL OR chat_id=''`）保护。**建这条索引前必须先清重复**，否则启动失败。
+5. **`captured_at` ≠ `ts`**：`ts` 是「消息在对话里发生的时刻」，`captured_at` 是「采集时刻」。
+   不要把抓取时刻写进 `ts`（历史遗留的 `assumed` 也不要再扩散）。
+6. **persona 与 persons 未打通**：`persons` 的关系字段只由用户手填，模型永远不写；
+   对象级设定存在 `person_personas`，渠道级 `personas` 保留作覆盖。
 
 ### 存储方法速查
 
-| 域 | 方法（行） |
+| 域 | 方法（行号已随 S0 漂移，以函数名为准） |
 |---|---|
-| 会话 | `upsert_chat`406 `get_chat`481 `list_chats`520 `delete_chat`530 `rename_chat`535 `set_roles`543 |
-| 人 | `create_person`565 `get_person`578 `find_person_by_alias`585 `list_persons`601 `update_person`663 `bind_chat`698 `unbind_chat`709 `merge_persons`713 `delete_person`751（**只解绑不删消息**）`person_detail`762 `person_messages`786 |
-| 消息 | `insert_messages`946 `list_messages`964 `recent_messages`980 `messages_by_ids`983 `last_peer_message`993 `search_text`1002 `all_messages`1017 |
-| 向量 | `upsert_embeddings`1026 `unembedded`1044 `load_embeddings`1057 |
-| 事实/摘要/画像 | `replace_facts`1088 `upsert_fact`1106 `list_facts`1125 `delete_fact`1143 `add_summary`1149 `list_summaries`1161 `get_persona`1176 `save_persona`1187 |
-| 游标 | `get_cursor`813 `list_cursors`830 `save_cursor`854 `reset_cursor`894 `merged_message_count`914 `messages_fingerprint`924 |
+| 会话 | `upsert_chat` `get_chat` `list_chats` `delete_chat` `rename_chat` `set_roles` · **S0** `set_chat_platform` |
+| 人 | `create_person` `get_person` `find_person_by_alias` `list_persons` `update_person` `bind_chat` `unbind_chat` `merge_persons` `delete_person`（**只解绑不删消息**，S0 起顺带清 `person_personas`）`person_detail` `person_messages` |
+| 消息 | `insert_messages` `list_messages` `recent_messages` `messages_by_ids` `last_peer_message` `search_text` `all_messages` · **S0** `update_message` `delete_messages` `insert_manual_message` |
+| 向量 | `upsert_embeddings` `unembedded` `load_embeddings` |
+| 事实/摘要/画像 | `replace_facts` `upsert_fact` `list_facts` `delete_fact` `add_summary` `list_summaries` `get_persona` `save_persona` · **S0** `list_facts_for_person` `upsert_person_fact` `get_person_persona` `save_person_persona` |
+| 留存/痕迹 | **S0** `save_run` `list_runs` `get_run` `delete_run` `save_sim_run` `list_sim_runs` `log_activity` `list_activity` |
+| 游标 | `get_cursor` `list_cursors` `save_cursor` `reset_cursor` `merged_message_count` `messages_fingerprint` |
 
 ---
 
@@ -119,19 +132,30 @@ DDL：`FACTS_DDL` `48-60`、`SCHEMA` `62-180`；建表 `init()` `284-293`。
 `POST /collect/semi/clear`335
 
 ### 数据 `routes_data.py`
-`POST /import/preview`46 · `POST /import`67 · `POST /import/text`97 ·
-`GET /chats`122 · `GET /chats/{id}`127 · `DELETE /chats/{id}`132 · `PATCH /chats/{id}`139（改 name/peer_name/me_name；可选 `me_names` 批量纠正角色）·
-`GET /chats/{id}/messages`158 · `GET /chats/{id}/export`167 · `POST /chats/{id}/index`176 ·
-`GET/POST /chats/{id}/facts`187/193 · `DELETE /chats/{id}/facts/{fid}`210 ·
-`GET/PUT /chats/{id}/persona`217/223 · `POST /chats/{id}/profile`231
+`POST /import/preview` · `POST /import` · `POST /import/text` ·
+`GET /chats` · `GET /chats/{id}` · `DELETE /chats/{id}` ·
+`PATCH /chats/{id}`（改 name/peer_name/me_name；可选 `me_names` 批量纠正角色；**S0 起支持 `platform`/`channel`**，channel 按映射重算、**不改 chat_id**；返回里多带 `chat`）·
+`GET /chats/{id}/messages` · **S0** `POST /chats/{id}/messages`（手动加一条）·
+`GET /chats/{id}/export` · `POST /chats/{id}/index` ·
+`GET/POST /chats/{id}/facts` · `DELETE /chats/{id}/facts/{fid}` ·
+`GET/PUT /chats/{id}/persona` · `POST /chats/{id}/profile`
+**S0 消息二次编辑**：`PATCH /messages/{msg_id}`（撞唯一键 → 409 `error:duplicate`）·
+`DELETE /messages/{msg_id}`（不存在 → 404）·
+`POST /messages/bulk`（`{ids, action: delete|set_role|set_ts|set_sender, value}` → `{changed, skipped, errors[]}`）
 
-### 人物 `routes_persons.py`（**除 GET /persons 外前端全未接**）
-`GET /persons`34 · `POST /persons`39 · `GET /persons/{id}`72 · `PATCH /persons/{id}`80 ·
-`DELETE /persons/{id}`93 · `POST /persons/{id}/merge`108 · `GET /persons/{id}/messages`128 ·
-`POST /persons/{id}/channels`147 · `DELETE /persons/{id}/channels/{chat_id}`163
+### 人物 `routes_persons.py`
+`GET /persons` · `POST /persons` · `GET /persons/{id}` · `PATCH /persons/{id}` ·
+`DELETE /persons/{id}` · `POST /persons/{id}/merge` · `GET /persons/{id}/messages` ·
+`POST /persons/{id}/channels` · `DELETE /persons/{id}/channels/{chat_id}`
+**S0 新增**：`GET /persons/{id}/overview`（对象详情聚合）·
+`GET/POST /persons/{id}/facts`、`DELETE /persons/{id}/facts/{fid}`（对象级事实，
+列表里逐条标 `scope: person|chat`）· `GET/PUT /persons/{id}/persona`（对象级设定）·
+`GET /persons/{id}/history?kind=`（历史输出 + 动作痕迹）
 
 ### 指挥台 `routes_engine.py`
-`POST /chats/{id}/suggest`42 · `POST /chats/{id}/analyze`61 · `POST /chats/{id}/simulate`78
+`POST /chats/{id}/suggest`（返回 `trace.run_id`）· `POST /chats/{id}/analyze` ·
+`POST /chats/{id}/simulate`（可带 `run_id` 把推演挂到某次运行上）·
+**S0 新增** `GET /history/runs/{run_id}` · `DELETE /history/runs/{run_id}`
 
 ### 设置/自检 `routes_admin.py` + `routes_health.py`
 `GET /health`23 · `GET /selfcheck`38 · `POST /runtime/open`48 · `GET /settings`73 · `PUT /settings`93 ·
@@ -314,9 +338,9 @@ _commit_capture(253-304)：
 
 ## 8. 测试 / CI / 发版
 
-- 测试：`backend/tests/` 17 个文件，**从 `backend/` 目录跑**（`conftest.py` 在那里重定向 `DATA_DIR`；从仓库根跑单文件会因 rootdir 落到 `backend/tests` 而跳过 conftest）。
+- 测试：`backend/tests/` 18 个文件，**从 `backend/` 目录跑**（`conftest.py` 在那里重定向 `DATA_DIR`；从仓库根跑单文件会因 rootdir 落到 `backend/tests` 而跳过 conftest）。
   ```bash
-  cd backend && ./.venv/Scripts/python.exe -m pytest tests/ -q     # 159 passed, 1 skipped
+  cd backend && ./.venv/Scripts/python.exe -m pytest tests/ -q     # 178 passed, 1 skipped（S0 后）
   ```
 - CI（`.github/workflows/ci.yml`）：push/PR 到 main，矩阵 Python 3.11 + 3.13；步骤＝语法检查 → `pytest tests/ -q` → `tests/test_smoke.py` → 冒烟编码防护 → 前端 JS 语法检查。基线耗时 ~40 秒。
 - 发版：
@@ -341,7 +365,7 @@ _commit_capture(253-304)：
 
 ## 10. 已知缺陷与盲区
 
-### 10.1 【崩溃，已定位未修】半自动采集「再次选中后开始监听」报 `AttributeError`
+### 10.1 【已在 S0 修复】半自动采集「再次选中后开始监听」报 `AttributeError`
 
 `AttributeError: 'PersonChannel' object has no attribute 'peer_name'`
 
@@ -379,11 +403,23 @@ if store is not None and person_id:            # ← 守卫：person_id 非空�
 **最小修法**：`454` 的 `ch.peer_name` → `ch.name`；`457` 的 `ch.me_name` 需另取（`PersonChannel` 没有该字段）或直接不收集。
 **回归测试**：构造「person 已绑定 chat」的用例走真 `start()`（现在没有这个用例）。
 
+**S0 实际采用的修法**（比「最小修法」更稳，见 PLAN Bug 1 的「更稳的做法」）：
+`schemas.PersonChannel` 补上 `peer_name` / `me_name` 两个字段（**只加不删**，前端在用的
+响应模型加字段是兼容的），并在 `store.person_detail` 里从 `ChatInfo` 填进去 ——
+这样「渠道视图缺字段」这一类坑一次性消掉，`semi._resolve_names` 的两处读取随之合法。
+**回归守卫**：`tests/test_collect_semi.py::test_start_works_when_the_person_already_has_a_channel`
+（真 `start()`；前置=建 person → `upsert_chat(person_id=pid)` → `start(store, person_id=pid)`）。
+按项目标准**先在旧代码上跑过**，复现出原始 `AttributeError: 'PersonChannel' object has no attribute 'peer_name'`。
+
 ### 10.2 其它缺口（本轮迭代要补的）
-- 消息**无增删改**（store 层就没有方法），聊天记录页只读。
-- 指挥台输出**零留存**；没有 `engine_runs` 之类的表。
-- 人物（`persons`）后端接口齐全（含合并/渠道/跨渠道时间线），但**前端只用了一个 `GET /api/persons`** —— 大量能力闲置。
-- 事实与画像都挂 chat，**没有人物级的事实/画像**。
+- ~~消息**无增删改**~~ → **S0 已补**（store 方法与 `PATCH/DELETE /api/messages`、`/api/messages/bulk`）；
+  前端聊天记录页**仍只读**（S1）。
+- ~~指挥台输出**零留存**~~ → **S0 已补**（`engine_runs` / `sim_runs` / `activity_log`）；
+  前端「历史」Tab **尚未接**（S1/S2）。
+- 人物（`persons`）后端接口齐全（含合并/渠道/跨渠道时间线 + S0 的 overview/facts/persona/history），
+  但**前端没用** —— 大量能力闲置。
+- ~~事实与画像都挂 chat，**没有人物级的事实/画像**~~ → **S0 已补**数据层与接口
+  （`facts.person_id` + `person_personas`）；**合并展示规则**（对象级/渠道级如何分组、是否去重计数）待与用户确认后再在前端落地。
 - 前端**没有多选/批量基建**（唯一的 checkbox 与选择无关）。
 - 弹窗**没右上角关闭按钮**；窗口**没有关闭小窗 / 后台运行**。
 - 导航 7 项里有 3 项是要合并/移除的（导入→采集、自检→设置、通话→移除）。
@@ -401,3 +437,36 @@ if store is not None and person_id:            # ← 守卫：person_id 非空�
 - **历史遗留**：曾用 `git-filter-repo` 重写过历史清掉真人姓名；旧 SHA 仍能被 GitHub 缓存视图取到，
   彻底清除需删库或联系 Support（**尚未做**，注意现在删库会连带删掉已发布的 Release）。
   隐私守卫测试：`backend/tests/test_privacy_pseudonyms.py`（扫源码 + `git log -S` 查历史）。
+
+---
+
+## 12. S0（对象中心后端打底）已落地 —— 未推送
+
+> 这一节记录「0.3.1 之后、尚未并入远端 main」的改动。版本号**仍是 0.3.1**（S4 才升 0.4.0）。
+> 前端 `frontend/index.html` **一个字没动**（S1 才动）。远端 main 与本仓库的差距请看 `git log`。
+
+**做了什么**（详见 `docs/PLAN-对象中心迭代.md` §S0）：
+
+1. 修 Bug 1（`PersonChannel` 补 `peer_name`/`me_name`）+ 真 `start()` 回归守卫。
+2. 迁移与新表（**幂等**）：`messages.captured_at`、`facts.person_id`（放开 `chat_id` 为可空、
+   回填、去重、部分唯一索引 `ux_facts_person`），新表 `person_personas` / `engine_runs` /
+   `sim_runs` / `activity_log`。
+3. `Store` 新方法：消息增删改（撞键返回结构化错误）、`set_chat_platform`（重算 channel、不改 chat_id）、
+   `save_run`/`list_runs`/`get_run`/`delete_run`、`save_sim_run`/`list_sim_runs`、
+   `log_activity`/`list_activity`、对象级 facts 与 persona 读写。
+4. 新接口：`PATCH/DELETE /api/messages/{id}`、`POST /api/messages/bulk`、
+   `POST /api/chats/{id}/messages`、`GET /api/persons/{id}/overview|facts|persona|history`、
+   `POST/DELETE /api/persons/{id}/facts`、`GET/DELETE /api/history/runs/{id}`、
+   `PATCH /api/chats/{id}` 扩展 `platform`/`channel`。
+5. 写入点：`run_analysis`→`engine_runs`、`simulate`→`sim_runs`、
+   导入/自动采集/半自动采集/批量编辑→`activity_log`。
+6. 测试：`tests/test_objects_s0.py`（17 项）+ 半自动采集 2 项新守卫。
+
+**给 S1 的接口清单**见当轮交接报告；**未做 / 存疑**：
+- 前端（S1）、对象级与渠道级事实的**合并展示规则**（是否去重计数）—— 需先与用户确认。
+- `export_chat_json` **尚未**带上 `engine_runs`/`activity_log`（PLAN 需求 11 的隐私要求：
+  导出/删除要覆盖历史输出）。
+- 自动采集（`collect/pipeline._collect_one_chat`）的 `activity_log` 写入点没有独立单测
+  （需要解密后的库，成本高），靠人工核对 + 半自动那条同构守卫。
+- `delete_person` 删除对象级人物设定、但**不删**对象级事实（假设：事实属不可再生记忆资产，
+  与「删人不删消息」一致）；如需一起删请明确。

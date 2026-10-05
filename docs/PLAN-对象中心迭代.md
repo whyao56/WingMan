@@ -380,6 +380,9 @@
 > **不要 push。**
 
 ### S0 · 后端打底（不动界面，纯加能力）
+
+> **状态：已完成**（未推送，前端未动）。落地清单与遗留问题见 [STATUS.md](STATUS.md) §12。
+
 1. 修 Bug 1 + 补回归测试（**先验证新测试在旧代码上失败**）。
 2. 迁移与新表：`messages.captured_at`、`facts.person_id`（含去重 + 部分唯一索引）、
    `person_personas`、`engine_runs`、`sim_runs`、`activity_log`。**迁移必须幂等**（重复启动不报错）。
