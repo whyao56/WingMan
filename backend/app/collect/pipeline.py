@@ -115,6 +115,13 @@ class DbOutcome:
     ok: bool = False
     key_method: str = ""
     key_detail: str = ""
+    # 校验通过的密钥。**故意不进 `as_dict()`** —— 它是能解开用户聊天库的东西，
+    # 只在本进程内用来省掉「下一个库再搜一遍内存」。同一个客户端下每个库的
+    # salt 不同，缓存键也不同，不在这里传递的话，7 个库就是 7 次全内存扫描。
+    key_hex: str = ""
+    # 这个库的自动搜密钥是「到点收工」结束的（没搜完）。同一次采集里，
+    # 同一个客户端的下一个库就没必要再花一份同样的预算。
+    budget_hit: bool = False
     decrypt_note: str = ""
     mapping_note: str = ""
     chats: list[ChatOutcome] = field(default_factory=list)
@@ -294,19 +301,42 @@ def _name_of(messages: Sequence[reader.RawMessage], peer_key: str,
 # ================================================================ 主流程
 
 
-def _dbs_to_collect(det: Detected, account: str) -> list[tuple[str, Path]]:
+def _is_message_db(path: Path) -> bool:
+    """这个文件是不是「能读出消息」的库。
+
+    不是所有名字里带 msg 的库都装着消息。客户端还有一批**全文索引库**
+    （`msg_fts.db`、`buddy_msg_fts.db` …）—— 里面只有分词索引，没有消息行，
+    读它永远不会读到东西。可它**同样要过一次取密钥 + 解密**，而取密钥这条路
+    最贵的一步是「把客户端所有进程的内存读一遍」。
+
+    实测（本机 QQ 9.9.20.37051）：名字过滤会挑出 7 个「消息库」，其中 4 个是
+    全文索引；每个索引库白跑一遍取密钥，用户等的时间就是原来的 7 倍。
+    """
+    name = path.name.lower()
+    if not any(k in name for k in ("msg", "message")):
+        return False
+    if "_fts" in name:          # 全文索引：只有分词表，没有消息行
+        return False
+    return True
+
+
+def _dbs_to_collect(det: Detected, account: str) -> tuple[list[tuple[str, Path]], list[str]]:
+    """要采的库，以及「哪些被跳过了」—— 跳过必须是可见的，不能悄悄少采几个。"""
     out: list[tuple[str, Path]] = []
+    skipped: list[str] = []
     for acc in det.accounts:
         if account and acc.account != account:
             continue
         if not acc.has_messages:
             continue
         for p in acc.message_dbs:
-            # 只采消息库；`media_0.db` / `emoticon.db` 这类没有正文
-            name = Path(p).name.lower()
-            if any(k in name for k in ("msg", "message")):
-                out.append((acc.account, Path(p)))
-    return out
+            path = Path(p)
+            # 媒体库 / 表情库这类本来就没有正文；全文索引库单独说明
+            if _is_message_db(path):
+                out.append((acc.account, path))
+            elif "_fts" in path.name.lower():
+                skipped.append(path.name)
+    return out, skipped
 
 
 def run(store, req: CollectRequest) -> CollectReport:
@@ -335,7 +365,12 @@ def run(store, req: CollectRequest) -> CollectReport:
         rep.next_steps.extend(det.support.actions)
         return rep
 
-    targets = _dbs_to_collect(det, req.account)
+    targets, skipped_fts = _dbs_to_collect(det, req.account)
+    if skipped_fts:
+        rep.notes.append(
+            f"跳过了 {len(skipped_fts)} 个全文索引库（{'、'.join(skipped_fts[:3])}"
+            f"{'…' if len(skipped_fts) > 3 else ''}）：里面只有分词索引、没有消息行，"
+            "读它采不到东西，只会白跑一遍取密钥。")
     if not targets:
         rep.problems.append(f"{spec.display_name} 这边没有找到可采的消息库。")
         rep.next_steps.append(
@@ -343,19 +378,37 @@ def run(store, req: CollectRequest) -> CollectReport:
             "没打开过的会话可能还没有本地文件。")
         return rep
 
+    # 这个路径最贵的一步是「在客户端进程内存里找密钥」，而它一次就能定下来
+    # （见 `Budget` 的说明：2.9 GB 内存，逐进程 2~12 秒）。所以日志必须有头有尾：
+    # 只看到「开始」没有「结束」，就说明这段时间里进程没能活着走完 ——
+    # 这条链路上没有别的线索可查了（请求日志是关的）。
+    log.info("采集开始：%s，%d 个库，密钥预算 %.0fs，dry_run=%s",
+             spec.display_name, len(targets), req.memory_budget_s, req.dry_run)
+
     write = store is not None and not req.dry_run
+    found_keys: dict[str, str] = {}
+    scanned_clients: set[str] = set()   # 已经为这个客户端搜过一遍内存了
     for account, db in targets:
-        outcome = _collect_one(store if write else None, spec, account, db, req)
+        outcome = _collect_one(store if write else None, spec, account, db, req,
+                              shared_key=found_keys.get(spec.key, ""),
+                              skip_memory_scan=spec.key in scanned_clients)
+        if outcome.key_hex:
+            found_keys[spec.key] = outcome.key_hex
+        if outcome.budget_hit:
+            scanned_clients.add(spec.key)
         rep.dbs.append(outcome)
         rep.problems.extend(f"{db.name}：{p}" for p in outcome.problems)
         rep.next_steps.extend(outcome.next_steps)
 
     rep.elapsed_s = time.perf_counter() - t0
+    log.info("采集结束：%s，读到 %d 条，写入 %d 条，耗时 %.1fs",
+             spec.display_name, rep.read, rep.inserted, rep.elapsed_s)
     return rep
 
 
 def _collect_one(store, spec, account: str, db: Path,
-                 req: CollectRequest) -> DbOutcome:
+                 req: CollectRequest, shared_key: str = "",
+                 skip_memory_scan: bool = False) -> DbOutcome:
     t0 = time.perf_counter()
     out = DbOutcome(db=str(db), account=account)
 
@@ -363,18 +416,31 @@ def _collect_one(store, spec, account: str, db: Path,
     profiles = _profiles_for(spec)
     pasted = req.keys.get(str(db)) or req.keys.get(db.name) or req.pasted_key
     cached_key = _cached_key(db, spec)
+    # 同一次采集里，前一个库已经验证通过的密钥先试 —— 它对别的库不一定对
+    # （每个库有自己的 salt），但 `obtain_key` 会用这个库的第 1 页真验一遍，
+    # 验不过才退回去搜内存。省掉的是「每个库都重搜一次内存」。
+    skip_note = ""
+    if skip_memory_scan:
+        skip_note = ("同一个客户端的密钥刚刚已经按预算搜过一遍、没找到；"
+                     "内存内容这几秒内不会变，所以后面的库不再重复搜。"
+                     "手动粘贴的密钥不受影响。")
+        out.next_steps.append(skip_note)
     attempt: KeyAttempt = obtain_key(
         db, profiles, exe_names=spec.exe_names,
-        pasted=pasted, cached=cached_key,
-        allow_memory=req.allow_memory_scan, budget_s=req.memory_budget_s)
+        pasted=pasted, cached=shared_key or cached_key,
+        allow_memory=req.allow_memory_scan and not skip_memory_scan,
+        budget_s=req.memory_budget_s,
+        memory_skip_note=skip_note)
     out.key_method = attempt.method
     out.key_detail = attempt.detail
+    out.budget_hit = attempt.budget_hit
     if not attempt.ok:
         out.problems.append(f"取不到密钥：{attempt.detail}")
         out.next_steps.extend(_key_next_steps(spec, attempt))
         out.elapsed_s = time.perf_counter() - t0
         return out
     _remember_key(db, spec, attempt.key_hex)
+    out.key_hex = attempt.key_hex
     profile = next((p for p in profiles if p.name == attempt.profile), profiles[0])
 
     # ---------- 解密（带缓存）

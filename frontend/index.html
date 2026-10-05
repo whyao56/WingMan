@@ -936,10 +936,44 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c =>
 
 const state = { chats: [], chatId: null, bundle: null, check: null };
 
+// ---------------------------------------------------------------- 请求
+//
+// 「请求根本没发出去」长得和「服务端报错」完全不一样，必须分开对待。
+//
+// 本机服务把一条空闲连接收掉之后，浏览器并不知道，仍会在这条连接上发下一个请求，
+// 拿回来的是**零字节响应**。浏览器对 GET 会静默重试、对 POST **不重试**，于是把
+// `net::ERR_CONNECTION_CLOSED` 原样抛给 JS —— `e.message` 就是那句英文
+// `Failed to fetch`，用户看到的是一句既看不懂、也不知道该做什么的话。
+//
+// 这类失败有个关键性质：**请求没到服务端**。所以重发一次是安全的：
+//   · GET 天然幂等；
+//   · 采集链路用 `retryOnce` 显式声明 —— 它按 ext_id 去重、游标只前进，
+//     重发最多是「再读一遍、写 0 条」，不会写重。
+// 重试仍失败就换成能照做的一句话，不再把浏览器的话原样丢出去。
+const NET_ERR_TEXT =
+  "和本机服务断开了，这次请求没有发出去（重发一次也没成功）。" +
+  "多半是 WingMan 的窗口或后台进程已经退出 —— 重新打开一次再做这个操作。";
+
 async function api(path, opts = {}) {
+  const method = String(opts.method || "GET").toUpperCase();
+  const tries = method === "GET" || opts.retryOnce === true ? 2 : 1;
+  let last = null;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await rawApi(path, opts);
+    } catch (e) {
+      if (!(e instanceof TypeError)) throw e;   // 有响应的错误（4xx/5xx）不重发
+      last = e;
+    }
+  }
+  throw new Error(`${NET_ERR_TEXT}（浏览器原话：${last && last.message}）`);
+}
+
+async function rawApi(path, opts = {}) {
+  const { retryOnce, ...init } = opts;          // retryOnce 是我们自己的开关
   const res = await fetch(path, {
-    headers: opts.body instanceof FormData ? {} : { "Content-Type": "application/json" },
-    ...opts,
+    headers: init.body instanceof FormData ? {} : { "Content-Type": "application/json" },
+    ...init,
   });
   const text = await res.text();
   let data = null;
@@ -966,6 +1000,18 @@ function busy(btn, on, label) {
     b.disabled = false;
     if (b.dataset.old) b.innerHTML = b.dataset.old;
   }
+}
+
+// 采集是秒级到分钟级的动作（搜密钥最贵）。按钮上带个秒数，
+// 「界面是不是卡死了」这个问题就不用靠猜 —— 数字在动就是还在跑。
+function busyClock(btn, label) {
+  const b = typeof btn === "string" ? $(btn) : btn;
+  busy(b, true, label);
+  const t0 = Date.now();
+  return setInterval(() => {
+    if (!b.disabled) return;
+    b.innerHTML = `<span class="spin"></span> ${label} ${Math.round((Date.now() - t0) / 1000)}s`;
+  }, 1000);
 }
 
 // ---------------------------------------------------------------- 模态弹窗
@@ -2323,11 +2369,12 @@ function paintReport(rep) {
 
 async function collectPreview() {
   const b = $("#ac-preview");
-  busy(b, true, "预演中…");
+  const clock = busyClock(b, "预演中…");
   toast("#ac-msg", "完整走一遍链路但不写库，稍等…");
   try {
     const rep = await api("/api/collect/preview", {
       method: "POST",
+      retryOnce: true,
       body: JSON.stringify({
         client: $("#ac-client").value,
         key: $("#ac-key").value.trim(),
@@ -2341,17 +2388,19 @@ async function collectPreview() {
   } catch (e) {
     toast("#ac-msg", e.message, "err");
   } finally {
+    clearInterval(clock);
     busy(b, false);
   }
 }
 
 async function collectRun() {
   const b = $("#ac-run");
-  busy(b, true, "采集中…");
+  const clock = busyClock(b, "采集中…");
   toast("#ac-msg", "会把读到的消息写进库里，稍等…");
   try {
     const rep = await api("/api/collect/run", {
       method: "POST",
+      retryOnce: true,
       body: JSON.stringify({ client: $("#ac-client").value, key: $("#ac-key").value.trim() }),
     });
     paintReport(rep);
@@ -2360,6 +2409,7 @@ async function collectRun() {
   } catch (e) {
     toast("#ac-msg", e.message, "err");
   } finally {
+    clearInterval(clock);
     busy(b, false);
   }
 }
@@ -2382,16 +2432,18 @@ async function collectCheckKey() {
 
 async function collectScanKey() {
   const b = $("#ac-scan");
-  busy(b, true, "搜内存中…");
+  const clock = busyClock(b, "搜内存中…");
   toast("#ac-msg", "在客户端进程内存里找密钥，最多 60 秒…");
   try {
     const r = await api("/api/collect/key/scan",
-      { method: "POST", body: JSON.stringify({ client: $("#ac-client").value, budget_s: 60 }) });
+      { method: "POST", retryOnce: true,
+        body: JSON.stringify({ client: $("#ac-client").value, budget_s: 60 }) });
     toast("#ac-msg", cut(r.detail, 200), r.ok ? "ok" : "err");
     if (r.ok && r.key) $("#ac-key").value = r.key;
   } catch (e) {
     toast("#ac-msg", e.message, "err");
   } finally {
+    clearInterval(clock);
     busy(b, false);
   }
 }

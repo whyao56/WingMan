@@ -23,7 +23,7 @@ import urllib.error
 import urllib.request
 import webbrowser
 
-from .config import APP_DIR, LOG_DIR, RESOURCE_DIR, get_settings
+from .config import APP_DIR, KEEP_ALIVE_S, LOG_DIR, RESOURCE_DIR, get_settings
 
 log = logging.getLogger("wingman.desktop")
 
@@ -140,6 +140,9 @@ def _run_server(port: int, host: str, log_level: str) -> threading.Thread:
         access_log=False,
         log_config=None,       # 复用我们自己的 logging 配置
         loop="asyncio",
+        # 见 `config.KEEP_ALIVE_S`：默认的 5 秒会让浏览器把请求写进一条
+        # 服务端已经收掉的连接，界面上表现为英文 `Failed to fetch`。
+        timeout_keep_alive=KEEP_ALIVE_S,
     )
     server = uvicorn.Server(config)
 

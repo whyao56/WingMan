@@ -148,12 +148,16 @@ async def scan_key(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
         raise HTTPException(status_code=409,
                             detail="本机没有找到可采的消息库，先按指引打开几个会话。")
     budget = float(payload.get("budget_s") or 60)
+    log.info("自动找密钥：client=%s，预算 %.0fs，开始", client, budget)
     attempt = await asyncio.to_thread(
         keys_mod.scan_memory_for_key, cands[0], _profiles_for(client),
         exe_names=spec.exe_names, budget_s=max(5.0, min(budget, 600.0)))
+    log.info("自动找密钥：%s，用时 %.1fs%s", "命中" if attempt.ok else "没找到",
+             attempt.elapsed_s, "（到点收工，没扫完）" if attempt.budget_hit else "")
     return {"ok": attempt.ok, "key": attempt.key_hex, "method": attempt.method,
             "detail": attempt.detail, "tried": attempt.tried,
-            "candidates": attempt.candidates, "elapsed_s": round(attempt.elapsed_s, 1)}
+            "candidates": attempt.candidates, "elapsed_s": round(attempt.elapsed_s, 1),
+            "budget_hit": attempt.budget_hit}
 
 
 # ================================================================ 自动采集

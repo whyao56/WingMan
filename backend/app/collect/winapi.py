@@ -344,15 +344,22 @@ class MemoryReader:
             addr += size
 
     def iterate(self, callback, *, max_region: int = 0x4000000,
-                private_only: bool = False) -> tuple[int, int]:
+                private_only: bool = False, should_stop=None) -> tuple[int, int]:
         """逐区域读出内容并交给 callback(基址, 内容)。返回 (区域数, 总字节数)。
 
         用回调而不是把整块内存攒在列表里：一个 800 MB 的进程攒满了，
         进程自己就要被换页拖垮，而调用方通常只需要「边读边判」。
+
+        `should_stop` 是**必须提供的逃生口**：一个 3 GB 的进程要读几十秒，
+        调用方（取密钥）是有时间预算的。没有这个回调，预算就只能写在注释里 ——
+        实测 7 个 QQ 进程、2.9 GB 可读内存，光「读一遍 + 扫十六进制」就要 43 秒，
+        而界面承诺的是 12 秒。回调在**每个区域之间**查一次，粒度是区域。
         """
         count = total = 0
         for base, size in self.regions(max_region=max_region,
                                        private_only=private_only):
+            if should_stop is not None and should_stop():
+                break
             blob = self.read(base, size)
             if not blob:
                 continue
@@ -364,7 +371,7 @@ class MemoryReader:
         return count, total
 
     def find(self, needle: bytes, *, max_hits: int = 40,
-             max_region: int = 0x4000000) -> list[int]:
+             max_region: int = 0x4000000, should_stop=None) -> list[int]:
         """在内存里找一段字节，返回虚拟地址列表。"""
         hits: list[int] = []
 
@@ -378,5 +385,5 @@ class MemoryReader:
                 start = i + 1
             return False
 
-        self.iterate(cb, max_region=max_region)
+        self.iterate(cb, max_region=max_region, should_stop=should_stop)
         return hits

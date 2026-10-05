@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import __version__
 from .api import ROUTERS
-from .config import FRONTEND_DIR, LOG_DIR, get_settings
+from .config import FRONTEND_DIR, KEEP_ALIVE_S, LOG_DIR, get_settings
 from .context import get_ctx
 from .llm.base import LLMError
 
@@ -199,6 +199,9 @@ def main() -> None:
         port=s.port,
         reload=False,
         log_level=s.log_level.lower(),
+        # 和桌面版同一条约束：默认 5 秒会让界面报英文 `Failed to fetch`。
+        # 见 `config.KEEP_ALIVE_S` 的说明。
+        timeout_keep_alive=KEEP_ALIVE_S,
     )
 
 
