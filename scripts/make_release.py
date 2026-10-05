@@ -150,11 +150,17 @@ def call(method: str, url: str, tok: str, *, data=None, raw: bytes | None = None
 def pack_one(src: str, top: str, version: str, repo: str, out_dir: str):
     """打一个带顶层目录的 zip，返回 (路径, 大小, sha256, 源文件数)。
 
-    刻意做成**可复现**的：同样输入两次跑出**字节相同**的 zip。
+    刻意做成**可复现**的：**同一个 `src` 目录**跑两次，得到**字节相同**的 zip。
     为什么值得多写这几行：zip 条目默认记录文件 mtime，而「使用说明.txt」是当场生成的，
     时间就是打包那一刻 —— 于是同样的代码重打一次，字节就变了、SHA256 也变了。
     后果是发行说明里印的校验和**永远复现不出来**，用户想核对反而以为下到了坏包。
     这里把时间戳钉死、遍历排序，让校验和成为可验证的事实而不是一次性的快照。
+
+    **边界（别把这条读大）**：本函数只管打包。`src` 是 PyInstaller 生成的，
+    而那个构建**不是**逐字节确定的 —— 实测同一份源码连构建两次，
+    219 个文件里有 2 个不同（`WingMan.exe` 与 `_internal/base_library.zip`）。
+    所以重建 `dist/` 之后校验和必然会变，这是正常的；发行说明里因此只写
+    「用它对核对下载」，不写「重跑构建就能复现」。
     """
     zpath = os.path.join(out_dir, top + ".zip")
     raw = n = 0
