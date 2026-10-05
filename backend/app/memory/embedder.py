@@ -22,6 +22,34 @@ import numpy as np
 
 log = logging.getLogger("wingman.memory.embed")
 
+# 本机 embedding 服务（LM Studio / 自建中转）走回环时不能被系统代理劫持。
+_LOOPBACK_HOSTS = frozenset({"localhost", "::1"})
+
+
+def _trust_env_for(url: str) -> bool:
+    """这个地址要不要继承环境代理（httpx 的 trust_env）。回环一律 False。
+
+    httpx 默认 trust_env=True 会继承 HTTP_PROXY 与 Windows 注册表里的系统代理；
+    本机代理软件开全局模式时，发往 127.0.0.1 的向量化请求会被代理接管 ——
+    表现为「embedding 服务返回 502」而不是连接被拒。非回环保持 True。
+    （与 llm/openai_compat.py、llm/ollama.py、asr/cloud.py 里的同名实现保持一致，
+      测试 test_loopback_proxy.py 会断言四份行为相同。）
+    """
+    raw = (url or "").strip().lower()
+    if "://" in raw:
+        raw = raw.split("://", 1)[1]                        # 去掉 scheme
+    authority = raw.split("/", 1)[0].rsplit("@", 1)[-1]     # 去掉 user:pass@
+    if authority.startswith("["):                           # [::1]:11434 这种 IPv6 字面量
+        host = authority.split("]", 1)[0][1:]
+    elif authority.count(":") == 1:
+        host = authority.rsplit(":", 1)[0]                  # host:port
+    else:
+        host = authority                                    # 没写端口，或没写方括号的 IPv6
+    host = host.strip().rstrip(".")
+    if not host:
+        return True
+    return not (host in _LOOPBACK_HOSTS or host.startswith("127."))
+
 _WS = re.compile(r"\s+")
 _PUNCT = re.compile(r"[^\w\u4e00-\u9fff]+")
 # 高频虚词对区分度几乎没贡献，还容易制造假匹配
@@ -156,7 +184,8 @@ class CloudEmbedder(Embedder):
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with httpx.AsyncClient(timeout=self.timeout,
+                                     trust_env=_trust_env_for(self.base_url)) as client:
             for chunk in chunks:
                 resp = await client.post(
                     f"{self.base_url}/embeddings",

@@ -5,6 +5,7 @@ from .routes_asr_models import router as asr_models_router
 from .routes_asr_probe import router as asr_probe_router
 from .routes_data import router as data_router
 from .routes_engine import router as engine_router
+from .routes_health import router as health_router
 from .routes_voice import router as voice_router
 
 ROUTERS = (
@@ -12,6 +13,7 @@ ROUTERS = (
     data_router,
     engine_router,
     voice_router,
+    health_router,
     asr_models_router,
     asr_probe_router,
 )

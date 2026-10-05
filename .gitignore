@@ -28,6 +28,7 @@ samples/private/
 __pycache__/
 *.py[cod]
 .venv/
+backend/.venv-baseline/
 venv/
 *.egg-info/
 .pytest_cache/

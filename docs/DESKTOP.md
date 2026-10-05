@@ -5,6 +5,30 @@
 
 ---
 
+## 零、先搞清楚：exe 和 wingman.cmd 是两条不同的路
+
+仓库里有两个「一键启动」，很容易搞混。它们解决的是**不同的前置条件**：
+
+| | `wingman.cmd`（源码路线） | `WingMan.exe`（本文档） |
+|---|---|---|
+| 需要装 Python | ✅ 3.11+ | ❌ 完全不需要 |
+| 首次启动 | 几分钟（建 venv + 装依赖） | 秒级 |
+| 要不要联网 | 首次装依赖要 | 不要（云模型除外） |
+| 体积 | 仓库本身几 MB | 78 MB / 246 MB |
+| 改了代码 | 直接生效 | 要重新打包 |
+| 启动前自检 | `wingman.cmd --doctor` | `WingMan.exe --check` |
+| 适合 | 自己开发、能装 Python | 只想用 / 分发给不懂技术的朋友 |
+
+**结论**：给自己用、要改代码 → 用 `wingman.cmd`。
+要给别人用、或者这台机器装不了 Python → 打包成 exe。
+
+两条路的自检脚本**检查项不完全相同**：`--doctor` 还会查 Python 版本、位数、
+venv 完整性、依赖锁一致性（这些在 exe 里根本不存在），
+`--check` 则更关注 exe 特有的东西（资源路径、可写目录、原生窗口依赖）。
+这也是它们没有合并成一个的原因。
+
+---
+
 ## 一、给使用者的话（怎么用）
 
 1. 拿到 `WingMan` 文件夹，整个放到任意位置（桌面、D 盘都行，**不需要安装**）
@@ -296,4 +320,6 @@ Windows 上 `Path("/tmp/a.wav")` 会解析成 `C:\tmp\a.wav`，而 Git Bash 的
       而不是绿的「已完成」
 - [ ] 日志文件有内容且中文不乱码
 - [ ] 整个 `dist/WingMan` 拷到另一台没装 Python 的机器上能跑
+- [ ] 源码路线也没被改坏：`wingman.cmd --doctor` 仍然正常，`wingman.cmd --setup-only`
+      建的 venv 与 `requirements.lock.txt` 一致
 - [ ] `git status` 里没有 `dist/`、`*.db`、`models/`

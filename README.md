@@ -1,8 +1,8 @@
 # WingMan · 聊天僚机
 
-[![CI](https://github.com/whyao56/wingman/actions/workflows/ci.yml/badge.svg)](https://github.com/whyao56/wingman/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.13-blue.svg)](https://www.python.org/)
+[![CI](https://github.com/whyao56/WingMan/actions/workflows/ci.yml/badge.svg)](https://github.com/whyao56/WingMan/actions/workflows/ci.yml)
 
 > 把聊天记录交给大模型记忆，通话时实时听懂对方，然后告诉你**该怎么回**。
 
@@ -11,6 +11,157 @@ WingMan 是一个本地优先的「对话参谋」系统。它做三件事：
 1. **记忆** —— 导入你与某个人的聊天记录（QQ / 微信 / 通用文件），构建长期记忆与人物画像；
 2. **听懂** —— 通话时双通道采集（系统回环听对方 + 麦克风听自己），实时转写成文字；
 3. **参谋** —— 收到新消息后，分析对方情绪与意图，给出多个可选回复，并**推演每条回复会把聊天带向哪里**。
+
+> **它只给建议，不代你发消息。** 不做无人值守的自动回复 —— 原因见 [docs/COMPLIANCE.md](docs/COMPLIANCE.md)。
+
+---
+
+## 快速开始（3 步）
+
+需要 Windows 10/11 与 **Python 3.11+**（安装时勾选 *Add python.exe to PATH*）。不需要 Node，不需要 API Key。
+
+```bat
+REM 第 1 步：下载并解压（也可以 git clone）
+REM        https://github.com/whyao56/WingMan/archive/refs/heads/main.zip
+
+REM 第 2 步：在仓库根目录启动（或直接双击 wingman.cmd）
+wingman.cmd
+
+REM 第 3 步：浏览器打开控制台后 →「导入」上传 samples\qq_sample_小鹿.txt
+REM        →「指挥台」点「取会话里最后一条对方消息」→「分析并给建议」
+```
+
+PowerShell 里第 2 步要写成 `.\wingman.cmd`（否则提示找不到命令）。
+首次运行会自动创建 Python 环境、安装依赖（几分钟，看网速），然后启动服务并自动打开 <http://127.0.0.1:8787>。
+
+**不配模型也能跑通全流程** —— 未配置时会用内置的 Mock（规则引擎）。
+但请注意：**Mock 的输出只是「流程演示」，不是真实智能**。接入真实模型见 **[docs/MODELS.md](docs/MODELS.md)**。
+
+不想一步步来？完整版见 **[docs/QUICKSTART.md](docs/QUICKSTART.md)**；卡住了见 **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)**。
+
+> 上面这条是**源码路线**。如果你不想在这台机器上装 Python，往下看
+> [「三种跑法：怎么选」](#三种跑法怎么选) —— 打包好的 `WingMan.exe` 连 Python 都不用装。
+
+### 启动器参数
+
+| 命令 | 作用 |
+|---|---|
+| `wingman.cmd` | 准备环境（首次）+ 启动 + 打开浏览器 |
+| `wingman.cmd --port 8899` | 换端口（默认 8787） |
+| `wingman.cmd --no-browser` | 不自动打开浏览器 |
+| `wingman.cmd --setup-only` | 只准备环境，不启动服务 |
+| `wingman.cmd --doctor` | 只做启动前自检，逐项打印结果与修复建议 |
+| `wingman.cmd --with-asr` | 额外安装语音依赖（可选，失败不影响主服务） |
+| `wingman.cmd --help` | 用法 |
+
+---
+
+## 三种跑法：怎么选
+
+有三种跑法。**分水岭只有一个：这台机器愿不愿意装 Python。**
+
+| | A. 一键启动器 | B. 打包版 | C. 手动源码 |
+|---|---|---|---|
+| 入口 | `wingman.cmd` | `WingMan.exe` | `uvicorn` |
+| 需要 Python | ✅ 3.11+ | ❌ 不用装 | ✅ 3.11+ |
+| 首次启动 | 几分钟（自动建环境装依赖） | 秒级 | 几分钟 |
+| 体积 | 仓库本身（几 MB） | 78 MB / 246 MB | 仓库本身 |
+| 改了代码 | 直接生效 | 要重新打包 | 直接生效 |
+| 适合 | 想改代码 / 已装 Python | 只想用，或给不懂技术的朋友 | 非 Windows、要做开发 |
+
+### A. 一键启动（Windows，推荐）
+
+```bat
+wingman.cmd
+```
+
+首次运行会自动：创建 Python 环境 → 按锁定版本装依赖 → 启动前自检 → 起服务 → 打开浏览器
+（`http://127.0.0.1:8787`）。
+
+详细步骤见 **[docs/QUICKSTART.md](docs/QUICKSTART.md)**，参数速查：
+
+| 命令 | 作用 |
+|---|---|
+| `wingman.cmd` | 准备环境（首次）+ 启动 + 自动开浏览器 |
+| `wingman.cmd --doctor` | 只做启动前自检，逐项打印结果与修复建议 |
+| `wingman.cmd --setup-only` | 只准备环境，不启动 |
+| `wingman.cmd --port 8899` | 换端口 |
+| `wingman.cmd --with-asr` | 额外装语音依赖（可选，装不上不影响主服务） |
+
+> PowerShell 里要写 `.\wingman.cmd`。用 PowerShell 工具的会话请照此处理。
+
+### B. 打包版（连 Python 都不用装）
+
+拿到 `WingMan.exe` 所在的**整个文件夹**，解压到一个**可写**的位置（桌面、D 盘都行），
+双击 `WingMan.exe`。程序会自己起服务并弹出原生窗口，关掉窗口即退出。
+
+| 版本 | 体积 | 语音怎么办 |
+|---|---|---|
+| **标准版** | 78 MB | 走云 ASR：填个接口地址就能用 |
+| **完整版** | 246 MB | 云端/本地都行；本地转写另需下载模型权重（音频一帧都不出本机） |
+
+**你的数据在** `%LOCALAPPDATA%\WingMan\` —— 聊天记录、画像、设置、日志都在那。
+
+第一次打开会提示「还有 N 项没配好」，这是正常的：默认用的是演示引擎、
+还没导入聊天记录、语音还没接。照着**「自检」页**逐条点，每配好一项就会变绿。
+
+> 语音不工作时，点「自检 → 语音链路实测」录一段看看。
+> 它会把设备、电平、引擎、识别文本逐步摊开 ——「没反应」会被拆成「第几步不行」。
+> 命令行等价物：`WingMan.exe --asr-test`（`--source loopback` 可测「听对方」那条路）。
+
+怎么自己打个包，见 **[docs/DESKTOP.md](docs/DESKTOP.md)**。
+
+### C. 手动从源码跑（任意平台）
+
+```bash
+cd wingman/backend
+python -m venv .venv
+.venv/Scripts/activate          # Windows
+# source .venv/bin/activate     # macOS / Linux
+pip install -r requirements.txt   # 或 requirements.lock.txt（精确版本）
+
+python -m uvicorn app.main:app --reload --port 8787
+# 打开 http://127.0.0.1:8787
+```
+
+要用语音再加：`pip install -r requirements-asr.txt`。
+
+**不需要任何 API Key 也能跑通全流程** —— 未配置模型时会自动使用内置的 Mock Provider，
+走完「导入 → 画像 → 分析 → 建议 → 推演」整条链路，方便你先看懂它怎么工作。
+想让建议真的有意义，去接真模型 —— 见 **[docs/MODELS.md](docs/MODELS.md)**。
+
+想接真模型时，在控制台「设置」里填 `base_url` / `api_key` / `model` 即可，
+支持一切 **OpenAI 兼容协议**的云端服务（DeepSeek、通义、Kimi、硅基流动、OpenAI…），
+也支持 **Ollama** 本地模型（数据不出本机）。
+
+---
+
+## 排错从哪下手
+
+**两条路的自检入口不一样，先找对那个：**
+
+| 你用的是 | 命令 | 产物 |
+|---|---|---|
+| `wingman.cmd` | `wingman.cmd --doctor` | 终端逐项输出（退出码 2 = 拒绝启动） |
+| `WingMan.exe` | `WingMan.exe --check` | `%LOCALAPPDATA%\WingMan\logs\selfcheck.txt` |
+| 界面里 | 侧栏「自检」页 | 三档结论 + 每项一个「点哪里能修好」按钮 |
+
+再往下看 **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)**（排错手册）和
+[docs/DESKTOP.md](docs/DESKTOP.md)（打包特有的坑）。
+
+---
+
+## 版本与状态
+
+- **当前版本：v0.1.0**（版本号定义在 `backend/app/__init__.py`，变更记录见 [CHANGELOG.md](CHANGELOG.md)）
+- **状态：脚手架可用（阶段 0「能跑通」已完成）**；阶段 1「能用」与阶段 2「好用」尚未实现，详见 [docs/ROADMAP.md](docs/ROADMAP.md)。
+
+| | 说明 |
+|---|---|
+| ✅ 现在就能用 | 导入（QQ / 微信 / 通用 JSON、CSV）→ 向量索引 → 事实与画像 → 分析 → 建议 → 推演 的完整链路；零 Key 用 Mock 跑通；OpenAI 兼容云服务与 Ollama 可切换；单文件控制台；实时字幕的 SSE 接口 |
+| ⚠️ 未做端到端验证 | 真实通话采集、云端 / 本地 ASR 的实际效果（需要你在自己设备上试；采集必须手动点「开始采集」） |
+| ⬜ 尚未实现 | 流式 ASR、AEC 回声消除、事实人工校对 UI、前端工程化、自动回复（明确不做，见 COMPLIANCE） |
+| 验证过的环境 | 中文 Windows + Python 3.11（实测安装 + 端到端人工验收）；Python 3.13 已由 CI 在真实环境验证：GitHub Actions（Ubuntu）用同一份锁定集真实安装并跑通冒烟测试（[run 37215141304](https://github.com/whyao56/WingMan/actions/runs/37215141304)，`3.11` / `3.13` 两个 job 均 success），但**开发机没有 3.13、未在本机真跑**；macOS / Linux 桌面未做人工验收 |
 
 ---
 
@@ -36,62 +187,6 @@ WingMan 是一个本地优先的「对话参谋」系统。它做三件事：
 └───────────────────────────────────────────────┘
         ↓ 点任意一条，展开 3 轮走向推演树
 ```
-
----
-
-## 快速开始
-
-### 方式一：直接用（Windows，不需要装 Python）
-
-下载对应的文件夹，解压到一个**可写**的位置（桌面、D 盘都行），双击 `WingMan.exe`。
-程序会自己起服务并弹出窗口，关掉窗口即退出。
-
-| 版本 | 体积 | 语音怎么办 |
-|---|---|---|
-| **标准版** | 78 MB | 走云 ASR：填个接口地址就能用 |
-| **完整版** | 246 MB | 云端/本地都行；本地转写另需下载模型权重（音频一帧都不出本机） |
-
-**你的数据在** `%LOCALAPPDATA%\WingMan\` —— 聊天记录、画像、设置、日志都在那。
-
-第一次打开会提示「还有 N 项没配好」，这是正常的：默认用的是演示引擎、
-还没导入聊天记录、语音还没接。照着**「自检」页**逐条点，每配好一项就会变绿。
-
-> 语音不工作时，点「自检 → 语音链路实测」录一段看看。
-> 它会把设备、电平、引擎、识别文本逐步摊开 ——「没反应」会被拆成「第几步不行」。
-> 命令行等价物：`WingMan.exe --asr-test`（`--source loopback` 可测「听对方」那条路）。
-
-### 方式二：从源码跑（任意平台，Python 3.11+）
-
-```bash
-cd wingman/backend
-python -m venv .venv
-.venv/Scripts/activate          # Windows
-# source .venv/bin/activate     # macOS / Linux
-pip install -r requirements.txt
-
-python -m uvicorn app.main:app --reload --port 8787
-# 打开 http://127.0.0.1:8787
-```
-
-要用语音再加：`pip install -r requirements-asr.txt`。
-
-**不需要任何 API Key 也能跑通全流程** —— 未配置模型时会自动使用内置的 Mock Provider，
-走完「导入 → 画像 → 分析 → 建议 → 推演」整条链路，方便你先看懂它怎么工作。
-
-想接真模型时，在控制台「设置」里填 `base_url` / `api_key` / `model` 即可，
-支持一切 **OpenAI 兼容协议**的云端服务（DeepSeek、通义、Kimi、硅基流动、OpenAI…），
-也支持 **Ollama** 本地模型（数据不出本机）。
-
-### 打包成 exe（开发者）
-
-```bash
-python scripts/build_exe.py              # 标准版
-python scripts/build_exe.py --with-asr   # 完整版（含本地语音识别）
-python scripts/build_exe.py --zip        # 顺手压成 zip
-```
-
-产物在 `dist/WingMan/`，**分发时要给整个文件夹**（`_internal/` 是运行时，缺了跑不起来）。
-细节、两个版本的差别、以及打包踩过的 10 个坑见 **[docs/DESKTOP.md](docs/DESKTOP.md)**。
 
 ---
 
@@ -151,44 +246,78 @@ CPU 完全够用。所以**推荐起步选 `small`**，只想先试通流程再�
 
 | 文档 | 内容 |
 |---|---|
+| [docs/QUICKSTART.md](docs/QUICKSTART.md) | 3 步上手：下载 → 启动 → 看到第一条建议 |
 | [docs/DESKTOP.md](docs/DESKTOP.md) | **打包成桌面程序**：怎么用、怎么构建、两个版本的区别、踩过的 10 个坑 |
+| [docs/MODELS.md](docs/MODELS.md) | 接真实模型：OpenAI 兼容云 API / Ollama、怎么确认接上了、密钥与隐私边界 |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | 排错手册：退出码含义、端口占用、Python 版本、依赖装不上、中文乱码、无音频设备…… |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 系统架构、模块职责、数据模型、接口契约 |
 | [docs/ENGINE_DESIGN.md](docs/ENGINE_DESIGN.md) | 参谋引擎的算法与 Prompt 设计（这是项目的灵魂） |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | 迭代路线：从脚手架到能用、好用 |
 | [docs/COMPLIANCE.md](docs/COMPLIANCE.md) | 数据合规、隐私边界、使用红线 |
+| [CHANGELOG.md](CHANGELOG.md) | 版本变更记录 |
 
 ---
 
 ## 目录结构
 
 ```
-wingman/
+WingMan/
+├── wingman.cmd                  # 一键启动器（源码路线入口）：装环境 / 自检 / 启动
 ├── backend/
 │   ├── app/
-│   │   ├── adapters/     # 聊天记录接入插件（QQ / 微信 / 通用）
-│   │   ├── memory/       # 存储、向量化、检索、人物画像
-│   │   ├── llm/          # 大模型接入（云 / 本地 / Mock）
-│   │   ├── asr/          # 语音识别 + 双通道音频采集 + 模型管理
-│   │   ├── engine/       # 分析 → 建议 → 推演 核心引擎
-│   │   ├── api/          # HTTP 接口
-│   │   ├── desktop.py    # 桌面启动器（exe 入口，含 --check / --asr-test）
-│   │   └── selfcheck.py  # 启动自检：缺什么、怎么补
-│   ├── run_wingman.py    # PyInstaller 打包入口
-│   ├── tests/
-│   └── data/             # 运行时数据（已 gitignore）
-├── frontend/index.html   # 单文件控制台，零构建
-├── build/wingman.spec    # 打包配置
-├── samples/              # 示例聊天记录，可直接导入试跑
+│   │   ├── adapters/            # 聊天记录接入插件（QQ / 微信 / 通用）
+│   │   ├── memory/              # 存储、向量化、检索、人物画像
+│   │   ├── llm/                 # 大模型接入（云 / 本地 / Mock）
+│   │   ├── asr/                 # 语音识别 + 双通道采集 + 模型管理
+│   │   ├── engine/              # 分析 → 建议 → 推演 核心引擎
+│   │   ├── api/                 # HTTP 接口
+│   │   ├── desktop.py           # 桌面启动器（exe 入口，含 --check / --asr-test）
+│   │   └── selfcheck.py         # 应用内自检：缺什么、怎么补
+│   ├── run_wingman.py           # PyInstaller 打包入口
+│   ├── tests/                   # 冒烟测试 + 音频管线 / 引擎状态单测
+│   ├── requirements.txt         # 依赖下限声明（人类可读）
+│   ├── requirements.lock.txt    # 精确版本锁定（启动器安装的就是它）
+│   ├── requirements-asr.txt     # 语音可选依赖（faster-whisper / soundcard）
+│   ├── requirements-desktop.txt # 打包工具链（pyinstaller / pywebview）
+│   └── data/                    # 运行时数据（已 gitignore）
+├── frontend/index.html          # 单文件控制台，零构建
+├── build/wingman.spec           # PyInstaller 打包配置
+├── samples/                     # 虚构的示例聊天记录，可直接导入试跑
 ├── scripts/
-│   ├── build_exe.py      # 一键打包
-│   ├── asr_bench.py      # 语音模型对比 + 量纲回归
-│   └── e2e_check.py      # HTTP 端到端自检
+│   ├── bootstrap.ps1            # 启动器主体（建环境 / 装依赖 / 调 preflight）
+│   ├── preflight.py             # 启动前自检（wingman.cmd --doctor）
+│   ├── build_exe.py             # 一键打包成 exe
+│   ├── asr_bench.py             # 语音模型对比 + 量纲回归
+│   ├── e2e_check.py             # HTTP 端到端检查
+│   ├── openai_stub.py           # 本地假 OpenAI 服务（离线联调用）
+│   └── run_dev.*                # 开发态启动脚本
 └── docs/
 ```
+
+### 开发者：手动跑测试
+
+```bat
+REM 准备环境（不启动服务；环境建在 backend\.venv）
+wingman.cmd --setup-only
+
+REM 内核链路冒烟测试（Mock，无需任何 Key）
+backend\.venv\Scripts\python.exe backend\tests\test_smoke.py
+
+REM 端到端 HTTP 检查（需要服务已经在运行）
+backend\.venv\Scripts\python.exe scripts\e2e_check.py
+```
+
+> `e2e_check.py` 会**往当前数据库里写数据**（导入示例会话、写入设定、注入一段语音）。
+> 想保持数据干净，就另解压一份仓库、或者先把 `backend\data\wingman.db` 备份出来再跑。
 
 ---
 
 ## 常见问题
+
+> 这几条是最常遇到的；完整的排错手册在 **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)**。
+
+**端口 8787 被占用**
+换端口启动：`wingman.cmd --port 8899`。查是谁占着：`netstat -ano | findstr :8787`。
 
 **跑 `scripts/e2e_check.py` 时报 404**
 环境里设了 `HTTP_PROXY` / `http_proxy` 时，httpx 默认把请求发给代理，
@@ -196,14 +325,15 @@ wingman/
 这种畸形路径就 404 了。脚本里已经用 `trust_env=False` 绕开，
 如果你自己写调用脚本，记得同样处理。
 
-**中文名的示例文件上传失败**
-某些 HTTP 客户端在 multipart 的 filename 里处理非 ASCII 有问题。
-把文件复制一份改成英文名再上传即可，内容不受影响。
+**上传中文名的文件失败（旧版本的问题，现已支持）**
+早期版本在 multipart 的 filename 里处理非 ASCII 有问题；**现在已支持中文名上传** ——
+按 [QUICKSTART](docs/QUICKSTART.md) 第 3 步直接传 `samples\qq_sample_小鹿.txt` 即可（端到端检查实测全绿）。
+如果你的环境里仍然失败（极少见），把文件复制一份改成英文名再上传即可，内容不受影响。
 
 **「通话」页说没有检测到音频设备**
-`pip install -r requirements-asr.txt` 装 `soundcard`。
+`wingman.cmd --with-asr` 装采集依赖（`soundcard`）。
 如果装了还是不行，检查系统默认播放设备是否为当前实际在用的那个 ——
-回环设备是跟着「默认扬声器」走的。
+回环设备是跟着「默认扬声器」走的。没有麦克风也可以用「通话」页的手动注入演示链路。
 
 > 打包版已经内置 `soundcard`，不用再装。
 

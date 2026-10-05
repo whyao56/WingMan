@@ -1,0 +1,27 @@
+# WingMan 行尾与二进制策略
+#
+# 为什么需要它：本机（以及 Git for Windows 的默认安装）core.autocrlf=true 时，
+# 仓库里所有文本文件在 Windows 上检出都会变成 CRLF —— 实测全新 clone 里
+# scripts/run_dev.sh 会带 459 个 CRLF，Git Bash / macOS / Linux 使用者会踩 "\r"。
+# 这些规则只约束「行尾怎么存、怎么检出」，不改任何文件的内容。
+#
+# 注意：本文件不影响已有工作区文件，只影响后续 checkout/clone。
+
+# ---- 脚本行尾：.sh 必须是 LF（否则 POSIX shell 与 Git Bash 会出错） ----
+*.sh text eol=lf
+
+# ---- .cmd / .bat 必须是 CRLF（cmd.exe 对 LF-only 批处理有解析陷阱） ----
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# ---- PowerShell 脚本 CRLF：Windows PowerShell 5.1 按行读取，CRLF 最稳 ----
+# （bootstrap.ps1 另需 UTF-8 with BOM，那由文件内容决定，与本文件无关）
+*.ps1 text eol=crlf
+
+# ---- 二进制保护：防止将来被误当文本转换 ----
+*.db binary
+*.wav binary
+*.mp3 binary
+*.png binary
+*.jpg binary
+*.ico binary

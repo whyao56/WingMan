@@ -479,6 +479,10 @@ table.t tr:hover td{background:var(--panel2)}
     <section class="view" id="view-check">
       <h2>自检</h2>
       <p class="sub">这里用大白话告诉你：现在哪几块能用、哪几块还缺东西、缺的怎么补。配好一项这里就会变成绿色的「已完成」。</p>
+      <p class="sub dim">服务根本起不来、看不到这一页时，还有两个命令行入口：源码运行用
+        <b>wingman.cmd --doctor</b>，打包版用 <b>WingMan.exe --check</b>。
+        它们查的东西和这一页不完全相同（启动器那边还会看 Python 版本和依赖完整性），
+        但都会直接告诉你缺什么、下一步做什么。</p>
 
       <div class="card">
         <h3>总体结论 <span class="tag" id="ck-worst"></span></h3>
@@ -575,15 +579,15 @@ table.t tr:hover td{background:var(--panel2)}
         <div class="grid2">
           <label class="f"><span>模式</span>
             <select id="s-embedder">
-              <option value="auto">auto（有云端配置就用云端，否则本地哈希）</option>
+              <option value="auto">auto（能复用云端 embedding 就用云端，否则本地哈希）</option>
               <option value="cloud">cloud（OpenAI 兼容 /v1/embeddings）</option>
               <option value="hash">hash（纯本地，零依赖）</option>
             </select></label>
           <label class="f"><span>模型名</span>
             <input type="text" id="s-embed_model" placeholder="text-embedding-3-small" /></label>
-          <label class="f"><span>Base URL（留空复用主模型）</span>
+          <label class="f"><span>Base URL（留空：OpenAI 兼容时复用主模型端点；Ollama 时退化为本地哈希向量）</span>
             <input type="text" id="s-embed_base_url" /></label>
-          <label class="f"><span>API Key（留空复用主模型）</span>
+          <label class="f"><span>API Key（留空则沿用主模型 Key；Ollama 场景用不到）</span>
             <input type="password" id="s-embed_api_key" /></label>
         </div>
         <button class="btn sm" id="s-test-embed">测试向量化</button>

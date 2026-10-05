@@ -31,6 +31,75 @@ PASS = 0
 FAIL = 0
 
 
+# ---------------------------------------------------------------- 控制台编码
+# 中文 Windows 控制台默认 GBK(cp936)：本脚本会打印中文与 ▸ ✓ ✗，直接跑会抛
+# UnicodeEncodeError（实测 '\u25b8' / '\u2713'）。这里在入口自己处理编码，
+# 不依赖调用方设置 PYTHONUTF8 / PYTHONIOENCODING：
+#   * 流的编码能表示中文（cp936 / utf-8 …）→ 重配置为 UTF-8 + errors="replace"
+#   * 流连中文都表示不了（ascii / latin-1 / C locale）→ 保留原编码但 errors="replace"，
+#     非 ASCII 字符降级成 "?"，同时把 ▸ ✓ ✗ 换成 ASCII 标记，保证可读、不出现乱码
+#   * 输出不是真实终端（重定向到文件 / 管道）或是 ASCII 降级时，关掉 ANSI 颜色，
+#     避免把裸转义序列写进日志
+# 只影响输出编码与颜色，不改任何检查项、端点调用与写库行为。
+
+_ASCII_MODE = False
+_ANSI_OK = False
+
+CYAN = "\033[36m"
+GREEN = "\033[32m"
+RED = "\033[31m"
+YELLOW = "\033[33m"
+DIM = "\033[90m"
+BOLD = "\033[1m"
+RESET = "\033[0m"
+
+MARK_STEP = "▸"
+MARK_OK = "✓"
+MARK_FAIL = "✗"
+
+
+def _configure_console() -> None:
+    """把 stdout/stderr 调成「在本机控制台一定能打印」的状态。"""
+    global _ASCII_MODE, _ANSI_OK
+    global CYAN, GREEN, RED, YELLOW, DIM, BOLD, RESET
+    global MARK_STEP, MARK_OK, MARK_FAIL
+
+    renderable = True
+    for name in ("stdout", "stderr"):
+        stream = getattr(sys, name, None)
+        if stream is None:
+            continue
+        encoding = getattr(stream, "encoding", None) or ""
+        target = encoding
+        if encoding:
+            try:
+                "中文".encode(encoding)
+            except (UnicodeEncodeError, LookupError):
+                renderable = False          # 这个流连中文都表示不了
+            else:
+                target = "utf-8"
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            try:
+                reconfigure(encoding=(target or None), errors="replace")
+            except (ValueError, LookupError, OSError):
+                pass
+    _ASCII_MODE = not renderable
+
+    try:
+        _ANSI_OK = bool(sys.stdout.isatty()) and not _ASCII_MODE
+    except Exception:
+        _ANSI_OK = False
+
+    if not _ANSI_OK:
+        CYAN = GREEN = RED = YELLOW = DIM = BOLD = RESET = ""
+    if _ASCII_MODE:
+        MARK_STEP, MARK_OK, MARK_FAIL = ">", "OK", "FAIL"
+
+
+_configure_console()
+
+
 def U(path: str) -> str:
     """拼成绝对 URL。
 
@@ -42,19 +111,19 @@ def U(path: str) -> str:
 
 
 def step(title: str) -> None:
-    print(f"\n\033[36m▸ {title}\033[0m")
+    print(f"\n{CYAN}{MARK_STEP} {title}{RESET}")
 
 
 def ok(msg: str) -> None:
     global PASS
     PASS += 1
-    print(f"  \033[32m✓\033[0m {msg}")
+    print(f"  {GREEN}{MARK_OK}{RESET} {msg}")
 
 
 def bad(msg: str) -> None:
     global FAIL
     FAIL += 1
-    print(f"  \033[31m✗\033[0m {msg}")
+    print(f"  {RED}{MARK_FAIL}{RESET} {msg}")
 
 
 def check(cond: bool, good: str, evil: str) -> bool:
@@ -63,6 +132,30 @@ def check(cond: bool, good: str, evil: str) -> bool:
     else:
         bad(evil)
     return bool(cond)
+
+
+def server_detail(r) -> str:
+    """从非 200 响应里取出能读的「服务端说了什么」。
+
+    模型不可用时（base_url 指错、代理劫持、Key 无效），后端会返回
+    `{"detail": "生成建议失败：…", "kind": "llm_error"}`。这条 detail 才是用户排错要看的
+    东西；直接取 `["analysis"]` 会抛 KeyError，把「哪一步失败、为什么」埋掉。
+    """
+    try:
+        body = r.json()
+    except Exception:
+        return (r.text or "")[:200]
+    if isinstance(body, dict):
+        detail = body.get("detail") or body.get("message")
+        if detail:
+            kind = body.get("kind")
+            return f"{detail}（{kind}）" if kind else str(detail)
+    return (r.text or "")[:200]
+
+
+def unexpected_shape(r) -> str:
+    """HTTP 200 但响应体不是预期结构时，给一段原始片段。"""
+    return (r.text or "")[:200]
 
 
 def main() -> int:
@@ -116,7 +209,7 @@ def main() -> int:
     chat_id = imp["chat_id"]
     ok(f"会话 {chat_id}：新增 {imp['inserted']} 条，跳过重复 {imp['skipped']} 条")
     for w in imp.get("warnings") or []:
-        print(f"    \033[33m! {w}\033[0m")
+        print(f"    {YELLOW}! {w}{RESET}")
 
     info = c.get(U(f"/api/chats/{chat_id}")).json()
     check(info["me_name"] == "我", "「我」的角色识别正确",
@@ -128,10 +221,24 @@ def main() -> int:
 
     # ---------------------------------------------------- 3 索引 + 画像
     step("重建索引 + 抽取画像")
-    idx = c.post(U(f"/api/chats/{chat_id}/index")).json()
+    r = c.post(U(f"/api/chats/{chat_id}/index"))
+    if r.status_code != 200:
+        bad(f"第 3 步「重建索引」失败：HTTP {r.status_code} —— {server_detail(r)}")
+        return 1
+    idx = r.json()
+    if not isinstance(idx, dict) or "indexed" not in idx:
+        bad(f"第 3 步「重建索引」返回了非预期结构（缺少 indexed）：{unexpected_shape(r)}")
+        return 1
     ok(f"索引：{idx['indexed']} 条，维度 {idx['dim']}，模型 {idx['model']}")
 
-    prof = c.post(U(f"/api/chats/{chat_id}/profile")).json()
+    r = c.post(U(f"/api/chats/{chat_id}/profile"))
+    if r.status_code != 200:
+        bad(f"第 3 步「抽取画像」失败：HTTP {r.status_code} —— {server_detail(r)}")
+        return 1
+    prof = r.json()
+    if not isinstance(prof, dict) or "facts_total" not in prof:
+        bad(f"第 3 步「抽取画像」返回了非预期结构（缺少 facts_total）：{unexpected_shape(r)}")
+        return 1
     check(prof["facts_total"] > 0, f"抽取到 {prof['facts_total']} 条事实",
           "一条事实都没抽到")
     facts = c.get(U(f"/api/chats/{chat_id}/facts")).json()
@@ -153,24 +260,31 @@ def main() -> int:
 
     # ---------------------------------------------------- 5 分析 + 建议
     step("核心：分析 + 建议")
-    sug = c.post(U(f"/api/chats/{chat_id}/suggest"),
-                 json={"peer_message": PEER_LINE, "persist": True}).json()
+    r = c.post(U(f"/api/chats/{chat_id}/suggest"),
+               json={"peer_message": PEER_LINE, "persist": True})
+    if r.status_code != 200:
+        bad(f"第 5 步「分析 + 建议」失败：HTTP {r.status_code} —— {server_detail(r)}")
+        return 1
+    sug = r.json()
+    if not isinstance(sug, dict) or "analysis" not in sug or "options" not in sug:
+        bad(f"第 5 步「分析 + 建议」返回了非预期结构（缺少 analysis/options）：{unexpected_shape(r)}")
+        return 1
     a = sug["analysis"]
     ok(f"情绪：{a['emotion']}（强度 {a['emotion_intensity']}/10，兴趣变化 {a['interest_delta']:+d}）")
     ok(f"意图：{a['intent'][:60]}")
     ok(f"风险：{a['risk'][:60]}")
     check(len(a["signals"]) > 0, f"观测信号 {len(a['signals'])} 条", "没有观测信号")
     ok(f"本轮策略：{sug['strategy']['goal_this_turn'][:60]}")
-    print(f"    \033[90m检索命中 {sug['trace'].get('retrieved')} 条历史 · "
-          f"耗时 {sug['trace'].get('total_ms')}ms\033[0m")
+    print(f"    {DIM}检索命中 {sug['trace'].get('retrieved')} 条历史 · "
+          f"耗时 {sug['trace'].get('total_ms')}ms{RESET}")
     for w in sug.get("warnings") or []:
-        print(f"    \033[33m! {w}\033[0m")
+        print(f"    {YELLOW}! {w}{RESET}")
 
     check(len(sug["options"]) >= 3, f"生成 {len(sug['options'])} 条候选回复",
           f"只有 {len(sug['options'])} 条候选")
     print()
     for o in sug["options"]:
-        print(f"    \033[1m{o['total']:>4.1f}\033[0m  [{o['id']}] {o['style']:<6} "
+        print(f"    {BOLD}{o['total']:>4.1f}{RESET}  [{o['id']}] {o['style']:<6} "
               f"{o['prediction']['direction']:<4} │ {o['text']}")
     totals = [o["total"] for o in sug["options"]]
     check(totals == sorted(totals, reverse=True), "候选按综合分降序排列",
@@ -181,9 +295,16 @@ def main() -> int:
     # ---------------------------------------------------- 6 推演
     step("推演：这条回复之后会怎么走")
     top = sug["options"][0]
-    tree = c.post(U(f"/api/chats/{chat_id}/simulate"),
-                  json={"option_id": top["id"], "option_text": top["text"],
-                        "peer_message": PEER_LINE}).json()
+    r = c.post(U(f"/api/chats/{chat_id}/simulate"),
+               json={"option_id": top["id"], "option_text": top["text"],
+                     "peer_message": PEER_LINE})
+    if r.status_code != 200:
+        bad(f"第 6 步「推演」失败：HTTP {r.status_code} —— {server_detail(r)}")
+        return 1
+    tree = r.json()
+    if not isinstance(tree, dict) or "branches" not in tree:
+        bad(f"第 6 步「推演」返回了非预期结构（缺少 branches）：{unexpected_shape(r)}")
+        return 1
     check(len(tree["branches"]) >= 2, f"推演出 {len(tree['branches'])} 个分支",
           "分支太少")
     for b in tree["branches"]:
@@ -225,10 +346,10 @@ def main() -> int:
     # ---------------------------------------------------- 结果
     print("\n" + "=" * 60)
     if FAIL == 0:
-        print(f"\033[32m全部通过（{PASS} 项检查）\033[0m")
+        print(f"{GREEN}全部通过（{PASS} 项检查）{RESET}")
         print(f"打开控制台看看：{BASE}")
     else:
-        print(f"\033[31m{PASS} 项通过，{FAIL} 项失败\033[0m")
+        print(f"{RED}{PASS} 项通过，{FAIL} 项失败{RESET}")
     print("=" * 60)
     return 0 if FAIL == 0 else 1
 
