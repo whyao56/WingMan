@@ -16,6 +16,27 @@ WingMan 是一个本地优先的「对话参谋」系统。它做三件事：
 
 ---
 
+## 直接下载（不想装 Python 就走这条）
+
+**[→ 前往下载页](https://github.com/whyao56/WingMan/releases/latest)** · 绿色免安装，解压后双击即可
+
+| 下载 | 大小 | 适合 |
+|---|---|---|
+| **[`WingMan-0.2.0-win64.zip`](https://github.com/whyao56/WingMan/releases/download/v0.2.0/WingMan-0.2.0-win64.zip)** | 31 MB | 先用起来。语音走云端（自己填接口地址） |
+| **[`WingMan-full-0.2.0-win64.zip`](https://github.com/whyao56/WingMan/releases/download/v0.2.0/WingMan-full-0.2.0-win64.zip)** | 91 MB | 想让**语音识别完全在本机跑**，音频一帧都不出本机 |
+
+不确定就下**标准版** —— 聊天记录分析、人物画像、回复建议这些主要功能完全一样。
+
+> ⚠️ **解压后双击 `WingMan.exe`，不要只把 exe 单独拖出来。** 旁边的 `_internal`
+> 文件夹是程序本体的一部分，少一个文件都起不来。要挪位置就整个文件夹一起挪。
+>
+> 双击没反应时，命令行跑 `WingMan.exe --check`，它会直接告诉你缺什么。
+> 数据存在 `%LOCALAPPDATA%\WingMan\`，**换位置解压程序数据不会丢**。
+
+想改代码、或者用 macOS / Linux，走下面的**源码路线**。
+
+---
+
 ## 快速开始（3 步）
 
 需要 Windows 10/11 与 **Python 3.11+**（安装时勾选 *Add python.exe to PATH*）。不需要 Node，不需要 API Key。
@@ -65,7 +86,7 @@ PowerShell 里第 2 步要写成 `.\wingman.cmd`（否则提示找不到命令�
 | 入口 | `wingman.cmd` | `WingMan.exe` | `uvicorn` |
 | 需要 Python | ✅ 3.11+ | ❌ 不用装 | ✅ 3.11+ |
 | 首次启动 | 几分钟（自动建环境装依赖） | 秒级 | 几分钟 |
-| 体积 | 仓库本身（几 MB） | 68 MB / 237 MB | 仓库本身 |
+| 体积 | 仓库本身（几 MB） | 下载 31 MB / 91 MB | 仓库本身 |
 | 改了代码 | 直接生效 | 要重新打包 | 直接生效 |
 | 适合 | 想改代码 / 已装 Python | 只想用，或给不懂技术的朋友 | 非 Windows、要做开发 |
 
@@ -92,13 +113,14 @@ wingman.cmd
 
 ### B. 打包版（连 Python 都不用装）
 
-拿到 `WingMan.exe` 所在的**整个文件夹**，解压到一个**可写**的位置（桌面、D 盘都行），
+从 **[下载页](https://github.com/whyao56/WingMan/releases/latest)** 拿到 zip（内容见上文
+[「直接下载」](#直接下载不想装-python-就走这条)），解压到一个**可写**的位置（桌面、D 盘都行），
 双击 `WingMan.exe`。程序会自己起服务并弹出原生窗口，关掉窗口即退出。
 
 | 版本 | 体积 | 语音怎么办 |
 |---|---|---|
-| **标准版** | 68 MB | 走云 ASR：填个接口地址就能用 |
-| **完整版** | 237 MB | 云端/本地都行；本地转写另需下载模型权重（音频一帧都不出本机） |
+| **标准版** | 31 MB（解压后 68 MB） | 走云 ASR：填个接口地址就能用 |
+| **完整版** | 91 MB（解压后 237 MB） | 云端/本地都行；本地转写另需下载模型权重（音频一帧都不出本机） |
 
 **你的数据在** `%LOCALAPPDATA%\WingMan\` —— 聊天记录、画像、设置、日志都在那。
 
@@ -153,8 +175,11 @@ python -m uvicorn app.main:app --reload --port 8787
 
 ## 版本与状态
 
-- **当前版本：v0.1.0**（版本号定义在 `backend/app/__init__.py`，变更记录见 [CHANGELOG.md](CHANGELOG.md)）
-- **状态：脚手架可用（阶段 0「能跑通」已完成）**；阶段 1「能用」与阶段 2「好用」尚未实现，详见 [docs/ROADMAP.md](docs/ROADMAP.md)。
+- **当前版本：v0.2.0**（版本号定义在 `backend/app/__init__.py`，变更记录见 [CHANGELOG.md](CHANGELOG.md)）
+- **状态：有成品包可用了。** [Releases](https://github.com/whyao56/WingMan/releases) 提供免安装的
+  Windows 桌面版（双击即用，不需要 Python）；源码路线同样可用。
+  **最大的缺口是建议内容本身** —— 默认的 Mock 引擎让整条链路跑得通，但给的建议还是规则生成的，
+  下一步是 Prompt 调优，详见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
 | | 说明 |
 |---|---|

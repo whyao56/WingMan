@@ -60,3 +60,6 @@ dist/
 *.exe
 *.pdb
 .venv-build/
+# 发行上传的中转目录：打过包的 zip 放这里，供上传到 GitHub Release。
+# 不进仓库的理由同 dist/ —— 是二进制产物，且单个就近百 MB。
+release/

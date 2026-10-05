@@ -6,13 +6,23 @@
 ## [Unreleased]
 
 下一个版本的计划见 [docs/ROADMAP.md](docs/ROADMAP.md)（阶段 1「能用」/ 阶段 2「好用」）。
+目前最大的缺口是 **Prompt 调优**：默认的 Mock 引擎让整条链路能跑，但建议内容还是空的。
+
+## [0.2.0] - 2026-10-05
+
+第二个发行版：从「代码能跑通」到「**双击就能用、坏了还能自己看出哪坏了**」。
+首次提供免安装的 Windows 成品包（见 [Releases](https://github.com/whyao56/WingMan/releases)），
+对方机器不需要装 Python。
 
 ### 新增
 
 - **打包成 Windows 桌面程序**：`python scripts/build_exe.py` 一条命令出包，
-  产物是绿色免安装的 `dist/WingMan/`，对方机器**不需要装 Python**。
-  两种风味：标准版（68 MB，云 ASR）与 `--with-asr` 完整版（237 MB，含本地语音识别）。
+  产物是绿色免安装的 `dist/WingMan/`（下载 31 MB / 91 MB，解压后 68 MB / 237 MB）。
+  两种风味：标准版（云 ASR）与 `--with-asr` 完整版（含本地语音识别）。
   详见 [docs/DESKTOP.md](docs/DESKTOP.md)。
+- **发行脚本** `scripts/make_release.py`：打包 → 算校验和 → 建 Release → 传附件一条命令完成。
+  刻意做成**可复现**——时间戳钉死、文件顺序排序，同样输入重跑会得到字节相同的 zip，
+  因此发行说明里印的 SHA256 是用户能独立验证的事实，而不是一次性的快照。
 - **桌面启动器** `WingMan.exe`：端口探测 → 单实例检查 → 起服务 → 开原生窗口（pywebview），
   失败退回浏览器。所有异常走原生弹窗 + 滚动日志，不静默退出。
   命令行支持 `--check`（环境自检）、`--asr-test`（语音链路自检，`--source loopback` 可测「听对方」）、

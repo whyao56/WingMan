@@ -59,7 +59,7 @@ curl.exe -s http://127.0.0.1:8787/api/health
 响应里的 `providers` 数组就是答案：
 
 ```json
-{"version":"0.1.0","db":"...\\backend\\data\\wingman.db","counts":{"messages":62,"facts":6,"chats":1},
+{"version":"0.2.0","db":"...\\backend\\data\\wingman.db","counts":{"messages":62,"facts":6,"chats":1},
  "providers":[{"kind":"llm","name":"openai_compat","available":true,"note":"https://api.deepseek.com/v1 · deepseek-chat"},
               {"kind":"embedder","name":"hash","available":true,"note":"..."},
               {"kind":"asr","name":"mock","available":true,"note":"..."}]}
