@@ -5,245 +5,304 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>WingMan · 聊天僚机</title>
 <style>
+/* ============================================================================
+   设计基准
+   ----------------------------------------------------------------------------
+   目标是让它看起来像一个正常的桌面工具，而不是「AI 生成的后台面板」。
+   具体做法：
+     · 浅色中性灰阶为主，强调色只有一个（靛蓝），不用渐变、不用霓虹紫。
+     · 字号只有五档 12 / 13 / 14.5 / 15.5 / 21，行高统一 1.7，不再混用 11.5px。
+     · 间距走 8 / 12 / 16 / 24 / 32 的节奏，卡片内边距给足，不再挤在一起。
+     · 语义色（成功/警告/危险）统一走「浅底 + 中色字 + 同色描边」，不是深色发光。
+   ========================================================================== */
 :root{
-  --bg:#0e1116; --panel:#151a22; --panel2:#1b212b; --panel3:#212836;
-  --border:#262d39; --border2:#313a49;
-  --text:#e8ebf0; --muted:#8d96a8; --dim:#66708a;
-  --accent:#5b9dff; --accent2:#a78bfa; --ok:#35c68a; --warn:#f5a524; --danger:#f0554d;
-  --r:10px; --mono:"Cascadia Code",Consolas,"SF Mono",Menlo,monospace;
+  /* 中性面 */
+  --bg:#f4f6f8;
+  --panel:#ffffff;
+  --panel2:#fafbfc;
+  --panel3:#eef1f4;
+  --border:#e5e8ec;
+  --border2:#d5dae1;
+
+  /* 文字：正文→次要→极淡 */
+  --text:#1b2027;
+  --muted:#596374;
+  --dim:#8a93a2;
+
+  /* 唯一的强调色 */
+  --accent:#2f6fed;
+  --accent-press:#2258c7;
+  --accent-weak:#eef4ff;
+  --accent-line:#c9dcfe;
+
+  /* 语义色 */
+  --ok:#0f7a52;      --ok-bg:#eaf7f1;     --ok-line:#b4e2ce;
+  --warn:#8f5d05;    --warn-bg:#fdf6e7;   --warn-line:#edd8a4;
+  --danger:#c0352b;  --danger-bg:#fdecea; --danger-line:#f2c0bb;
+
+  /* 对话双方 */
+  --peer:#7c4ddb;  --peer-bg:#f4f0ff;  --peer-line:#ddd2fb;
+
+  --r:10px; --r-sm:8px;
+  --mono:"Cascadia Code",Consolas,"SF Mono",Menlo,monospace;
+  --shadow:0 1px 2px rgba(18,24,40,.04),0 1px 3px rgba(18,24,40,.05);
 }
+
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
 body{
-  background:var(--bg); color:var(--text); font-size:14px; line-height:1.6;
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  background:var(--bg); color:var(--text);
+  font-size:14.5px; line-height:1.7;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
   overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
 }
 button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
 button{cursor:pointer}
-::-webkit-scrollbar{width:10px;height:10px}
-::-webkit-scrollbar-thumb{background:#2b3341;border-radius:5px;border:2px solid var(--bg)}
-::-webkit-scrollbar-thumb:hover{background:#3a4454}
+::selection{background:var(--accent-line)}
+
+::-webkit-scrollbar{width:12px;height:12px}
+::-webkit-scrollbar-thumb{background:#ccd2da;border-radius:8px;border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:#b3bbc6;background-clip:content-box;border:3px solid transparent}
 ::-webkit-scrollbar-track{background:transparent}
 
-.app{display:grid;grid-template-columns:236px 1fr;height:100vh}
+.app{display:grid;grid-template-columns:232px 1fr;height:100vh}
 
 /* ---------- 侧栏 ---------- */
 .side{background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
-.brand{padding:16px 16px 12px;border-bottom:1px solid var(--border)}
-.brand h1{font-size:17px;font-weight:650;letter-spacing:.3px}
-.brand h1 span{background:linear-gradient(92deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
-.brand p{font-size:11.5px;color:var(--dim);margin-top:2px}
-nav{padding:8px;display:flex;flex-direction:column;gap:2px}
+.brand{padding:20px 18px 16px;border-bottom:1px solid var(--border)}
+.brand h1{font-size:17.5px;font-weight:680;letter-spacing:.2px;color:var(--text)}
+.brand h1 span{color:var(--accent)}
+.brand p{font-size:12.5px;color:var(--dim);margin-top:3px}
+nav{padding:10px;display:flex;flex-direction:column;gap:2px}
 nav button{
-  background:transparent;border:0;text-align:left;padding:8px 10px;border-radius:8px;
-  color:var(--muted);display:flex;align-items:center;gap:9px;transition:.14s;
+  background:transparent;border:0;text-align:left;padding:9px 11px;border-radius:var(--r-sm);
+  color:var(--muted);display:flex;align-items:center;gap:10px;font-size:14px;
+  transition:background .12s,color .12s;
 }
-nav button:hover{background:var(--panel2);color:var(--text)}
-nav button.on{background:var(--panel3);color:var(--text);box-shadow:inset 2px 0 0 var(--accent)}
-nav button i{font-style:normal;width:16px;text-align:center;opacity:.85}
-nav button .navdot{width:7px;height:7px;border-radius:50%;background:var(--warn);margin-left:auto;flex:none}
+nav button:hover{background:var(--panel3);color:var(--text)}
+nav button.on{background:var(--accent-weak);color:var(--accent);font-weight:600}
+nav button i{font-style:normal;width:16px;height:16px;display:grid;place-items:center;flex:none}
+nav button i svg{width:15px;height:15px;display:block}
+nav button .navdot{width:6px;height:6px;border-radius:50%;background:var(--warn);margin-left:auto;flex:none}
 
-.sidebody{flex:1;overflow-y:auto;padding:4px 8px 12px}
-.sidelabel{font-size:11px;color:var(--dim);padding:10px 10px 4px;letter-spacing:.5px;text-transform:uppercase}
+.sidebody{flex:1;overflow-y:auto;padding:2px 10px 14px}
+.sidelabel{font-size:11.5px;color:var(--dim);padding:14px 11px 6px;letter-spacing:.8px;font-weight:600}
 .chatitem{
-  padding:7px 10px;border-radius:8px;cursor:pointer;font-size:13px;
-  display:flex;justify-content:space-between;gap:6px;align-items:center;transition:.14s;
+  padding:8px 11px;border-radius:var(--r-sm);cursor:pointer;font-size:13.5px;
+  display:flex;justify-content:space-between;gap:8px;align-items:center;transition:.12s;
 }
-.chatitem:hover{background:var(--panel2)}
-.chatitem.on{background:var(--panel3)}
+.chatitem:hover{background:var(--panel3)}
+.chatitem.on{background:var(--accent-weak);color:var(--accent)}
 .chatitem .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.chatitem .ct{font-size:11px;color:var(--dim);flex:none}
-.empty-hint{color:var(--dim);font-size:12.5px;padding:10px;line-height:1.7}
+.chatitem .ct{font-size:12px;color:var(--dim);flex:none}
+.chatitem.on .ct{color:var(--accent)}
+.empty-hint{color:var(--dim);font-size:13px;padding:12px;line-height:1.8}
 
 /* ---------- 主区 ---------- */
-main{overflow-y:auto;padding:22px 26px 60px}
-.view{display:none;max-width:1080px}
+main{overflow-y:auto;padding:30px 34px 80px}
+.view{display:none;max-width:1040px}
 .view.on{display:block}
-h2{font-size:19px;font-weight:620;margin-bottom:4px}
-.sub{color:var(--muted);font-size:13px;margin-bottom:18px}
+h2{font-size:21px;font-weight:660;letter-spacing:-.1px;margin-bottom:6px}
+.sub{color:var(--muted);font-size:13.5px;line-height:1.8;margin-bottom:22px;max-width:78ch}
 
-.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:14px}
-.card>h3{font-size:14px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.card>h3 .tag{font-size:11px;font-weight:500;color:var(--dim);border:1px solid var(--border2);padding:1px 7px;border-radius:20px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:20px 22px;margin-bottom:16px;box-shadow:var(--shadow)}
+.card>h3{font-size:15px;font-weight:620;margin-bottom:14px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.card>h3 .tag{font-size:12px;font-weight:500;color:var(--dim);border:1px solid var(--border2);background:var(--panel2);padding:2px 9px;border-radius:20px}
 
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px 18px}
 @media(max-width:900px){.grid2{grid-template-columns:1fr}}
 
-label.f{display:block;margin-bottom:10px}
-label.f>span{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+label.f{display:block;margin-bottom:14px}
+label.f>span{display:block;font-size:12.5px;color:var(--muted);margin-bottom:6px;line-height:1.6}
 input[type=text],input[type=password],input[type=number],select,textarea{
-  width:100%;background:var(--panel2);border:1px solid var(--border2);border-radius:8px;
-  padding:8px 10px;outline:none;transition:.14s;
+  width:100%;background:var(--panel);border:1px solid var(--border2);border-radius:var(--r-sm);
+  padding:9px 12px;outline:none;line-height:1.5;transition:border-color .12s,box-shadow .12s;
 }
-input:focus,select:focus,textarea:focus{border-color:var(--accent);background:var(--panel3)}
-textarea{resize:vertical;min-height:70px;line-height:1.65}
-select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 16px) 50%,calc(100% - 11px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:32px}
+input::placeholder,textarea::placeholder{color:#a7afbc}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-weak)}
+textarea{resize:vertical;min-height:80px;line-height:1.75}
+select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--dim) 50%),linear-gradient(135deg,var(--dim) 50%,transparent 50%);background-position:calc(100% - 17px) 50%,calc(100% - 12px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:34px}
 
 .btn{
-  background:var(--panel3);border:1px solid var(--border2);border-radius:8px;
-  padding:7px 14px;transition:.14s;color:var(--text);white-space:nowrap;
+  background:var(--panel);border:1px solid var(--border2);border-radius:var(--r-sm);
+  padding:8px 15px;font-size:13.5px;font-weight:500;color:var(--text);white-space:nowrap;
+  transition:background .12s,border-color .12s,color .12s;
 }
-.btn:hover{border-color:#41506a;background:#28313f}
-.btn:disabled{opacity:.45;cursor:not-allowed}
-.btn.primary{background:linear-gradient(92deg,#2f6fd0,#7c5cf0);border-color:transparent;font-weight:560}
-.btn.primary:hover{filter:brightness(1.12)}
-.btn.ghost{background:transparent}
-.btn.sm{padding:4px 10px;font-size:12.5px}
-.btn.danger{color:#ffb1ac;border-color:#5a2f2c}
-.btn.danger:hover{background:#3a1f1d}
+.btn:hover{border-color:#b7bfca;background:var(--panel2)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:560}
+.btn.primary:hover{background:var(--accent-press);border-color:var(--accent-press)}
+.btn.ghost{background:transparent;border-color:transparent}
+.btn.ghost:hover{background:var(--panel3);border-color:transparent}
+.btn.sm{padding:5px 11px;font-size:12.5px}
+.btn.danger{color:var(--danger);border-color:var(--danger-line)}
+.btn.danger:hover{background:var(--danger-bg)}
 
-.pill{font-size:11.5px;padding:2px 9px;border-radius:20px;border:1px solid var(--border2);color:var(--muted);white-space:nowrap}
-.pill.ok{color:#8fe6c0;border-color:#1f5340;background:#10241c}
-.pill.bad{color:#ffb1ac;border-color:#5a2f2c;background:#241211}
-.pill.warn{color:#f7cd85;border-color:#5a4620;background:#241d10}
-.pill.info{color:#a9c9ff;border-color:#2b4570;background:#111c2e}
+.pill{font-size:12px;padding:3px 10px;border-radius:20px;border:1px solid var(--border2);background:var(--panel2);color:var(--muted);white-space:nowrap;line-height:1.5}
+.pill.ok{color:var(--ok);border-color:var(--ok-line);background:var(--ok-bg)}
+.pill.bad{color:var(--danger);border-color:var(--danger-line);background:var(--danger-bg)}
+.pill.warn{color:var(--warn);border-color:var(--warn-line);background:var(--warn-bg)}
+.pill.info{color:var(--accent);border-color:var(--accent-line);background:var(--accent-weak)}
 
 .mono{font-family:var(--mono);font-size:12.5px}
 .muted{color:var(--muted)}
 .dim{color:var(--dim)}
-.small{font-size:12.5px}
+.small{font-size:13px;line-height:1.75}
 
-.note{border-left:3px solid var(--warn);background:#1d1a10;padding:9px 12px;border-radius:0 8px 8px 0;font-size:12.5px;color:#e8d5a8;margin:8px 0}
-.note.err{border-color:var(--danger);background:#1e1211;color:#f5c0bb}
-.note.ok{border-color:var(--ok);background:#101e18;color:#a9e3c8}
+.note{border-left:3px solid var(--warn-line);background:var(--warn-bg);padding:11px 14px;border-radius:0 var(--r-sm) var(--r-sm) 0;font-size:13px;color:#6b4a12;line-height:1.75;margin:10px 0}
+.note.err{border-color:var(--danger-line);background:var(--danger-bg);color:#8d2f27}
+.note.ok{border-color:var(--ok-line);background:var(--ok-bg);color:#0d5f41}
 
 /* ---------- 分析卡 ---------- */
-.analysis{display:grid;grid-template-columns:150px 1fr;gap:16px}
+.analysis{display:grid;grid-template-columns:170px 1fr;gap:22px}
 @media(max-width:760px){.analysis{grid-template-columns:1fr}}
-.gauge{background:var(--panel2);border-radius:var(--r);padding:14px;text-align:center}
-.gauge .emo{font-size:16px;font-weight:600;margin-bottom:2px}
-.gauge .bar{height:6px;background:#2a3242;border-radius:3px;overflow:hidden;margin:10px 0 6px}
-.gauge .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2))}
-.gauge .lbl{font-size:11px;color:var(--dim)}
+.gauge{background:var(--panel2);border:1px solid var(--border);border-radius:var(--r);padding:16px;text-align:center}
+.gauge .emo{font-size:16px;font-weight:620;margin-bottom:3px}
+.gauge .bar{height:6px;background:var(--panel3);border-radius:3px;overflow:hidden;margin:13px 0 9px}
+.gauge .bar i{display:block;height:100%;background:var(--accent);border-radius:3px}
+.gauge .lbl{font-size:12px;color:var(--dim);line-height:1.8}
 
-.kv{margin:0 0 8px;font-size:13px}
-.kv b{color:var(--muted);font-weight:500;display:inline-block;min-width:52px}
-.delta-up{color:#ff7b72}
-.delta-down{color:#35c68a}
+.kv{margin:0 0 11px;font-size:13.5px;line-height:1.75}
+.kv b{color:var(--muted);font-weight:500;display:inline-block;min-width:56px}
+.delta-up{color:#c8372d}
+.delta-down{color:#0f7a52}
 .delta-zero{color:var(--muted)}
 
-.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
-.chip{font-size:12px;padding:3px 9px;border-radius:20px;background:var(--panel3);border:1px solid var(--border2);color:#b9c2d4}
-.chip.obs{background:#101c2e;border-color:#26405f;color:#a3c4f0}
-.chip.inf{background:#1c1630;border-color:#3d3160;color:#c4b1f5}
+.chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+.chip{font-size:12.5px;padding:4px 11px;border-radius:20px;background:var(--panel3);border:1px solid var(--border);color:var(--muted);line-height:1.5}
+.chip.obs{background:var(--accent-weak);border-color:var(--accent-line);color:var(--accent)}
+.chip.inf{background:var(--peer-bg);border-color:var(--peer-line);color:var(--peer)}
 
-.obslist{list-style:none;font-size:12.5px;color:#b9c2d4}
-.obslist li{padding:3px 0 3px 16px;position:relative}
-.obslist li:before{content:"";position:absolute;left:4px;top:11px;width:5px;height:5px;border-radius:50%;background:var(--accent)}
+.obslist{list-style:none;font-size:13px;color:var(--muted);line-height:1.85}
+.obslist li{padding:4px 0 4px 18px;position:relative}
+.obslist li:before{content:"";position:absolute;left:5px;top:14px;width:5px;height:5px;border-radius:50%;background:var(--accent-line)}
 
 /* ---------- 建议卡 ---------- */
-.opt{border:1px solid var(--border);border-radius:var(--r);background:var(--panel);margin-bottom:10px;overflow:hidden;transition:.16s}
-.opt:hover{border-color:#3a4657}
-.opt.best{border-color:#3b5a86;box-shadow:0 0 0 1px #2b4364 inset}
-.opthead{display:flex;align-items:center;gap:10px;padding:11px 14px;background:var(--panel2);cursor:pointer}
-.opthead .sty{font-weight:600;font-size:13.5px}
+.opt{border:1px solid var(--border);border-radius:var(--r);background:var(--panel);margin-bottom:12px;overflow:hidden;transition:border-color .14s,box-shadow .14s}
+.opt:hover{border-color:var(--border2);box-shadow:var(--shadow)}
+.opt.best{border-color:var(--accent-line);box-shadow:0 0 0 3px var(--accent-weak)}
+.opthead{display:flex;align-items:center;gap:11px;padding:13px 16px;background:var(--panel2);border-bottom:1px solid var(--border)}
+.opthead .sty{font-weight:620;font-size:14px}
 .opthead .spacer{flex:1}
 .opthead .score{font-family:var(--mono);font-size:15px;font-weight:600}
-.optbody{padding:14px}
-.opttext{font-size:15px;line-height:1.7;background:var(--panel2);border-radius:8px;padding:11px 13px;border-left:3px solid var(--accent);margin-bottom:12px;user-select:text}
-.optacts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
-.mini{font-size:12.5px;color:var(--muted);margin:6px 0}
-.mini b{color:#c3cbdb;font-weight:500}
+.optbody{padding:16px}
+.opttext{font-size:15.5px;line-height:1.75;background:var(--panel2);border-radius:var(--r-sm);padding:13px 15px;border-left:3px solid var(--accent);margin-bottom:14px;user-select:text}
+.optacts{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}
+.mini{font-size:13px;color:var(--muted);margin:8px 0;line-height:1.75}
+.mini b{color:var(--text);font-weight:560}
 
-.sbars{display:grid;gap:6px;margin-top:10px}
-.sbar{display:grid;grid-template-columns:64px 1fr 40px;gap:8px;align-items:center;font-size:11.5px;color:var(--muted)}
-.sbar .t{height:5px;background:#2a3242;border-radius:3px;overflow:hidden}
+.sbars{display:grid;gap:8px;margin-top:12px}
+.sbar{display:grid;grid-template-columns:66px 1fr 42px;gap:10px;align-items:center;font-size:12.5px;color:var(--muted)}
+.sbar .t{height:6px;background:var(--panel3);border-radius:3px;overflow:hidden}
 .sbar .t i{display:block;height:100%;border-radius:3px}
-.sbar .n{text-align:right;font-family:var(--mono);font-size:11px}
+.sbar .n{text-align:right;font-family:var(--mono);font-size:12px}
 
 /* ---------- 推演树 ---------- */
-.branch{border:1px solid var(--border);border-radius:var(--r);padding:13px;margin-bottom:10px;background:var(--panel2)}
-.branch h4{font-size:13px;font-weight:600;display:flex;align-items:center;gap:9px;margin-bottom:9px;flex-wrap:wrap}
-.steps{display:grid;gap:7px}
-.step{display:grid;grid-template-columns:44px 1fr;gap:9px;align-items:start}
-.step .who{font-size:11.5px;padding:2px 0;text-align:center;border-radius:6px;background:var(--panel3);color:var(--muted)}
-.step.peer .who{background:#2a2038;color:#c4b1f5}
-.step .tx{font-size:13px}
-.step .nt{font-size:11.5px;color:var(--dim);margin-top:1px}
-.outcome{margin-top:10px;font-size:12.5px;color:#c3cbdb;border-top:1px dashed var(--border2);padding-top:9px}
+.branch{border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:12px;background:var(--panel2)}
+.branch h4{font-size:13.5px;font-weight:620;display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.steps{display:grid;gap:9px}
+.step{display:grid;grid-template-columns:46px 1fr;gap:11px;align-items:start}
+.step .who{font-size:12px;padding:3px 0;text-align:center;border-radius:6px;background:var(--panel3);color:var(--muted)}
+.step.peer .who{background:var(--peer-bg);color:var(--peer)}
+.step .tx{font-size:13.5px;line-height:1.75}
+.step .nt{font-size:12.5px;color:var(--dim);margin-top:3px;line-height:1.7}
+.outcome{margin-top:12px;font-size:13px;color:var(--muted);border-top:1px dashed var(--border2);padding-top:11px;line-height:1.75}
 
 /* ---------- 消息流 ---------- */
-.msgs{max-height:520px;overflow-y:auto;background:var(--panel2);border-radius:var(--r);padding:12px}
-.msg{display:flex;gap:10px;margin-bottom:11px;font-size:13px}
-.msg .t{color:var(--dim);font-size:11px;flex:none;width:74px;padding-top:2px;font-family:var(--mono)}
-.msg .w{color:var(--muted);flex:none;width:52px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.msg.me .w{color:#a3c4f0}
+.msgs{max-height:520px;overflow-y:auto;background:var(--panel2);border:1px solid var(--border);border-radius:var(--r);padding:14px}
+.msg{display:flex;gap:12px;margin-bottom:12px;font-size:13.5px;line-height:1.75}
+.msg .t{color:var(--dim);font-size:12px;flex:none;width:78px;padding-top:3px;font-family:var(--mono)}
+.msg .w{color:var(--muted);flex:none;width:56px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msg.me .w{color:var(--accent)}
 .msg .c{flex:1;word-break:break-word;white-space:pre-wrap}
-.msg.me .c{color:#cfd7e6}
+.msg.me .c{color:var(--text)}
 
-/* ---------- 字幕 ---------- */
-.subs{max-height:420px;overflow-y:auto;background:var(--panel2);border-radius:var(--r);padding:12px}
-.sub{display:grid;grid-template-columns:64px 1fr;gap:10px;margin-bottom:10px;font-size:13px;align-items:start}
-.sub .ch{font-size:11px;text-align:center;padding:3px 0;border-radius:6px;background:#2a2038;color:#c4b1f5;font-weight:500}
-.sub.me .ch{background:#132a3d;color:#8fc4f5}
-.sub .txt{white-space:pre-wrap;word-break:break-word}
-.sub .meta{font-size:11px;color:var(--dim);margin-top:2px;font-family:var(--mono)}
-.meter{height:6px;background:#2a3242;border-radius:3px;overflow:hidden;flex:1}
+/* ---------- 通话字幕 ----------
+   字幕行必须叫 .cap。历史上它也叫 .sub，而 .sub 同时是各页的副标题段落，
+   后定义的 grid 会把副标题压成 66px 宽的一列 —— 这正是「排版挤在一起」的元凶。 */
+.subs{max-height:420px;overflow-y:auto;background:var(--panel2);border:1px solid var(--border);border-radius:var(--r);padding:14px}
+.cap{display:grid;grid-template-columns:66px 1fr;gap:12px;margin-bottom:12px;font-size:13.5px;align-items:start}
+.cap .ch{font-size:12px;text-align:center;padding:4px 0;border-radius:6px;background:var(--peer-bg);color:var(--peer);font-weight:560}
+.cap.me .ch{background:var(--accent-weak);color:var(--accent)}
+.cap .txt{white-space:pre-wrap;word-break:break-word;line-height:1.75}
+.cap .meta{font-size:12px;color:var(--dim);margin-top:3px;font-family:var(--mono)}
+/* 浅色下纯浅灰的音量条会被误认成分隔线，加一圈描边让它明确是个「槽」 */
+.meter{height:6px;background:var(--panel3);border:1px solid var(--border);border-radius:3px;overflow:hidden;flex:1}
 .meter i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--ok),var(--warn),var(--danger));transition:width .12s}
 
-.spin{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px}
+.spin{display:inline-block;width:13px;height:13px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px}
 @keyframes sp{to{transform:rotate(360deg)}}
 .hidden{display:none!important}
-table.t{width:100%;border-collapse:collapse;font-size:12.5px}
-table.t th,table.t td{text-align:left;padding:6px 9px;border-bottom:1px solid var(--border)}
-table.t th{color:var(--muted);font-weight:500;font-size:12px}
+table.t{width:100%;border-collapse:collapse;font-size:13px}
+table.t th,table.t td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--border)}
+table.t th{color:var(--muted);font-weight:560;font-size:12.5px;background:var(--panel2)}
 table.t tr:hover td{background:var(--panel2)}
 
 /* ---------- 自检 / 新手引导 ---------- */
 .wizard{
-  background:linear-gradient(180deg,#1a2333,#151a22);
-  border:1px solid var(--border2);border-radius:var(--r);
-  padding:14px 16px;margin-bottom:16px;
-  display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap;
+  background:var(--accent-weak);border:1px solid var(--accent-line);border-radius:var(--r);
+  padding:16px 18px;margin-bottom:20px;
+  display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap;
 }
-.wizard .wt{font-weight:600;margin-bottom:3px}
-.wizard.ok{background:linear-gradient(180deg,#14261f,#151a22);border-color:#25473a}
-.wizard.bad{background:linear-gradient(180deg,#2a1c1c,#151a22);border-color:#5a3230}
+.wizard .wt{font-weight:620;margin-bottom:4px}
+.wizard.ok{background:var(--ok-bg);border-color:var(--ok-line)}
+.wizard.bad{background:var(--danger-bg);border-color:var(--danger-line)}
 
-.chk{
-  display:flex;gap:11px;padding:11px 12px;border-radius:9px;
-  border:1px solid var(--border);background:var(--panel2);margin-bottom:8px;align-items:flex-start;
-}
-.chk .ico{
-  flex:none;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;
-  font-size:12px;font-weight:700;margin-top:1px;
-}
-.chk.ok .ico{background:#1d4436;color:var(--ok)}
-.chk.warn .ico{background:#463519;color:var(--warn)}
-.chk.fail .ico{background:#4a2321;color:var(--danger)}
+.chk{display:flex;gap:13px;padding:14px;border-radius:var(--r-sm);border:1px solid var(--border);background:var(--panel2);margin-bottom:10px;align-items:flex-start}
+.chk .ico{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12.5px;font-weight:700;margin-top:1px}
+.chk.ok .ico{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-line)}
+.chk.warn .ico{background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn-line)}
+.chk.fail .ico{background:var(--danger-bg);color:var(--danger);border:1px solid var(--danger-line)}
 .chk .body{flex:1;min-width:0}
-.chk .lbl{font-weight:600;font-size:13.5px}
-.chk .dt{font-size:12.5px;color:var(--muted);margin-top:2px;line-height:1.6;word-break:break-word}
-.chk .fx{font-size:12.5px;color:var(--accent);margin-top:5px;line-height:1.6}
-.chk .acts{flex:none;display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.chk .lbl{font-weight:620;font-size:13.5px}
+.chk .dt{font-size:13px;color:var(--muted);margin-top:4px;line-height:1.75;word-break:break-word}
+.chk .fx{font-size:13px;color:var(--accent);margin-top:6px;line-height:1.75}
+.chk .acts{flex:none;display:flex;gap:7px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
 
 .preset{
-  display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:20px;
-  border:1px solid var(--border2);background:var(--panel2);font-size:12.5px;color:var(--text);
-  transition:.14s;
+  display:inline-flex;align-items:center;gap:7px;padding:6px 13px;border-radius:20px;
+  border:1px solid var(--border2);background:var(--panel);font-size:13px;color:var(--text);
+  transition:background .12s,border-color .12s,color .12s;
 }
-.preset:hover{border-color:var(--accent);color:var(--accent)}
-.preset:disabled{opacity:.45;cursor:not-allowed}
+.preset:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-weak)}
+.preset:disabled{opacity:.5;cursor:not-allowed}
 
 .pathbox{
-  font-family:var(--mono);font-size:11.5px;color:var(--muted);
-  background:var(--panel2);border:1px solid var(--border);border-radius:7px;
-  padding:7px 9px;word-break:break-all;margin-top:6px;
+  font-family:var(--mono);font-size:12px;color:var(--muted);
+  background:var(--panel2);border:1px solid var(--border);border-radius:var(--r-sm);
+  padding:9px 11px;word-break:break-all;margin-top:8px;line-height:1.85;
 }
 
-.pbar{height:6px;border-radius:4px;background:var(--panel3);overflow:hidden;margin-top:6px}
-.pbar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .4s}
+.pbar{height:6px;border-radius:3px;background:var(--panel3);overflow:hidden;margin-top:8px}
+.pbar>i{display:block;height:100%;width:0;background:var(--accent);transition:width .4s}
 
 .mitem{
-  display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;
-  border:1px solid var(--border);background:var(--panel2);margin-bottom:6px;
+  display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:var(--r-sm);
+  border:1px solid var(--border);background:var(--panel2);margin-bottom:8px;
 }
-.mitem.on{border-color:#2c5f47}
-.mitem .mn{font-family:var(--mono);font-size:12.5px;min-width:64px}
-.mitem .md{flex:1;font-size:12px;color:var(--muted);min-width:0}
-.mitem .mb{flex:none;font-size:11.5px;color:var(--dim)}
+.mitem.on{border-color:var(--ok-line);background:var(--ok-bg)}
+.mitem .mn{font-family:var(--mono);font-size:12.5px;min-width:70px}
+.mitem .md{flex:1;font-size:12.5px;color:var(--muted);min-width:0;line-height:1.6}
+.mitem .mb{flex:none;font-size:12px;color:var(--dim)}
+
+/* ---------- 上手三步 ---------- */
+.steps3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}
+@media(max-width:860px){.steps3{grid-template-columns:1fr}}
+.step3{
+  border:1px solid var(--border);border-radius:var(--r);background:var(--panel);
+  padding:16px 18px;position:relative;box-shadow:var(--shadow);
+}
+.step3 .no{
+  width:24px;height:24px;border-radius:50%;background:var(--panel3);color:var(--muted);
+  display:grid;place-items:center;font-size:12.5px;font-weight:660;margin-bottom:10px;
+}
+.step3.done .no{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-line)}
+.step3 .st{font-weight:620;font-size:14px;margin-bottom:4px}
+.step3 .sd{font-size:12.5px;color:var(--muted);line-height:1.7;margin-bottom:12px}
+.step3 .sa{font-size:12.5px}
 </style>
 </head>
 <body>
@@ -254,12 +313,12 @@ table.t tr:hover td{background:var(--panel2)}
       <p>聊天僚机 · 本地优先</p>
     </div>
     <nav id="nav">
-      <button data-v="copilot" class="on"><i>◎</i>指挥台</button>
-      <button data-v="memory"><i>◈</i>记忆</button>
-      <button data-v="import"><i>↧</i>导入</button>
-      <button data-v="voice"><i>◉</i>通话</button>
-      <button data-v="check"><i>✚</i>自检<span id="nav-badge" class="navdot hidden"></span></button>
-      <button data-v="settings"><i>⚙</i>设置</button>
+      <button data-v="copilot" class="on"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5a3.5 3.5 0 0 1-3.5 3.5H8l-4 3.5V6.5A3.5 3.5 0 0 1 7.5 3h9A3.5 3.5 0 0 1 20 6.5z"/></svg></i>指挥台</button>
+      <button data-v="memory"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3h11a1 1 0 0 1 1 1v17l-6.5-4-6.5 4V4a1 1 0 0 1 1-1z"/></svg></i>记忆</button>
+      <button data-v="import"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="m7.5 9.5 4.5 4.5 4.5-4.5"/><path d="M4 20h16"/></svg></i>导入</button>
+      <button data-v="voice"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z"/><path d="M19 11a7 7 0 0 1-14 0"/><path d="M12 18v3"/></svg></i>通话</button>
+      <button data-v="check"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.3 2.4 2.4 4.6-5"/></svg></i>自检<span id="nav-badge" class="navdot hidden"></span></button>
+      <button data-v="settings"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5h16"/><path d="M4 12h16"/><path d="M4 17.5h16"/><circle cx="9" cy="6.5" r="2.1"/><circle cx="15" cy="12" r="2.1"/><circle cx="8" cy="17.5" r="2.1"/></svg></i>设置</button>
     </nav>
     <div class="sidebody">
       <div class="sidelabel">会话</div>
@@ -288,10 +347,13 @@ table.t tr:hover td{background:var(--panel2)}
       <h2>指挥台</h2>
       <p class="sub">把对方刚发来的话贴进来，看看她的状态、给你四个不同风格的回复，再推演每条会把聊天带向哪里。</p>
 
+      <!-- 三步走完自动隐藏，不给配好的人添堵 -->
+      <div id="cp-steps" class="steps3 hidden"></div>
+
       <div id="cp-nochat" class="card">
         <h3>先选一个会话</h3>
-        <p class="small muted">左侧还没有会话。去「导入」页上传一份聊天记录，或者用示例文件
-          <span class="mono">samples/qq_sample_小鹿.txt</span> 试跑。</p>
+        <p class="small muted">左侧还没有会话。到「导入」页上传一份聊天记录（QQ / 微信导出的 txt 都支持），
+          或者直接用示例文件 <span class="mono">samples/qq_sample_小鹿.txt</span> 试跑一遍流程。</p>
       </div>
 
       <div id="cp-main" class="hidden">
@@ -428,7 +490,7 @@ table.t tr:hover td{background:var(--panel2)}
     <section class="view" id="view-voice">
       <h2>通话</h2>
       <p class="sub">
-        双通道采集：系统回环听<span style="color:#c4b1f5">对方</span>，麦克风听<span style="color:#8fc4f5">你自己</span>。
+        双通道采集：系统回环听<span style="color:var(--peer)">对方</span>，麦克风听<span style="color:var(--accent)">你自己</span>。
         转写实时推到下面。需要装 <span class="mono">soundcard</span> 和语音识别引擎。
       </p>
 
@@ -543,7 +605,8 @@ table.t tr:hover td{background:var(--panel2)}
           <button class="preset" data-preset="siliconflow">硅基流动</button>
           <button class="preset" data-preset="ollama">Ollama 本地</button>
         </div>
-        <div class="small dim" id="s-preset-hint" style="margin-bottom:11px">
+        <div id="s-preset-models" class="hidden" style="margin-bottom:12px"></div>
+        <div class="small dim" id="s-preset-hint" style="margin-bottom:12px">
           只帮你填好地址和模型名，<b>API Key 需要你自己去服务商申请</b>（点上面的按钮会给出申请入口）。
         </div>
         <label class="f"><span>Provider</span>
@@ -558,20 +621,22 @@ table.t tr:hover td{background:var(--panel2)}
           <label class="f"><span>API Key</span>
             <input type="password" id="s-llm_api_key" placeholder="sk-..." /></label>
           <label class="f"><span>模型名</span>
-            <input type="text" id="s-llm_model" placeholder="deepseek-chat" /></label>
-          <label class="f"><span>温度</span>
+            <input type="text" id="s-llm_model" placeholder="deepseek-flash" /></label>
+          <label class="f"><span>温度（越高越发散，聊天建议 0.8）</span>
             <input type="number" id="s-llm_temperature" step="0.1" min="0" max="2" /></label>
           <label class="f"><span>Ollama 地址</span>
             <input type="text" id="s-ollama_host" placeholder="http://127.0.0.1:11434" /></label>
           <label class="f"><span>Ollama 模型</span>
             <input type="text" id="s-ollama_model" placeholder="qwen2.5:7b" /></label>
         </div>
+        <div id="s-model-warn"></div>
         <div class="row">
           <button class="btn sm" id="s-test-llm">测试连通</button>
           <button class="btn sm ghost" id="s-list-models">拉取模型列表</button>
           <span id="s-llm-msg" class="small dim"></span>
         </div>
         <div id="s-models" class="chips"></div>
+        <div id="s-llm-diag"></div>
       </div>
 
       <div class="card">
@@ -790,6 +855,7 @@ async function loadChats() {
   if (state.chatId && !state.chats.some(c => c.id === state.chatId)) state.chatId = null;
   if (!state.chatId && state.chats.length) state.chatId = state.chats[0].id;
   reflectChat();
+  updateSteps();
 }
 
 function reflectChat() {
@@ -857,10 +923,10 @@ function analysisHTML(b) {
 
 function scoresHTML(o) {
   const rows = [
-    ["自然度", o.scores.naturalness, "#5b9dff"],
-    ["共情", o.scores.warmth, "#a78bfa"],
-    ["推进力", o.scores.progress, "#35c68a"],
-    ["风险", o.scores.risk, "#f0554d"],
+    ["自然度", o.scores.naturalness, "#2f6fed"],
+    ["共情", o.scores.warmth, "#7c4ddb"],
+    ["推进力", o.scores.progress, "#0f7a52"],
+    ["风险", o.scores.risk, "#c0352b"],
   ];
   return `<div class="sbars">${rows.map(([n, v, c]) => `
     <div class="sbar">
@@ -968,7 +1034,7 @@ function simHTML(t) {
     <div class="small dim" style="margin-bottom:8px">发出「${esc(t.option_text)}」之后的走向推演</div>
     ${branches}
     ${t.advice ? `<div class="note ok"><b>综合建议</b><br>${esc(t.advice)}</div>` : ""}
-    <div class="note" style="border-color:#5a4620">${esc(t.disclaimer)}</div>
+    <div class="note" style="border-color:var(--warn-line)">${esc(t.disclaimer)}</div>
   </div>`;
 }
 
@@ -1019,9 +1085,11 @@ async function loadFacts() {
       $("#facts").innerHTML = `<span class="muted">还没有抽取过事实。点上面的「抽取事实并生成画像」。</span>`;
       return;
     }
+    // 后端用 peer / me 做归属标记，界面上直接显示中文，别让用户猜 peer 是谁
+    const WHO = { peer: "对方", me: "我", self: "我" };
     $("#facts").innerHTML = facts.map(f => `
       <div class="row" style="justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)">
-        <span><span class="pill">${esc(f.subject)}</span> <b>${esc(f.key)}</b> ${esc(f.value)}</span>
+        <span><span class="pill">${esc(WHO[f.subject] || f.subject)}</span> <b>${esc(f.key)}</b> ${esc(f.value)}</span>
         <span class="row" style="gap:6px">
           <span class="dim mono">${(f.confidence * 100).toFixed(0)}%</span>
           <button class="btn sm ghost danger f-del" data-id="${f.id}">×</button>
@@ -1286,7 +1354,7 @@ function pushSub(d) {
   state.subs++;
   $("#v-count").textContent = state.subs + " 段";
   const el = document.createElement("div");
-  el.className = "sub " + (d.channel === "me" ? "me" : "");
+  el.className = "cap " + (d.channel === "me" ? "me" : "");
   el.innerHTML = `
     <span class="ch">${d.channel === "me" ? "我" : "对方"}</span>
     <div><div class="txt">${esc(d.text)}</div>
@@ -1296,6 +1364,10 @@ function pushSub(d) {
 }
 
 function connectSSE() {
+  // 带 ?nostream=1 时不接长连接。EventSource 是持久连接，会让「等页面网络空闲
+  // 再截图」的自动化工具永远等不到空闲（headless 截图、CI 视觉回归都会中招）。
+  // 正常打开页面不带这个参数，行为完全不变。
+  if (location.search.includes("nostream")) return;
   const es = new EventSource("/api/voice/stream");
   es.onmessage = (ev) => {
     let d; try { d = JSON.parse(ev.data); } catch { return; }
@@ -1334,6 +1406,7 @@ async function loadSettings() {
     // hf_endpoint 在界面上是「勾选框」，不是输入框，要单独还原
     const ep = r.values.hf_endpoint || "";
     $("#s-hf-mirror").checked = ep.includes("hf-mirror");
+    checkRetiredModel();
     syncAsrRoute();
     loadAsrModels();
   } catch (e) { toast("#s-msg", e.message, "err"); }
@@ -1365,12 +1438,59 @@ $("#s-reset").addEventListener("click", async () => {
   } catch (e) { toast("#s-msg", e.message, "err"); }
 });
 
+// 手打模型名时也顺带检查一次，不用等到保存
+$("#s-llm_model").addEventListener("input", checkRetiredModel);
+
+// 连通失败时，把常见原因翻译成「下一步点哪」。
+// 新手拿到一句 HTTP 404 是没法自己往下走的 —— 这一块就是补这个缺口。
+function llmDiagHTML(msg) {
+  const m = (msg || "").toLowerCase();
+  const hits = [];
+  if (m.includes("401") || m.includes("鉴权") || m.includes("api key")) {
+    hits.push(["API Key 不对",
+      "去服务商后台重新复制一次（通常以 sk- 开头）。注意别漏掉结尾字符；也别把 Key 填到 Base URL 那一格。"]);
+  }
+  if (m.includes("404")) {
+    hits.push(["地址（Base URL）写错了",
+      "Base URL 形如 <span class=\"mono\">https://api.deepseek.com/v1</span>：以 /v1 结尾，且<b>不要</b>带 /chat/completions。"]);
+  }
+  if (m.includes("model") || m.includes("模型")) {
+    hits.push(["模型名不对，或你的账户没有这个模型",
+      "点上面的服务商按钮重新选一次；或点「拉取模型列表」，从它返回的名字里挑一个。"]);
+  }
+  if (m.includes("429") || m.includes("额度")) {
+    hits.push(["额度用尽或请求太频繁", "去服务商后台充值，或稍等几分钟再试。"]);
+  }
+  if (m.includes("403")) {
+    hits.push(["没有访问权限", "这个 Key 可能没开通该模型，或已被限制。去服务商后台确认。"]);
+  }
+  if (m.includes("timeout") || m.includes("超时") || m.includes("网络")
+      || m.includes("connect") || m.includes("connection")) {
+    hits.push(["网络到不了服务商",
+      "开着代理软件的话，确认它没拦下本机请求；公司网络可能需要放行对应域名。实在不行可以先切到 Ollama 本地模型，绕过网络。"]);
+  }
+  if (!hits.length) {
+    hits.push(["按这个顺序排查",
+      "① API Key 是否已填；② Base URL 是否以 /v1 结尾；③ 模型名是否来自「拉取模型列表」。"]);
+  }
+  return `<div class="note err" style="margin-top:12px">
+    <b>没连通。大概率是下面之一：</b>
+    ${hits.map(([t, d]) => `<div style="margin-top:9px"><b>${esc(t)}</b><br>${d}</div>`).join("")}
+    <div class="dim" style="margin-top:10px">原始信息：${esc((msg || "").slice(0, 300))}</div>
+  </div>`;
+}
+
 async function testProvider(which, btn, msgEl) {
   busy(btn, true, "测试中…");
+  if (which === "llm") $("#s-llm-diag").innerHTML = "";
   try {
     const r = await api(`/api/settings/test?which=${which}`, { method: "POST" });
     toast(msgEl, `${r.ok ? "✓" : "✗"} ${r.name} — ${r.message}`, r.ok ? "ok" : "err");
-  } catch (e) { toast(msgEl, e.message, "err"); }
+    if (which === "llm" && !r.ok) $("#s-llm-diag").innerHTML = llmDiagHTML(r.message);
+  } catch (e) {
+    toast(msgEl, e.message, "err");
+    if (which === "llm") $("#s-llm-diag").innerHTML = llmDiagHTML(e.message);
+  }
   finally { busy(btn, false); }
 }
 
@@ -1467,6 +1587,7 @@ async function loadSelfCheck() {
     b.addEventListener("click", () => goView(b.dataset.goto)));
 
   updateWizard(r);
+  updateSteps();
 }
 
 // 顶部横幅：只要还有没配好的东西就提醒，用户关掉后不再烦他
@@ -1482,11 +1603,56 @@ function updateWizard(r) {
 
   const pending = (r.items || []).filter(i => i.status !== "ok");
   $("#wz-title").textContent = pending.length
-    ? `还有 ${pending.length} 项没配好：${pending.slice(0, 3).map(i => i.label).join("、")}${pending.length > 3 ? " 等" : ""}`
-    : "还没配好";
-  $("#wz-desc").textContent = r.summary || "";
+    ? `还有 ${pending.length} 项可以补上：${pending.slice(0, 3).map(i => i.label).join("、")}${pending.length > 3 ? " 等" : ""}`
+    : "还有几项没配好";
+  // 标题说「缺什么」，这里说「怎么办」，不要重复同一句话
+  $("#wz-desc").textContent = "不配也能跑，但配上之后分析质量问题差很多。点右边「开始配置」，每一项都写了缺什么、怎么补。";
   box.classList.remove("hidden");
   box.classList.toggle("bad", r.worst === "fail");
+}
+
+// 指挥台顶部的「上手三步」。
+// 借鉴同类项目的做法：新手第一屏最需要的不是功能入口，而是「我现在缺什么、下一步点哪」。
+// 两步都齐了就整块收起来，不打扰已经配好的人。
+function updateSteps() {
+  const box = $("#cp-steps");
+  if (!box) return;
+
+  const items = state.check?.items || [];
+  const llmOk = items.find(i => i.key === "llm")?.status === "ok";
+  const hasChat = state.chats.length > 0;
+
+  // 自检还没回来之前先不判断，免得闪一下
+  if (state.check && llmOk && hasChat) { box.classList.add("hidden"); return; }
+
+  const step = (no, done, title, desc, action, view) => `
+    <div class="step3 ${done ? "done" : ""}">
+      <div class="no">${done ? "✓" : no}</div>
+      <div class="st">${esc(title)}</div>
+      <div class="sd">${esc(desc)}</div>
+      ${done ? `<div class="sa dim">已完成</div>`
+             : `<button class="btn sm primary" data-step-go="${esc(view || "")}">${esc(action)}</button>`}
+    </div>`;
+
+  box.innerHTML =
+    step(1, llmOk, "接上大模型",
+      llmOk ? "已有可用的模型，分析和推演都走它。"
+            : "现在跑的是演示模式，回复是套模板的。填入 API Key 才会有真实效果。",
+      "去配置", "settings") +
+    step(2, hasChat, "导入一份聊天记录",
+      hasChat ? `已经有 ${state.chats.length} 个会话了。`
+              : "QQ / 微信导出的 txt 都支持，也可以直接把聊天内容粘进去。",
+      "去导入", "import") +
+    step(3, false, "开始分析",
+      "把对方刚发的那句话贴进下面的输入框，点「分析并给建议」。",
+      "开始", "");
+
+  $$("#cp-steps [data-step-go]").forEach(b =>
+    b.addEventListener("click", () => {
+      if (b.dataset.stepGo) goView(b.dataset.stepGo);
+      else $("#cp-msg")?.focus();
+    }));
+  box.classList.remove("hidden");
 }
 
 $("#wz-go").addEventListener("click", () => goView("check"));
@@ -1571,34 +1737,113 @@ $$("[data-open]").forEach(b => b.addEventListener("click", async () => {
 
 // ================================================================ 模型预设
 
-// 新手最大的卡点是「不知道 base_url 填什么」。这里给几个常见的，点了就填好。
+// 新手最大的卡点是「不知道 base_url / 模型名填什么」。这里给几个常见的，点了就填好。
+//
+// 模型名是会过期的，而且服务商不会通知你 —— DeepSeek 就在 2026-07-24 下线了
+// deepseek-chat / deepseek-reasoner，调用直接报错。所以下面除了预设，还维护一张
+// 退役表（RETIRED_MODELS），见到旧名字就主动提示换掉，别让人对着一个 400 发呆。
 const MODEL_PRESETS = {
-  deepseek:    { provider: "openai_compat", base: "https://api.deepseek.com/v1",
-                 model: "deepseek-chat", apply: "https://platform.deepseek.com/api_keys" },
-  qwen:        { provider: "openai_compat", base: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-                 model: "qwen-plus", apply: "https://bailian.console.aliyun.com/" },
-  kimi:        { provider: "openai_compat", base: "https://api.moonshot.cn/v1",
-                 model: "moonshot-v1-8k", apply: "https://platform.moonshot.cn/console/api-keys" },
-  siliconflow: { provider: "openai_compat", base: "https://api.siliconflow.cn/v1",
-                 model: "deepseek-ai/DeepSeek-V3", apply: "https://cloud.siliconflow.cn/account/ak" },
-  ollama:      { provider: "ollama", base: "", model: "",
-                 host: "http://127.0.0.1:11434", omodel: "qwen2.5:7b",
-                 apply: "https://ollama.com/download" },
+  deepseek: {
+    provider: "openai_compat",
+    base: "https://api.deepseek.com/v1",
+    models: [
+      { id: "deepseek-flash",  label: "deepseek-flash",  note: "V4.1-Flash · 快、便宜，日常聊天够用" },
+      { id: "deepseek-v4-pro", label: "deepseek-v4-pro", note: "V4-Pro · 推理更强，单价约 4 倍" },
+    ],
+    apply: "https://platform.deepseek.com/api_keys",
+    tip: "不确定选哪个就用 deepseek-flash。",
+  },
+  qwen: {
+    provider: "openai_compat",
+    base: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    models: [{ id: "qwen-plus", label: "qwen-plus", note: "长期维护的均衡档" }],
+    apply: "https://bailian.console.aliyun.com/",
+    tip: "模型名时有更新，点「拉取模型列表」能看到你账户实际可用的。",
+  },
+  kimi: {
+    provider: "openai_compat",
+    base: "https://api.moonshot.cn/v1",
+    models: [{ id: "moonshot-v1-8k", label: "moonshot-v1-8k", note: "若报「模型不存在」，改用拉取列表里的名字" }],
+    apply: "https://platform.moonshot.cn/console/api-keys",
+    tip: "月之暗面的模型名更新较频繁，建议点「拉取模型列表」挑。",
+  },
+  siliconflow: {
+    provider: "openai_compat",
+    base: "https://api.siliconflow.cn/v1",
+    models: [{ id: "deepseek-ai/DeepSeek-V3", label: "deepseek-ai/DeepSeek-V3", note: "聚合平台托管的开源模型" }],
+    apply: "https://cloud.siliconflow.cn/account/ak",
+    tip: "平台聚合的模型很多，点「拉取模型列表」挑更准。",
+  },
+  ollama: {
+    provider: "ollama", base: "", models: [],
+    host: "http://127.0.0.1:11434", omodel: "qwen2.5:7b",
+    apply: "https://ollama.com/download",
+    tip: "模型跑在本机，聊天记录一帧都不出本地。",
+  },
 };
+
+// 已退役的模型名 → 建议换成什么。
+const RETIRED_MODELS = {
+  "deepseek-chat":     "deepseek-flash",
+  "deepseek-reasoner": "deepseek-flash",
+};
+
+// 见到退役的模型名就提示 —— 这是「模型连不上」最常见、又最难看出来的原因。
+function checkRetiredModel() {
+  const box = $("#s-model-warn");
+  if (!box) return;
+  const model = ($("#s-llm_model").value || "").trim();
+  const replacement = RETIRED_MODELS[model];
+  if (!replacement) { box.innerHTML = ""; return; }
+  box.innerHTML = `
+    <div class="note">
+      <b>「${esc(model)}」这个模型名已经停用了。</b><br>
+      DeepSeek 在 2026 年 7 月下线了它，现在调用会直接报错。这也是「云模型连不上」最常见的原因。
+      <div class="row" style="margin-top:10px">
+        <button class="btn sm primary" id="s-fix-model">换成 ${esc(replacement)}</button>
+      </div>
+    </div>`;
+  $("#s-fix-model").addEventListener("click", () => {
+    $("#s-llm_model").value = replacement;
+    box.innerHTML = "";
+    toast("#s-llm-msg", `已改成 ${replacement}，记得点下面的「保存设置」`, "ok");
+  });
+}
 
 $$("[data-preset]").forEach(btn => btn.addEventListener("click", () => {
   const p = MODEL_PRESETS[btn.dataset.preset];
   if (!p) return;
   $("#s-llm_provider").value = p.provider;
   $("#s-llm_base_url").value = p.base;
-  if (p.model) $("#s-llm_model").value = p.model;
+  if (p.models?.length) $("#s-llm_model").value = p.models[0].id;
   if (p.host) $("#s-ollama_host").value = p.host;
   if (p.omodel) $("#s-ollama_model").value = p.omodel;
 
+  // 有多个模型可选时摊开摆给用户挑，省得他去翻文档
+  const box = $("#s-preset-models");
+  if (p.models?.length > 1) {
+    box.innerHTML = `<div class="small muted" style="margin-bottom:8px">这个服务商有多个模型可选，挑一个：</div>
+      <div class="row">${p.models.map(m =>
+        `<button class="preset" data-pmodel="${esc(m.id)}" title="${esc(m.note)}">${esc(m.label)}</button>`
+      ).join("")}</div>`;
+    box.classList.remove("hidden");
+    $$("#s-preset-models [data-pmodel]").forEach(b =>
+      b.addEventListener("click", () => {
+        $("#s-llm_model").value = b.dataset.pmodel;
+        checkRetiredModel();
+        toast("#s-llm-msg", `已选 ${b.dataset.pmodel}`, "ok");
+      }));
+  } else {
+    box.innerHTML = "";
+    box.classList.add("hidden");
+  }
+
   const isOllama = p.provider === "ollama";
   $("#s-preset-hint").innerHTML = isOllama
-    ? `已填好本地地址。还需要：① 去 <a href="${p.apply}" target="_blank" rel="noopener">下载安装 Ollama</a>；② 命令行跑 <span class="mono">ollama pull ${esc(p.omodel)}</span>；③ 回到这里点「测试连通」。模型跑在本机，聊天记录一帧都不出本地。`
-    : `已填好地址和模型名。<b>还差 API Key</b> —— 去 <a href="${p.apply}" target="_blank" rel="noopener">这里申请</a>，拿到后粘贴到下面的 API Key 输入框，再点「测试连通」。`;
+    ? `已填好本地地址。还需要：① 去 <a href="${p.apply}" target="_blank" rel="noopener">下载安装 Ollama</a>；② 命令行跑 <span class="mono">ollama pull ${esc(p.omodel)}</span>；③ 回到这里点「测试连通」。${esc(p.tip)}`
+    : `地址和模型名已填好（<span class="mono">${esc($("#s-llm_model").value)}</span>）。<b>还差 API Key</b> —— 去 <a href="${p.apply}" target="_blank" rel="noopener">这里申请</a>，粘贴到下面的 API Key 输入框，再点「测试连通」。${esc(p.tip)}`;
+
+  checkRetiredModel();
   toast("#s-llm-msg", "已填入预设，别忘了补 API Key", "ok");
 }));
 
@@ -1734,6 +1979,10 @@ async function pollAsrProgress() {
   loadSelfCheck();
   connectSSE();
   setInterval(loadHealth, 30000);
+
+  // ?view=settings 这样的深链接，可以直接跳到某一页（也方便自动化截图）
+  const want = new URLSearchParams(location.search).get("view");
+  if (want && document.getElementById("view-" + want)) goView(want);
 })();
 </script>
 </body>

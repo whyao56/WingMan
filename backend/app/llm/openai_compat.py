@@ -82,10 +82,13 @@ class OpenAICompatProvider(ChatProvider):
     # ------------------------------------------------------ 调用
 
     def _headers(self) -> dict[str, str]:
+        # 版本号从 app.__version__ 取，别再手写 —— 手写过一次 0.1，发版后就漂移了
+        from .. import __version__
+
         h = {
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "User-Agent": "WingMan/0.1",
+            "User-Agent": f"WingMan/{__version__}",
         }
         if self.api_key:
             h["Authorization"] = f"Bearer {self.api_key}"

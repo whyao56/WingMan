@@ -60,7 +60,7 @@ curl.exe -s http://127.0.0.1:8787/api/health
 
 ```json
 {"version":"0.2.0","db":"...\\backend\\data\\wingman.db","counts":{"messages":62,"facts":6,"chats":1},
- "providers":[{"kind":"llm","name":"openai_compat","available":true,"note":"https://api.deepseek.com/v1 · deepseek-chat"},
+ "providers":[{"kind":"llm","name":"openai_compat","available":true,"note":"https://api.deepseek.com/v1 · deepseek-flash"},
               {"kind":"embedder","name":"hash","available":true,"note":"..."},
               {"kind":"asr","name":"mock","available":true,"note":"..."}]}
 ```
@@ -92,7 +92,13 @@ curl.exe -s http://127.0.0.1:8787/api/health
    - OpenAI：`https://api.openai.com/v1`
    - 自建/中转：`http://127.0.0.1:3000/v1` 这类
    ⚠️ **不要**带 `/chat/completions` —— 程序会自己在后面拼它。
-3. **模型名**：例如 `deepseek-chat`（各家的名字不同，以服务商文档为准）
+3. **模型名**：例如 `deepseek-flash`（各家的名字不同，以服务商文档为准）
+
+   ⚠️ **模型名是会过期的，而且服务商通常不通知你**。DeepSeek 就在 2026-07-24 下线了
+   `deepseek-chat` / `deepseek-reasoner`，继续用会直接报 400 —— 这是「模型连不上」
+   最常见的原因。控制台为此做了两件事：预设按钮里给的是**当前可用**的名字；
+   如果你填了（或之前存过）已下线的名字，会当场弹提示并提供一键替换。
+   仍然拿不准，就点「**拉取模型列表**」，用服务商实际返回的名字。
 
 ### 3.2 在控制台里填
 
