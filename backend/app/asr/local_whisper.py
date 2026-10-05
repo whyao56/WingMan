@@ -25,6 +25,20 @@ from .base import ASREngine, ASRResult, to_float_mono
 
 log = logging.getLogger("wingman.asr.whisper")
 
+# Whisper 有个中文特有的毛病：**同一个模型会时而不时地吐繁体**。
+# 实测 base 把「今天加班到10点,好累呀,你周末有空吗?」写成
+# 「今天加班到10點,好累呀,你周末有空嗎?」—— 内容是对的，字形是错的，
+# 而用户一眼就能看出来，还会以为程序认错了字。
+#
+# 给一段简体中文的 initial_prompt 就能把它带回简体（同一段音频实测恢复成
+# 「今天加班到10点,好累呀。你周末有空吗?」）。这比引一个繁简转换库更根本：
+# 转换库只是事后补救，而它是从源头就不让模型往繁体跑，还能顺手把语气
+# 定在普通话上。
+#
+# 只在明确是中文时加。副作用是 beam search 路径会变，个别用词会有出入
+# （tiny 会把「10点」写成「十点」，同样正确），可以接受。
+ZH_SIMPLIFIED_PROMPT = "以下是普通话的句子，请用简体中文转写。"
+
 _model_lock = threading.Lock()
 _model_cache: dict[tuple[str, str, str], Any] = {}
 
@@ -138,12 +152,21 @@ class LocalWhisperASR(ASREngine):
 
         def _run() -> tuple[str, str, float]:
             model = self._get_model()
+            # 只有明确说了是中文才加简体提示词。
+            # language 为 auto/空 时是在做语种识别，此时塞一段中文进去会
+            # 把语种判断本身带偏 —— 宁可偶尔出繁体，也不要认错语种。
+            prompt = (
+                ZH_SIMPLIFIED_PROMPT
+                if (language or "").strip().lower().startswith("zh")
+                else None
+            )
             segments, info = model.transcribe(
                 arr,
                 language=None if language in ("auto", "") else language,
                 beam_size=3,
                 vad_filter=False,          # 外层已经做过 VAD 了
                 condition_on_previous_text=False,
+                initial_prompt=prompt,
             )
             parts: list[str] = []
             probs: list[float] = []

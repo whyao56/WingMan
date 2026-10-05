@@ -14,7 +14,7 @@
 | 需要装 Python | ✅ 3.11+ | ❌ 完全不需要 |
 | 首次启动 | 几分钟（建 venv + 装依赖） | 秒级 |
 | 要不要联网 | 首次装依赖要 | 不要（云模型除外） |
-| 体积 | 仓库本身几 MB | 78 MB / 246 MB |
+| 体积 | 仓库本身几 MB | 68 MB / 237 MB |
 | 改了代码 | 直接生效 | 要重新打包 |
 | 启动前自检 | `wingman.cmd --doctor` | `WingMan.exe --check` |
 | 适合 | 自己开发、能装 Python | 只想用 / 分发给不懂技术的朋友 |
@@ -110,18 +110,25 @@ python scripts/build_exe.py --zip        # 顺手压成 zip
 
 | | 标准版 | 完整版（`--with-asr`） |
 |---|---|---|
-| 体积（实测） | **78 MB** | **246 MB** |
+| 体积（实测） | **68 MB** | **237 MB** |
 | 文字链路（记忆 / 分析 / 建议 / 推演） | ✅ | ✅ |
 | 云 ASR | ✅ 填密钥即用 | ✅ |
 | 本地 ASR（音频不出本机） | ❌ 库里没带 | ✅ 另需下载模型权重 |
 | 适用 | 大多数用户 | 明确要用本地转写的人 |
 
 体积差主要在 `faster-whisper` 拖进来的三块（实测）：
-`PyAV 65MB` + `ctranslate2 59MB` + `onnxruntime 36MB` ≈ 160MB。
+`PyAV 67MB` + `ctranslate2 59MB` + `onnxruntime 36MB` ≈ 160MB。
 
 > `onnxruntime` 是 Silero VAD 用的，`PyAV` 是音频解码用的 —— 即使我们把
 > `vad_filter=False`、只喂 numpy 数组，它们仍会被 `faster_whisper` 顶层导入，
 > 删不掉。删了就是「打得开、一录就崩」。
+
+**`hf_xet` 被显式排除了**（在 `build/wingman.spec` 的 `excludes` 里）。
+它是 `huggingface_hub` 的可选下载加速后端，被自动探测到就会跟着进包 ——
+在标准版里占 9MB，约 12%。但我们无条件设了 `HF_HUB_DISABLE_XET=1`，
+它永远不会被 import，所以是纯死重量。排除它反而更稳：包里有它时，
+一旦哪条路径漏设那个环境变量，就可能重新踩上「Xet 的 CAS 服务器国内被拦 → 401」
+这个坑；包里没有它，`is_package_available("hf_xet")` 直接为假，自动回落经典 HTTP 下载。
 
 **模型权重两个版本都不打包** —— 那是另外 78–3090 MB，让用户按需下载更合理，
 而且要带提示（见下）。
@@ -284,6 +291,39 @@ Windows 上 `Path("/tmp/a.wav")` 会解析成 `C:\tmp\a.wav`，而 Git Bash 的
 
 用 `tempfile.gettempdir()` 拿真实临时目录即可。
 
+### 11. 「静态分析看不见」只对**字符串动态导入**成立，别推广到函数内的 import
+
+第 2 条说的 uvicorn 坑，很容易被误记成「函数内的 import 也看不见」—— 不是的。
+PyInstaller 用字节码分析，**函数内写的 `from X import Y` 照样能追到**。
+唯一追不到的是「模块名是运行时拼出来的」那种（`importlib.import_module(name)`）。
+
+这个区别很实际：本次就因为它差点做错一个判断。`models.py` 里
+`from huggingface_hub import snapshot_download` 是写在函数里的，我据此
+推断它没被打进包、准备去「修」—— 但用归档清单核对后发现
+`huggingface_hub` 有 147 个子模块，本来就在包里。
+
+**核对包内容别靠猜，也别靠 grep 二进制里的字符串**（docstring 里的模块名
+一样会被打进去，数出来的是假阳性）。用 PyInstaller 自己的读取器看真实 TOC：
+
+```python
+from PyInstaller.archive.readers import CArchiveReader, ZlibArchiveReader
+r = CArchiveReader("dist/WingMan/WingMan.exe")
+open("pyz.pyz", "wb").write(r.extract("PYZ.pyz"))     # 真正的模块归档在里层
+names = sorted(ZlibArchiveReader("pyz.pyz").toc)      # 这才是权威清单
+```
+
+### 12. 手工验证时，先确认「你连的是自己刚起的那个进程」
+
+窗口版为了做单实例，会在启动时探测目标端口上是否已有 WingMan；有就直接复用、
+**不起新服务**。这在日常使用里是对的，但做验证时是个陷阱：如果你机器上还留着
+早前的服务（源码模式跑 `wingman.cmd`、或上一次没关的窗口），你新起的 exe 会
+静默退出，而你的 `curl` 打到的是**那个旧进程** —— 数据目录、ASR 引擎全是旧的，
+得出一堆看似矛盾的结论（「明明打的是完整版，怎么 ASR 是 mock？」）。
+
+所以验证时：换一个没人用的端口，并核对响应里的数据目录是不是你预期的那一个。
+顺带一提，`--no-window` 下的日志现在会明说「不打开界面」，不再一律印
+「直接打开界面」—— 之前那句误导过排查。
+
 ---
 
 ## 四、本地语音模型为什么让用户自己下
@@ -316,6 +356,12 @@ Windows 上 `Path("/tmp/a.wav")` 会解析成 `C:\tmp\a.wav`，而 Git Bash 的
 - [ ] 「自检 → 语音链路实测」在界面里点得通
 - [ ] 走一遍「云 ASR」路线（填地址）和「本地模型」路线（下模型），
       确认自检面板对**两条路线**的提示都对
+- [ ] **在打包版里真的下载一个模型**（`base` 约 145MB 最省事），
+      确认「下载 → 加载 → 转写」整条走通 —— 光验「加载已有模型」不够：
+      `local_dir` 下载下来的目录结构、以及被排除掉的 `hf_xet`，
+      都只在这条路上才会暴露问题
+- [ ] 用 `base` 或更大规格跑一句中文，确认**不吐繁体**
+      （没带简体 `initial_prompt` 时 `base` 会输出「10點…嗎?」这种）
 - [ ] 故意把引擎设成 `local` + 一个没下载的模型，确认自检报 **WARN**
       而不是绿的「已完成」
 - [ ] 日志文件有内容且中文不乱码

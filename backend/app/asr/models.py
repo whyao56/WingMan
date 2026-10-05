@@ -164,6 +164,15 @@ def _explain_error(err: str) -> str:
     一个明确的动作，所以必须翻译。
     """
     e = err or ""
+    # 「缺组件」必须排在所有网络关键词之前判断。
+    # 这是个安装包问题，给再多的网络建议都不可能修好 —— 镜像补不上一个
+    # 根本没打进包的模块。而且模块名有可能碰巧命中下面的关键词
+    # （比如某个模块名里带 connection），排在后面就会被翻译成
+    # 「勾上国内镜像重试」，把用户带进一个永远转不出来的死胡同。
+    if ("ModuleNotFoundError" in e or "ImportError" in e
+            or "No module named" in e or "cannot import name" in e):
+        return ("程序缺少一个必需组件，这是安装包的问题，不是你操作的问题。"
+                "请到发布页重新下载安装包；若反复出现，请把上面这行原文反馈给作者。")
     if "xethub" in e or "CAS Client" in e or "Xet" in e:
         return ("下载走错了通道（Xet）。这通常发生在国内网络下，"
                 "程序会自动改走经典下载；请重试一次，仍失败就换小一号的模型。")

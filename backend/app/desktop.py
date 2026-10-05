@@ -209,8 +209,16 @@ def main(argv: list[str] | None = None) -> int:
 
         # 单实例：已经在跑就只把界面调出来，别再起一个服务
         if _probe_wingman(wanted):
-            log.info("检测到 %s 端口上已有 WingMan 在运行，直接打开界面。", wanted)
-            if not args.no_window:
+            # 日志必须说实话：--no-window 下我们**不会**打开任何界面。
+            # 之前这里无论什么模式都印「直接打开界面」，排查别人的问题时
+            # 会让人以为是自己那个进程起的窗口，白绕一圈。
+            if args.no_window:
+                log.info(
+                    "%s 端口上已有 WingMan 在运行，直接复用（--no-window，不打开界面）。",
+                    wanted,
+                )
+            else:
+                log.info("检测到 %s 端口上已有 WingMan 在运行，直接打开界面。", wanted)
                 if not _open_window(wanted):
                     _open_browser(wanted)
             return 0

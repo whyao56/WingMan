@@ -95,6 +95,20 @@ excludes = [
     "pip",
     "PIL",
     "sqlalchemy",
+    # hf_xet 是 huggingface_hub 的**可选**加速后端，被自动探测到就会进包
+    # （一个纯二进制 .pyd，标准版里占 9.06MB —— 相当于标准版的 12%）。
+    #
+    # 我们永远用不到它，所以剔除是**纯赚**，不是取舍：
+    #   1) apply_endpoint() 无条件设 HF_HUB_DISABLE_XET=1，
+    #      huggingface_hub 的 is_xet_available() 第一行就直接 return False，
+    #      那 8 处 `from hf_xet import ...` 一个都不会执行（全是函数内导入）；
+    #   2) 退一步说，就算哪个调用点忘了设这个环境变量，包没打进去时
+    #      is_package_available("hf_xet") 同样返回 False → 自动回落经典 HTTP 下载。
+    # 换句话说：剔除它顺手消灭了「Xet CAS 服务器国内被拦 → 401」这个故障模式本身。
+    #
+    # 剔除后 huggingface_hub 的 snapshot_download / hf_hub_download / HfApi
+    # 全部照常可用（已实测）。
+    "hf_xet",
 ]
 
 if not WITH_ASR:

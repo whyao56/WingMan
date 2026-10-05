@@ -127,6 +127,49 @@ def test_local_whisper_not_ready_without_model():
     assert eng.not_ready_reason, "非 ready 时必须给出一句人能看懂的原因"
 
 
+def test_zh_transcription_asks_model_for_simplified_output():
+    """中文转写必须带简体提示词，否则模型可能吐繁体。
+
+    这条防的是「内容对、字形错」—— 用户一眼就能看出来，但纯文本比对的
+    测试很容易漏掉。实测 base 模型会把「今天加班到10点,好累呀,你周末有空吗?」
+    写成「今天加班到10點,好累呀,你周末有空嗎?」，用户会以为程序认错了字。
+    """
+    import asyncio
+
+    from app.asr.local_whisper import LocalWhisperASR
+
+    seen: dict = {}
+
+    class _Seg:
+        text = "今天加班到10点"
+        avg_logprob = -0.1
+
+    class _Info:
+        language = "zh"
+
+    class _Model:
+        def transcribe(self, audio, **kw):
+            seen.clear()
+            seen.update(kw)
+            return [_Seg()], _Info()
+
+    eng = LocalWhisperASR(model_size="tiny")
+    eng._get_model = lambda: _Model()          # type: ignore[method-assign]
+    pcm = np.zeros(16000, dtype=np.float32)
+
+    asyncio.run(eng.transcribe(pcm, 16000, "zh"))
+    prompt = seen.get("initial_prompt")
+    assert prompt, "中文转写没有传 initial_prompt，模型可能输出繁体"
+    assert "简体" in prompt, f"提示词没有明确要求简体：{prompt}"
+
+    # auto 是在做语种识别，塞中文提示词会把语种判断本身带偏
+    asyncio.run(eng.transcribe(pcm, 16000, "auto"))
+    assert not seen.get("initial_prompt"), "auto 模式下不该强行加中文提示词"
+
+    asyncio.run(eng.transcribe(pcm, 16000, "en"))
+    assert not seen.get("initial_prompt"), "非中文语种不该带中文提示词"
+
+
 def test_mock_asr_is_ready_but_named_mock():
     """Mock 引擎「能跑」但没有识别能力 —— 靠 name 区分，不靠 ready。"""
     from app.asr.mock import MockASR
@@ -244,3 +287,28 @@ def test_explain_error_translates_known_failures():
     assert "磁盘" in _explain_error("OSError: [Errno 28] No space left on device")
     # 未知错误也要给出可执行的建议，不能是空字符串
     assert _explain_error("something weird happened")
+
+
+def test_explain_error_does_not_send_users_chasing_mirrors_for_missing_modules():
+    """缺组件是安装包问题，绝不能建议「重试 / 换镜像」。
+
+    这条单独立一个测试，是因为它防的是**误导性建议**，不是没建议。
+    打包版最容易出的就是这类错：某个模块没被 PyInstaller 收进包里，
+    运行到那一步才报 ModuleNotFoundError。此时如果翻译成
+    「勾上国内镜像再试一次」，用户会朝着一个永远修不好的方向反复试，
+    而且不会想到来反馈 —— 这是最坏的一种失败。
+    """
+    from app.asr.models import _explain_error
+
+    for raw in (
+        "ModuleNotFoundError: No module named 'huggingface_hub'",
+        "ImportError: cannot import name 'snapshot_download'",
+    ):
+        msg = _explain_error(raw)
+        assert "安装包" in msg, f"{raw} 没被识别为「缺组件」：{msg}"
+        assert "镜像" not in msg, f"{raw} 却建议换镜像（会把用户带进死胡同）：{msg}"
+        assert "重试一次" not in msg, f"{raw} 却建议重试（没有意义）：{msg}"
+
+    # 反例保护：真正的网络错误仍然要走网络建议，不能被这条吞掉
+    net = _explain_error("ConnectionError: getaddrinfo failed")
+    assert "镜像" in net or "网络" in net, f"网络错误被误判成缺组件：{net}"
