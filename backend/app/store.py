@@ -24,13 +24,16 @@ from typing import Any, Iterable, Iterator, Sequence
 import numpy as np
 
 from .schemas import (
+    ActivityEntry,
     ChatInfo,
     CollectCursor,
+    EngineRun,
     Fact,
     Msg,
     Person,
     PersonChannel,
     PersonDetail,
+    PersonPersona,
     Persona,
     Summary,
 )
@@ -250,6 +253,38 @@ CREATE TABLE IF NOT EXISTS person_personas (
 
 def _now() -> str:
     return datetime.now().isoformat(timespec="seconds")
+
+
+def _json_or(value: Any, default: Any) -> Any:
+    """把库里存的 JSON 文本读回来；空值或坏值都退到 default（不抛）。"""
+    if value in (None, ""):
+        return default
+    try:
+        return json.loads(value)
+    except (ValueError, TypeError):
+        return default
+
+
+def _normalise_ts(value: Any) -> str:
+    """把消息时间归一到 ISO 字符串。
+
+    datetime 直接序列化；字符串按 ISO 解析后规范化（统一分隔符与本地时区写法）。
+    解析不了就原样返回 —— 校验在前面的接口层做，这里不吞掉用户的输入。
+    """
+    if isinstance(value, datetime):
+        return value.isoformat()
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        return datetime.fromisoformat(text).isoformat()
+    except ValueError:
+        return text
+
+
+# 一条消息允许被二次编辑的字段。刻意**不含** chat_id / platform / ext_id：
+# 前者是幂等键与游标的依据，后两者是「这条从哪来」的事实，不属于「编辑内容」。
+_MESSAGE_EDITABLE_FIELDS = ("sender", "role", "text", "ts", "ts_source")
 
 
 # 渠道：这个人的记录是从哪儿来的。渠道决定界面上的分组，也决定
@@ -715,6 +750,25 @@ class Store:
                 "me_name = COALESCE(NULLIF(?, ''), me_name) WHERE id = ?",
                 (name, peer_name, me_name, chat_id),
             )
+
+    def set_chat_platform(self, chat_id: str, platform: str, channel: str = "") -> ChatInfo | None:
+        """改一条记录的平台 / 渠道。会话不存在返回 None。
+
+        **绝不改 `chat_id`**：它是消息幂等键与采集游标的依据，改了会破坏去重与增量。
+        `channel` 默认由 `platform` 按映射表重算（除非显式传入）—— platform 与 channel
+        若各说各话，界面上的分组就和实际平台对不上，而这是静默的。
+        """
+        info = self.get_chat(chat_id)
+        if info is None:
+            return None
+        plat = (platform or "").strip() or info.platform
+        ch = (channel or "").strip() or _channel_from_platform(plat)
+        with self.conn() as c:
+            c.execute(
+                "UPDATE chats SET platform = ?, channel = ? WHERE id = ?",
+                (plat, ch, chat_id),
+            )
+        return self.get_chat(chat_id)
 
     def set_roles(self, chat_id: str, me_names: Sequence[str]) -> int:
         """导入时角色猜错了？用它一次性纠正整条会话的 me / peer 归属。"""
@@ -1201,6 +1255,98 @@ class Store:
             ).fetchall()
         return [dict(r) for r in rows]
 
+    def _message_by_id(self, msg_id: int) -> dict[str, Any] | None:
+        with self.conn() as c:
+            row = c.execute("SELECT * FROM messages WHERE id = ?", (msg_id,)).fetchone()
+        return dict(row) if row else None
+
+    def update_message(self, msg_id: int, patch: dict[str, Any]) -> dict[str, Any]:
+        """改一条消息。撞幂等键时返回**结构化错误**，不抛异常、不让接口 500。
+
+        幂等键是 `UNIQUE(chat_id, sender, ts, text)`。编辑后的行可能和另一条
+        完全一样（同会话 + 同发送者 + 同时间 + 同内容）—— 这时 SQLite 会抛
+        `IntegrityError`。对用户来说这不是「服务出错」，而是「你改的这条和已有的
+        重复了」，所以要能区分「改成功」和「改重复」，界面才给得出人话提示。
+
+        返回：`{"ok": True, "id", "changed", "message"}`；
+        或 `{"ok": False, "id", "error": "not_found"|"duplicate", "detail"}`。
+        """
+        current = self._message_by_id(msg_id)
+        if current is None:
+            return {"ok": False, "id": msg_id, "error": "not_found",
+                    "detail": f"消息不存在：{msg_id}"}
+        fields = [k for k in _MESSAGE_EDITABLE_FIELDS
+                  if k in patch and patch[k] is not None]
+        if not fields:
+            return {"ok": True, "id": msg_id, "changed": 0, "message": current}
+        values: list[Any] = [
+            _normalise_ts(patch[k]) if k == "ts" else patch[k] for k in fields
+        ]
+        assignments = ", ".join(f"{k} = ?" for k in fields)
+        try:
+            with self.conn() as c:
+                c.execute(
+                    f"UPDATE messages SET {assignments} WHERE id = ?",
+                    values + [msg_id],
+                )
+                changed = c.total_changes
+        except sqlite3.IntegrityError:
+            return {
+                "ok": False, "id": msg_id, "error": "duplicate",
+                "detail": "改完和另一条完全一样（同会话 + 同发送者 + 同时间 + 同内容）。",
+            }
+        return {"ok": True, "id": msg_id, "changed": changed,
+                "message": self._message_by_id(msg_id)}
+
+    def delete_messages(self, ids: Sequence[int]) -> int:
+        """按 id 批量删消息，返回真删掉的条数。向量随 ON DELETE CASCADE 一起走。"""
+        clean = [int(i) for i in (ids or []) if i is not None]
+        if not clean:
+            return 0
+        q = ",".join("?" * len(clean))
+        with self.conn() as c:
+            c.execute("PRAGMA foreign_keys = ON")
+            before = c.total_changes
+            c.execute(f"DELETE FROM messages WHERE id IN ({q})", clean)
+            return c.total_changes - before
+
+    def insert_manual_message(
+        self,
+        chat_id: str,
+        *,
+        sender: str,
+        role: str,
+        ts: Any,
+        text: str,
+        msg_type: str = "text",
+        ts_source: str = "manual",
+        captured_at: str = "",
+    ) -> dict[str, Any]:
+        """手工往某条会话里加一条消息（聊天记录的「增加」）。
+
+        `ext_id` 留空：它不是从平台读来的，没有外部 id；`ts_source` 默认 `manual`，
+        因为时间是人给的。撞幂等键时同样返回结构化错误，不 500。
+        """
+        info = self.get_chat(chat_id)
+        if info is None:
+            return {"ok": False, "error": "not_found", "detail": f"会话不存在：{chat_id}"}
+        msg = Msg(
+            chat_id=chat_id, platform=info.platform, sender=sender, role=role,
+            ts=ts, text=text, msg_type=msg_type, ext_id=None,
+            ts_source=ts_source, captured_at=captured_at,
+        )
+        inserted, _skipped = self.insert_messages([msg])
+        if not inserted:
+            return {"ok": False, "error": "duplicate",
+                    "detail": "这条和已有的完全一样（同会话 + 同发送者 + 同时间 + 同内容）。"}
+        with self.conn() as c:
+            row = c.execute(
+                "SELECT * FROM messages WHERE chat_id = ? AND sender = ? AND ts = ? AND text = ?",
+                (chat_id, msg.sender, msg.ts.isoformat(), msg.text),
+            ).fetchone()
+        return {"ok": True, "id": int(row["id"]) if row else None,
+                "message": dict(row) if row else None}
+
     # ------------------------------------------------------------ embeddings
 
     def upsert_embeddings(self, model: str, items: Iterable[tuple[int, np.ndarray]]) -> int:
@@ -1272,11 +1418,11 @@ class Store:
             c.executemany(
                 """
                 INSERT OR REPLACE INTO facts
-                    (chat_id, subject, key, value, confidence, evidence, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                    (chat_id, person_id, subject, key, value, confidence, evidence, updated_at)
+                VALUES (?, (SELECT person_id FROM chats WHERE id = ?), ?, ?, ?, ?, ?, ?)
                 """,
                 [
-                    (chat_id, f.subject or subject, f.key, f.value,
+                    (chat_id, chat_id, f.subject or subject, f.key, f.value,
                      float(f.confidence), f.evidence, _now())
                     for f in facts if f.key and f.value
                 ],
@@ -1288,17 +1434,20 @@ class Store:
 
         冲突目标必须与表上的唯一键完全一致，否则 SQLite 会直接抛
         "ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint"。
+        `person_id` 一并按 chats 带上：人物级视图要能只靠 facts 表就知道归属，
+        不必每次都 join（也避免新写入的事实和迁移回填的旧事实口径不一致）。
         """
         with self.conn() as c:
             c.execute(
                 """
-                INSERT INTO facts (chat_id, subject, key, value, confidence, evidence, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO facts (chat_id, person_id, subject, key, value, confidence, evidence, updated_at)
+                VALUES (?, (SELECT person_id FROM chats WHERE id = ?), ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(chat_id, subject, key, value) DO UPDATE SET
+                    person_id = excluded.person_id,
                     confidence = excluded.confidence,
                     evidence = excluded.evidence, updated_at = excluded.updated_at
                 """,
-                (chat_id, fact.subject, fact.key, fact.value,
+                (chat_id, chat_id, fact.subject, fact.key, fact.value,
                  float(fact.confidence), fact.evidence, _now()),
             )
 
@@ -1313,12 +1462,85 @@ class Store:
             rows = c.execute(sql, args).fetchall()
         return [
             Fact(
-                id=r["id"], chat_id=r["chat_id"], subject=r["subject"], key=r["key"],
+                id=r["id"], chat_id=r["chat_id"], person_id=r["person_id"] or "",
+                subject=r["subject"], key=r["key"],
                 value=r["value"], confidence=r["confidence"],
                 evidence=r["evidence"] or "", updated_at=r["updated_at"] or "",
             )
             for r in rows
         ]
+
+    def list_facts_for_person(self, person_id: str, subject: str | None = None) -> list[Fact]:
+        """对象级事实 + 该对象名下所有渠道的事实，合并成一个视图。
+
+        合并的是「视野」不是「去重」：同一条事实若在对象级与渠道级都存在，
+        两条都会返回，各自标着 `scope`，界面才能分组显示且不重复计数。
+        """
+        sql = (
+            "SELECT * FROM facts WHERE ("
+            f"({_FACTS_PERSON_SCOPE} AND person_id = ?) "
+            "OR chat_id IN (SELECT id FROM chats WHERE person_id = ?)"
+            ")"
+        )
+        params: list[Any] = [person_id, person_id]
+        if subject:
+            sql += " AND subject = ?"
+            params.append(subject)
+        sql += " ORDER BY subject, key, id"
+        with self.conn() as c:
+            rows = c.execute(sql, params).fetchall()
+        out: list[Fact] = []
+        for r in rows:
+            scope = "person" if not (r["chat_id"] or "").strip() else "chat"
+            out.append(Fact(
+                id=r["id"], chat_id=r["chat_id"] or "", person_id=r["person_id"] or "",
+                scope=scope, subject=r["subject"], key=r["key"], value=r["value"],
+                confidence=r["confidence"], evidence=r["evidence"] or "",
+                updated_at=r["updated_at"] or "",
+            ))
+        return out
+
+    def upsert_person_fact(self, person_id: str, fact: Fact) -> Fact | None:
+        """写一条**对象级**事实（不绑具体渠道）。人不存在或内容为空返回 None。
+
+        不直接用 `ON CONFLICT`：冲突目标要匹配那条**部分唯一索引**，
+        手写匹配条件容易和索引定义漂移；这里先查后写，语义直白且不依赖缝隙。
+        """
+        if self.get_person(person_id) is None:
+            return None
+        key = (fact.key or "").strip()
+        value = (fact.value or "").strip()
+        if not key or not value:
+            return None
+        subject = fact.subject or "peer"
+        with self.conn() as c:
+            row = c.execute(
+                f"SELECT id FROM facts WHERE ({_FACTS_PERSON_SCOPE}) "
+                "AND person_id = ? AND subject = ? AND key = ? AND value = ?",
+                (person_id, subject, key, value),
+            ).fetchone()
+            if row:
+                fid = int(row["id"])
+                c.execute(
+                    "UPDATE facts SET confidence = ?, evidence = ?, updated_at = ? WHERE id = ?",
+                    (float(fact.confidence), fact.evidence or "", _now(), fid),
+                )
+            else:
+                cur = c.execute(
+                    "INSERT INTO facts "
+                    "(chat_id, person_id, subject, key, value, confidence, evidence, updated_at) "
+                    "VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)",
+                    (person_id, subject, key, value, float(fact.confidence),
+                     fact.evidence or "", _now()),
+                )
+                fid = int(cur.lastrowid or 0)
+            got = c.execute("SELECT * FROM facts WHERE id = ?", (fid,)).fetchone()
+        return Fact(
+            id=fid, chat_id="", person_id=person_id, scope="person",
+            subject=got["subject"], key=got["key"], value=got["value"],
+            confidence=got["confidence"], evidence=got["evidence"] or "",
+            updated_at=got["updated_at"] or "",
+        )
 
     def delete_fact(self, fact_id: int) -> None:
         with self.conn() as c:
@@ -1383,6 +1605,224 @@ class Store:
             )
         merged.updated_at = _now()
         return merged
+
+    # ------------------------------------------------------------ 对象级人物设定
+
+    def get_person_persona(self, person_id: str) -> PersonPersona:
+        """对象级人物设定。没有就返回一份空的（不是 None）——
+        界面首次打开就该能编辑，而不是先报「不存在」。"""
+        with self.conn() as c:
+            row = c.execute(
+                "SELECT * FROM person_personas WHERE person_id = ?", (person_id,)
+            ).fetchone()
+        if not row:
+            return PersonPersona(person_id=person_id)
+        return PersonPersona(
+            person_id=row["person_id"], goal=row["goal"] or "",
+            my_style=row["my_style"] or "", peer_profile=row["peer_profile"] or "",
+            taboos=row["taboos"] or "", stage=row["stage"] or "",
+            updated_at=row["updated_at"] or "",
+        )
+
+    def save_person_persona(self, person_id: str, patch: dict[str, Any]) -> PersonPersona | None:
+        """局部更新对象级设定：只写传进来的字段，其余保持。人不存在返回 None。"""
+        if self.get_person(person_id) is None:
+            return None
+        cur = self.get_person_persona(person_id)
+        fields = ("goal", "my_style", "peer_profile", "taboos", "stage")
+        merged = {
+            f: (str(patch[f]) if f in patch and patch[f] is not None else getattr(cur, f))
+            for f in fields
+        }
+        now = _now()
+        with self.conn() as c:
+            c.execute(
+                """
+                INSERT INTO person_personas
+                    (person_id, goal, my_style, peer_profile, taboos, stage, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(person_id) DO UPDATE SET
+                    goal = excluded.goal, my_style = excluded.my_style,
+                    peer_profile = excluded.peer_profile, taboos = excluded.taboos,
+                    stage = excluded.stage, updated_at = excluded.updated_at
+                """,
+                (person_id, merged["goal"], merged["my_style"], merged["peer_profile"],
+                 merged["taboos"], merged["stage"], now),
+            )
+        return PersonPersona(person_id=person_id, updated_at=now, **merged)
+
+    # ------------------------------------------------------------ 输出留存
+
+    def save_run(
+        self,
+        *,
+        person_id: str = "",
+        chat_ids: Sequence[str] = (),
+        peer_message: str = "",
+        analysis: Any = None,
+        strategy: Any = None,
+        options: Any = None,
+        trace: Any = None,
+    ) -> int:
+        """留存一次指挥台运行，返回 run id。
+
+        `options` 里是模型生成的回复原文（隐私），只落本机 DATA_DIR。
+        JSON 一律 `ensure_ascii=False` 存原文，方便直接肉眼核对。
+        """
+        with self.conn() as c:
+            cur = c.execute(
+                """
+                INSERT INTO engine_runs
+                    (person_id, chat_ids, peer_message, analysis, strategy, options, trace, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (person_id or "",
+                 json.dumps(list(chat_ids or []), ensure_ascii=False),
+                 peer_message or "",
+                 json.dumps(analysis or {}, ensure_ascii=False),
+                 json.dumps(strategy or {}, ensure_ascii=False),
+                 json.dumps(list(options or []), ensure_ascii=False),
+                 json.dumps(trace or {}, ensure_ascii=False),
+                 _now()),
+            )
+            return int(cur.lastrowid or 0)
+
+    @staticmethod
+    def _run_model(row: sqlite3.Row) -> EngineRun:
+        return EngineRun(
+            id=row["id"], person_id=row["person_id"] or "",
+            chat_ids=_json_or(row["chat_ids"], []),
+            peer_message=row["peer_message"] or "",
+            analysis=_json_or(row["analysis"], {}),
+            strategy=_json_or(row["strategy"], {}),
+            options=_json_or(row["options"], []),
+            trace=_json_or(row["trace"], {}),
+            created_at=row["created_at"] or "",
+        )
+
+    def list_runs(self, person_id: str = "", limit: int = 50) -> list[EngineRun]:
+        """按人（可空 = 全部）取历史输出，时间倒序。"""
+        sql = "SELECT * FROM engine_runs"
+        params: list[Any] = []
+        if person_id:
+            sql += " WHERE person_id = ?"
+            params.append(person_id)
+        sql += " ORDER BY id DESC LIMIT ?"
+        params.append(max(1, min(int(limit or 50), 500)))
+        with self.conn() as c:
+            rows = c.execute(sql, params).fetchall()
+        return [self._run_model(r) for r in rows]
+
+    def get_run(self, run_id: int) -> EngineRun | None:
+        """取一次运行的完整内容（含它的推演），供「回看 / 复用」。"""
+        with self.conn() as c:
+            row = c.execute("SELECT * FROM engine_runs WHERE id = ?", (run_id,)).fetchone()
+        if row is None:
+            return None
+        run = self._run_model(row)
+        run.sim_runs = self.list_sim_runs(run_id)
+        return run
+
+    def delete_run(self, run_id: int) -> int:
+        """删一次运行（连同它的推演），返回真删掉的运行条数。"""
+        with self.conn() as c:
+            c.execute("DELETE FROM sim_runs WHERE run_id = ?", (run_id,))
+            before = c.total_changes
+            c.execute("DELETE FROM engine_runs WHERE id = ?", (run_id,))
+            return c.total_changes - before
+
+    def save_sim_run(
+        self,
+        *,
+        run_id: int = 0,
+        option_id: str = "",
+        option_text: str = "",
+        branches: Any = None,
+        advice: str = "",
+    ) -> int:
+        """留存一次推演。`run_id=0` 表示这次推演没关联到具体的运行。"""
+        with self.conn() as c:
+            cur = c.execute(
+                """
+                INSERT INTO sim_runs (run_id, option_id, option_text, branches, advice, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (int(run_id or 0), option_id or "", option_text or "",
+                 json.dumps(list(branches or []), ensure_ascii=False), advice or "", _now()),
+            )
+            return int(cur.lastrowid or 0)
+
+    def list_sim_runs(self, run_id: int) -> list[dict[str, Any]]:
+        with self.conn() as c:
+            rows = c.execute(
+                "SELECT * FROM sim_runs WHERE run_id = ? ORDER BY id", (run_id,)
+            ).fetchall()
+        return [
+            {"id": r["id"], "run_id": r["run_id"], "option_id": r["option_id"] or "",
+             "option_text": r["option_text"] or "",
+             "branches": _json_or(r["branches"], []),
+             "advice": r["advice"] or "", "created_at": r["created_at"] or ""}
+            for r in rows
+        ]
+
+    # ------------------------------------------------------------ 动作痕迹
+
+    def log_activity(
+        self,
+        kind: str,
+        *,
+        person_id: str = "",
+        chat_id: str = "",
+        summary: str = "",
+        detail: str = "",
+        ts: str = "",
+    ) -> int:
+        """记一条动作痕迹（导入 / 采集 / 编辑 / 画像）。
+
+        它是「有动作就有痕迹」的落点：对象详情要能回看「这个人的数据是怎么来的」。
+        """
+        with self.conn() as c:
+            cur = c.execute(
+                """
+                INSERT INTO activity_log (ts, kind, person_id, chat_id, summary, detail)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (ts or _now(), str(kind or ""), person_id or "", chat_id or "",
+                 summary or "", detail or ""),
+            )
+            return int(cur.lastrowid or 0)
+
+    def list_activity(
+        self,
+        *,
+        person_id: str = "",
+        chat_id: str = "",
+        kind: str = "",
+        limit: int = 100,
+    ) -> list[ActivityEntry]:
+        sql = "SELECT * FROM activity_log WHERE 1 = 1"
+        params: list[Any] = []
+        if person_id:
+            sql += " AND person_id = ?"
+            params.append(person_id)
+        if chat_id:
+            sql += " AND chat_id = ?"
+            params.append(chat_id)
+        if kind:
+            sql += " AND kind = ?"
+            params.append(kind)
+        sql += " ORDER BY id DESC LIMIT ?"
+        params.append(max(1, min(int(limit or 100), 500)))
+        with self.conn() as c:
+            rows = c.execute(sql, params).fetchall()
+        return [
+            ActivityEntry(
+                id=r["id"], ts=r["ts"] or "", kind=r["kind"] or "",
+                person_id=r["person_id"] or "", chat_id=r["chat_id"] or "",
+                summary=r["summary"] or "", detail=r["detail"] or "",
+            )
+            for r in rows
+        ]
 
     # ------------------------------------------------------------ kv
 

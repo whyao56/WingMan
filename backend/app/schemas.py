@@ -121,6 +121,10 @@ class ImportResult(BaseModel):
 class Fact(BaseModel):
     id: int | None = None
     chat_id: str = ""
+    # 归属到哪个人（对象级事实有值；渠道级事实可由 chats 推出来）
+    person_id: str = ""
+    # 这条事实的视野：person（对象级，不绑渠道）| chat（渠道级）
+    scope: str = "chat"
     subject: str = "peer"          # peer | me | relationship
     key: str
     value: str
@@ -313,6 +317,64 @@ class CollectCursor(BaseModel):
 class PersonDetail(BaseModel):
     person: Person
     channels: list[PersonChannel] = Field(default_factory=list)
+
+
+class PersonPersona(BaseModel):
+    """对象级人物设定 —— 挂在「人」上，不是某一段渠道。
+
+    渠道级 `personas` 保留作「渠道覆盖」，但界面只暴露这一层：
+    用户描述的是「我和这个人」，而不是「我和这个人在微信里」。
+    """
+
+    person_id: str = ""
+    goal: str = ""
+    my_style: str = ""
+    peer_profile: str = ""
+    taboos: str = ""
+    stage: str = ""
+    updated_at: str = ""
+
+
+class EngineRun(BaseModel):
+    """一次指挥台运行的留存：分析 → 策略 → 候选 → 轨迹。
+
+    `options` 里存的是模型生成的**回复原文**，属于隐私 —— 与消息一样只落在本机。
+    """
+
+    id: int
+    person_id: str = ""
+    chat_ids: list[str] = Field(default_factory=list)
+    peer_message: str = ""
+    analysis: dict[str, Any] = Field(default_factory=dict)
+    strategy: dict[str, Any] = Field(default_factory=dict)
+    options: list[Any] = Field(default_factory=list)
+    trace: dict[str, Any] = Field(default_factory=dict)
+    created_at: str = ""
+    sim_runs: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ActivityEntry(BaseModel):
+    """一条「有动作就有痕迹」的记录：导入 / 采集 / 批量编辑 / 画像。"""
+
+    id: int
+    ts: str = ""
+    kind: str = ""
+    person_id: str = ""
+    chat_id: str = ""
+    summary: str = ""
+    detail: str = ""
+
+
+class PersonOverview(BaseModel):
+    """对象详情聚合：基础字段 + 渠道 + 计数 + 最近消息/输出/痕迹 + 待办。"""
+
+    person: Person
+    channels: list[PersonChannel] = Field(default_factory=list)
+    counts: dict[str, int] = Field(default_factory=dict)
+    recent_messages: list[dict[str, Any]] = Field(default_factory=list)
+    recent_runs: list[EngineRun] = Field(default_factory=list)
+    activity: list[ActivityEntry] = Field(default_factory=list)
+    todos: list[str] = Field(default_factory=list)
 
 
 # ============================================================= 设置
