@@ -134,26 +134,6 @@ class Settings(BaseSettings):
     embed_model: str = "text-embedding-3-small"
     embed_dim: int = 512
 
-    # ---- 语音识别 ----
-    asr_engine: str = "mock"            # mock | cloud | local
-    asr_language: str = "zh"
-    asr_base_url: str = ""
-    asr_api_key: str = ""
-    asr_model: str = "whisper-1"
-
-    whisper_model: str = "small"
-    whisper_device: str = "cpu"
-    whisper_compute_type: str = "int8"
-    # 本地模型权重的下载源。留空走 HuggingFace 官方；国内网络常超时，
-    # 可以填 https://hf-mirror.com。界面上有「国内镜像」开关帮你切。
-    hf_endpoint: str = ""
-
-    # ---- 音频采集 ----
-    audio_sample_rate: int = 16000
-    vad_threshold: float = 0.012
-    vad_silence_ms: int = 700
-    vad_max_segment_ms: int = 15000
-
     # ---- 服务 ----
     host: str = "127.0.0.1"
     port: int = 8787
@@ -187,24 +167,11 @@ EDITABLE_KEYS: tuple[str, ...] = (
     "embed_api_key",
     "embed_model",
     "embed_dim",
-    "asr_engine",
-    "asr_language",
-    "asr_base_url",
-    "asr_api_key",
-    "asr_model",
-    "whisper_model",
-    "whisper_device",
-    "whisper_compute_type",
-    "hf_endpoint",
-    "audio_sample_rate",
-    "vad_threshold",
-    "vad_silence_ms",
-    "vad_max_segment_ms",
 )
 
 # 从不让前端读回的敏感键（读设置时做掩码）
 SECRET_KEYS: frozenset[str] = frozenset(
-    {"llm_api_key", "embed_api_key", "asr_api_key"}
+    {"llm_api_key", "embed_api_key"}
 )
 
 

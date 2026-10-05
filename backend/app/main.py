@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import sys
 from contextlib import asynccontextmanager
@@ -20,8 +19,6 @@ from fastapi.staticfiles import StaticFiles
 
 from . import __version__
 from .api import ROUTERS
-from .asr.capture import get_session
-from .bus import bus
 from .config import FRONTEND_DIR, LOG_DIR, get_settings
 from .context import get_ctx
 from .llm.base import LLMError
@@ -79,7 +76,6 @@ async def lifespan(app: FastAPI):
     _setup_logging(settings.log_level)
 
     ctx = get_ctx()
-    bus.bind_loop(asyncio.get_running_loop())
 
     counts = ctx.store.counts()
     logger.info("WingMan v%s 启动中…", __version__)
@@ -101,16 +97,12 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        session = get_session()
-        if session and session.running:
-            logger.info("停止语音采集…")
-            await asyncio.to_thread(session.stop)
         logger.info("WingMan 已退出")
 
 
 app = FastAPI(
     title="WingMan · 聊天僚机",
-    description="本地优先的对话参谋系统：记忆聊天记录、听懂通话、给出可推演的回复建议。",
+    description="本地优先的对话参谋系统：记住你和某个人的聊天，分析 Ta 是个什么样的人，给出可推演的回复建议。",
     version=__version__,
     lifespan=lifespan,
 )

@@ -203,7 +203,7 @@ def test_json_contract_is_machine_readable_and_matches_exit_code() -> None:
         ids = [check["id"] for check in payload["checks"]]
         for expected in (
             "python_version", "backend_deps", "data_dir", "database", "port",
-            "frontend", "samples", "optional_soundcard", "optional_faster_whisper", "config",
+            "frontend", "samples", "config",
         ):
             assert expected in ids, f"缺少检查项 {expected}：{ids}"
         for check in payload["checks"]:
@@ -500,9 +500,6 @@ def test_health_route_is_backward_compatible_and_structured() -> None:
             assert str(tmp) in payload["db"]["path"]
             assert payload["db"]["exists"] is True
             assert set(payload["db"]["counts"]) >= {"messages", "facts", "chats"}
-            for key in ("soundcard", "faster_whisper"):
-                assert key in payload["optional_deps"]
-                assert payload["optional_deps"][key]["optional"] is True
             assert payload["paths"]["data"] == str(tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -566,8 +563,6 @@ def test_config_source_resolution_and_masking_helpers() -> None:
         assert (value, source) == ("mock", "runtime"), "运行时覆盖必须压过 .env"
         value, source, _ = rh._resolve_key("port", {}, parsed)
         assert (value, source) == (8787, "default")
-        value, source, _ = rh._resolve_key("whisper_model", {}, parsed)
-        assert (value, source) == ("small", "default")
 
         # 掩码不泄漏长度：短密钥固定 ***，长密钥固定 6 个星号且不暴露长度
         assert rh._mask_value("short") == "***"

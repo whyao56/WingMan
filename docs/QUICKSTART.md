@@ -63,14 +63,13 @@ wingman.cmd
 | `wingman.cmd --no-browser` | 不自动打开浏览器 |
 | `wingman.cmd --setup-only` | 只准备环境，不启动服务 |
 | `wingman.cmd --doctor` | 只做启动前自检，逐项打印检查结果与修复建议 |
-| `wingman.cmd --with-asr` | 额外安装语音相关依赖（可选；装不上不影响主服务） |
 | `wingman.cmd --help` | 打印用法 |
 
 - 参数在 **cmd 与 PowerShell 里都能用**（记得 PowerShell 加 `.\` 前缀）。
 - 停止服务：在运行中的窗口按 `Ctrl+C`；如果出现 `Terminate batch job (Y/N)?`，按 `Y` 再回车。
   就绪横幅里会打印进程 PID，来不及按的时候可以在另一个窗口执行 `taskkill /PID <pid> /F`，或者直接关掉窗口。
 - **启动前**自查用 `wingman.cmd --doctor`；**服务已经在跑**时想看健康报告，用 `GET /api/health`
-  （想知道「每个配置从哪来」，再加一个 `GET /api/health/details`；见 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) 第 10 节）。
+  （想知道「每个配置从哪来」，再加一个 `GET /api/health/details`；见 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) 第 9 节）。
 
 也可以用环境变量（都是可选的，只对当前终端窗口有效）：
 
@@ -95,8 +94,8 @@ $env:PORT="8899"
 1. 先跑一次 `wingman.cmd --doctor`：它会体检仓库完整性、Python 版本与位数、虚拟环境、依赖完整性、数据目录和端口，
    给出结论与修复建议（不修改配置、不建库、不动你的数据、也不启动服务；唯一会留下的是 Python 自动生成的
    `__pycache__` 字节码缓存）。
-   > 服务已经在跑时，还可以查 `GET /api/health/details` 看配置来源与各 provider 状态（见 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) 第 10 节）。
-2. 再看 **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)**：端口被占、Python 版本、依赖装不上、中文乱码、没有音频设备、Mock 输出像废话……常见情况都在里面。
+   > 服务已经在跑时，还可以查 `GET /api/health/details` 看配置来源与各 provider 状态（见 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) 第 9 节）。
+2. 再看 **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)**：端口被占、Python 版本、依赖装不上、中文乱码、Mock 输出像废话……常见情况都在里面。
 
 ## 下一步看什么
 

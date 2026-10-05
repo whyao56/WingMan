@@ -86,6 +86,12 @@ nav button.on{background:var(--accent-weak);color:var(--accent);font-weight:600}
 nav button i{font-style:normal;width:16px;height:16px;display:grid;place-items:center;flex:none}
 nav button i svg{width:15px;height:15px;display:block}
 nav button .navdot{width:6px;height:6px;border-radius:50%;background:var(--warn);margin-left:auto;flex:none}
+/* 侧栏里的「敬请期待」小标签：不抢眼，但一眼能看出这一项还没开放 */
+nav button .soon{
+  margin-left:auto;flex:none;font-size:11px;font-weight:600;
+  padding:2px 7px;border-radius:10px;background:var(--panel3);color:var(--dim);
+  border:1px solid var(--border);
+}
 
 .sidebody{flex:1;overflow-y:auto;padding:2px 10px 14px}
 .sidelabel{font-size:11.5px;color:var(--dim);padding:14px 11px 6px;letter-spacing:.8px;font-weight:600}
@@ -220,9 +226,10 @@ select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,va
 .msg .c{flex:1;word-break:break-word;white-space:pre-wrap}
 .msg.me .c{color:var(--text)}
 
-/* ---------- 通话字幕 ----------
-   字幕行必须叫 .cap。历史上它也叫 .sub，而 .sub 同时是各页的副标题段落，
-   后定义的 grid 会把副标题压成 66px 宽的一列 —— 这正是「排版挤在一起」的元凶。 */
+/* ---------- 通话字幕（当前用于「通话」页的效果预览） ----------
+   注意 .cap 与 .sub 的区别：字幕行必须叫 .cap。历史上它也叫 .sub，而 .sub 同时是
+   各页的副标题段落，后定义的 grid 会把副标题压成 66px 宽的一列 —— 这正是当年
+   「排版挤在一起」的元凶。这一条由 test_frontend_assets.py 钉住，改名前先看那个测试。 */
 .subs{max-height:420px;overflow-y:auto;background:var(--panel2);border:1px solid var(--border);border-radius:var(--r);padding:14px}
 .cap{display:grid;grid-template-columns:66px 1fr;gap:12px;margin-bottom:12px;font-size:13.5px;align-items:start}
 .cap .ch{font-size:12px;text-align:center;padding:4px 0;border-radius:6px;background:var(--peer-bg);color:var(--peer);font-weight:560}
@@ -251,6 +258,28 @@ table.t tr:hover td{background:var(--panel2)}
 .wizard.ok{background:var(--ok-bg);border-color:var(--ok-line)}
 .wizard.bad{background:var(--danger-bg);border-color:var(--danger-line)}
 
+/* ---------- 敬请期待 ---------- */
+.soonbar{
+  background:var(--accent-weak);border:1px solid var(--accent-line);border-radius:var(--r);
+  padding:18px 20px;display:flex;gap:14px;align-items:flex-start;
+}
+.soonbar .si{font-size:19px;line-height:1;flex:none;margin-top:1px}
+.soonbar .st{font-weight:620;font-size:14.5px;margin-bottom:5px}
+.soonbar .sd{font-size:13px;color:var(--muted);line-height:1.8}
+.plan{display:grid;gap:14px}
+.plan .pno{
+  width:22px;height:22px;border-radius:50%;background:var(--accent-weak);color:var(--accent);
+  border:1px solid var(--accent-line);display:grid;place-items:center;
+  font-size:12px;font-weight:660;flex:none;
+}
+.plan .prow{display:grid;grid-template-columns:22px 1fr;gap:12px;align-items:start}
+.plan .pt{font-weight:600;font-size:13.5px;margin-bottom:4px}
+.plan .pd{font-size:13px;color:var(--muted);line-height:1.85}
+.plan .pd code{
+  font-family:var(--mono);font-size:12px;background:var(--panel3);
+  padding:1px 5px;border-radius:5px;
+}
+
 .chk{display:flex;gap:13px;padding:14px;border-radius:var(--r-sm);border:1px solid var(--border);background:var(--panel2);margin-bottom:10px;align-items:flex-start}
 .chk .ico{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12.5px;font-weight:700;margin-top:1px}
 .chk.ok .ico{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-line)}
@@ -275,18 +304,6 @@ table.t tr:hover td{background:var(--panel2)}
   background:var(--panel2);border:1px solid var(--border);border-radius:var(--r-sm);
   padding:9px 11px;word-break:break-all;margin-top:8px;line-height:1.85;
 }
-
-.pbar{height:6px;border-radius:3px;background:var(--panel3);overflow:hidden;margin-top:8px}
-.pbar>i{display:block;height:100%;width:0;background:var(--accent);transition:width .4s}
-
-.mitem{
-  display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:var(--r-sm);
-  border:1px solid var(--border);background:var(--panel2);margin-bottom:8px;
-}
-.mitem.on{border-color:var(--ok-line);background:var(--ok-bg)}
-.mitem .mn{font-family:var(--mono);font-size:12.5px;min-width:70px}
-.mitem .md{flex:1;font-size:12.5px;color:var(--muted);min-width:0;line-height:1.6}
-.mitem .mb{flex:none;font-size:12px;color:var(--dim)}
 
 /* ---------- 上手三步 ---------- */
 .steps3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}
@@ -316,7 +333,7 @@ table.t tr:hover td{background:var(--panel2)}
       <button data-v="copilot" class="on"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5a3.5 3.5 0 0 1-3.5 3.5H8l-4 3.5V6.5A3.5 3.5 0 0 1 7.5 3h9A3.5 3.5 0 0 1 20 6.5z"/></svg></i>指挥台</button>
       <button data-v="memory"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3h11a1 1 0 0 1 1 1v17l-6.5-4-6.5 4V4a1 1 0 0 1 1-1z"/></svg></i>记忆</button>
       <button data-v="import"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="m7.5 9.5 4.5 4.5 4.5-4.5"/><path d="M4 20h16"/></svg></i>导入</button>
-      <button data-v="voice"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z"/><path d="M19 11a7 7 0 0 1-14 0"/><path d="M12 18v3"/></svg></i>通话</button>
+      <button data-v="voice"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z"/><path d="M19 11a7 7 0 0 1-14 0"/><path d="M12 18v3"/></svg></i>通话<span class="soon">敬请期待</span></button>
       <button data-v="check"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.3 2.4 2.4 4.6-5"/></svg></i>自检<span id="nav-badge" class="navdot hidden"></span></button>
       <button data-v="settings"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5h16"/><path d="M4 12h16"/><path d="M4 17.5h16"/><circle cx="9" cy="6.5" r="2.1"/><circle cx="15" cy="12" r="2.1"/><circle cx="8" cy="17.5" r="2.1"/></svg></i>设置</button>
     </nav>
@@ -486,54 +503,125 @@ table.t tr:hover td{background:var(--panel2)}
       <div id="imp-result"></div>
     </section>
 
-    <!-- ============ 通话 ============ -->
+    <!-- ============ 通话（规划中） ============ -->
     <section class="view" id="view-voice">
-      <h2>通话</h2>
+      <h2>通话 <span class="tag">规划中</span></h2>
       <p class="sub">
-        双通道采集：系统回环听<span style="color:var(--peer)">对方</span>，麦克风听<span style="color:var(--accent)">你自己</span>。
-        转写实时推到下面。需要装 <span class="mono">soundcard</span> 和语音识别引擎。
+        把语音通话也变成记忆的一部分：系统回环听<span style="color:var(--peer)">对方</span>，
+        麦克风听<span style="color:var(--accent)">你自己</span>，两边各自转写、各自贴标签，
+        最后和微信 / QQ 的文字记录汇进同一条时间线。
       </p>
 
-      <div class="card">
-        <h3>采集控制 <span class="tag" id="v-engine"></span></h3>
-        <div class="row" style="margin-bottom:12px">
-          <label class="f" style="margin:0;flex:1;min-width:200px">
-            <span>对声音通道（系统回环）</span>
-            <select id="v-peer"><option value="auto">自动（默认扬声器）</option></select>
-          </label>
-          <label class="f" style="margin:0;flex:1;min-width:200px">
-            <span>我的声音通道（麦克风）</span>
-            <select id="v-me"><option value="auto">自动（默认麦克风）</option></select>
-          </label>
-          <label class="f" style="margin:0;flex:1;min-width:180px">
-            <span>归入哪个会话（可选）</span>
-            <select id="v-chat"><option value="">不保存</option></select>
-          </label>
-        </div>
-        <div class="row">
-          <button class="btn sm ghost" id="v-reload">刷新设备</button>
-          <button class="btn primary" id="v-start">开始采集</button>
-          <button class="btn danger" id="v-stop" disabled>停止</button>
-          <span id="v-status" class="small dim"></span>
-        </div>
-        <div class="row" style="margin-top:12px;gap:16px">
-          <div class="row" style="flex:1;gap:8px"><span class="small dim" style="width:52px">对方</span><div class="meter"><i id="v-lv-peer"></i></div></div>
-          <div class="row" style="flex:1;gap:8px"><span class="small dim" style="width:52px">我</span><div class="meter"><i id="v-lv-me"></i></div></div>
-        </div>
-        <div class="note" style="margin-top:12px">
-          录音涉及法律问题：请确认你所在地区的规定，并只用于个人备忘。不要用于采集你未参与的对话。
+      <div class="soonbar" style="margin-bottom:16px">
+        <div class="si">◷</div>
+        <div>
+          <div class="st">这块还没做完，先不放了</div>
+          <div class="sd">
+            上一版试过一版云端转写，能用但不够好：转写延迟、双方串音、断句切得碎，
+            而且要把通话音频送出本机 —— 对一个「本地优先」的工具来说，这个代价不划算。
+            我们把它撤下来重做，思路留在下面。等做扎实了再放出来，不拿半成品占位置。
+          </div>
         </div>
       </div>
 
       <div class="card">
-        <h3>实时字幕 <span class="tag" id="v-count">0 段</span></h3>
-        <div class="row" style="margin-bottom:10px">
-          <input type="text" id="v-manual" placeholder="没有麦克风？在这里手动输入一句话当作『听到的内容』" style="flex:1" />
-          <select id="v-manual-ch" style="max-width:110px"><option value="peer">对方说</option><option value="me">我说</option></select>
-          <button class="btn sm" id="v-manual-go">注入</button>
-          <button class="btn sm ghost" id="v-clear">清空</button>
+        <h3>已经想清楚的思路</h3>
+        <div class="plan">
+          <div class="prow">
+            <div class="pno">1</div>
+            <div>
+              <div class="pt">双通道采集，谁说的要分清</div>
+              <div class="pd">
+                一路抓系统回环（<code>WASAPI loopback</code>）当「对方」，一路抓默认麦克风当「我」。
+                两条流独立分帧、独立送识别，从源头上就不会把两个人的话混成一段 ——
+                事后靠声纹去切是下策，切错一次整段记录都不可信。
+              </div>
+            </div>
+          </div>
+          <div class="prow">
+            <div class="pno">2</div>
+            <div>
+              <div class="pt">本机转写，音频不出机器</div>
+              <div class="pd">
+                用 <code>faster-whisper</code> 在本地跑，模型权重存到数据目录，可离线。
+                代价是首次要下 80–500MB 的模型、CPU 转写比显卡慢，但换来的是
+                「通话录音一帧都不上传」。这正是这个工具存在的理由，不能反过来妥协。
+              </div>
+            </div>
+          </div>
+          <div class="prow">
+            <div class="pno">3</div>
+            <div>
+              <div class="pt">按「话轮」断句，而不是按静音断</div>
+              <div class="pd">
+                纯靠 VAD 静音阈值切，会把一句「我觉得……（停顿）……还是算了吧」切成两段，
+                语义就断了。计划是 VAD 先粗切，再用小模型判断句尾是否完整，
+                不完整就继续等下一帧 —— 宁可多等几百毫秒，也不切坏一句话。
+              </div>
+            </div>
+          </div>
+          <div class="prow">
+            <div class="pno">4</div>
+            <div>
+              <div class="pt">落库时和文字记录同构</div>
+              <div class="pd">
+                转写结果按 <code>(时间, 说话人, 文本)</code> 直接写成普通消息，
+                只是多带一个 <code>source=call</code> 标记。这样记忆、向量检索、人物分析
+                全都不用为通话写第二套逻辑 —— 对下游来说，它和金标聊天记录没区别。
+              </div>
+            </div>
+          </div>
+          <div class="prow">
+            <div class="pno">5</div>
+            <div>
+              <div class="pt">开录前把话说在前面</div>
+              <div class="pd">
+                录音涉及法律问题。开始采集前会要求明确确认，并且只用于你本人参与的通话、
+                只存本机；不提供「采集他人对话」的用法。这条不做成可关闭的选项。
+              </div>
+            </div>
+          </div>
         </div>
-        <div id="v-subs" class="subs"><div class="empty-hint">还没有转写内容。</div></div>
+      </div>
+
+      <div class="card">
+        <h3>将来大概是这个样子的 <span class="tag">界面预览</span></h3>
+        <p class="small muted" style="margin-top:4px;margin-bottom:12px">
+          下面是静态示意（不是真的在录），只是把「两路分开、左右分明」这件事先摆出来看看。
+        </p>
+        <div class="subs">
+          <div class="cap">
+            <div class="ch">对方</div>
+            <div><div class="txt">你上次说的那个方案，我再看了下，感觉成本还是高了点。</div>
+            <div class="meta">14:02:11 · 段长 4.2s · #1</div></div>
+          </div>
+          <div class="cap me">
+            <div class="ch">我</div>
+            <div><div class="txt">嗯，那部分我拆成两期做，第一期只上核心链路。</div>
+            <div class="meta">14:02:19 · 段长 3.6s · #2</div></div>
+          </div>
+          <div class="cap">
+            <div class="ch">对方</div>
+            <div><div class="txt">这样还行。那你先把排期发我，我这边好同步。</div>
+            <div class="meta">14:02:26 · 段长 3.1s · #3</div></div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px;gap:16px">
+          <div class="row" style="flex:1;gap:8px"><span class="small dim" style="width:52px">对方</span><div class="meter"><i style="width:38%"></i></div></div>
+          <div class="row" style="flex:1;gap:8px"><span class="small dim" style="width:52px">我</span><div class="meter"><i style="width:64%"></i></div></div>
+        </div>
+        <div class="note" style="margin-top:12px">
+          现在这里没有任何按钮 —— 后端入口也已一并移除，不会出现「点了没反应」的情况。
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>还是想要这个功能？</h3>
+        <p class="small muted" style="margin-top:4px;line-height:1.85">
+          眼下更要紧的是另一条链路：把微信 / QQ 的历史记录<b>不重复地、按时间范围地</b>爬进来，
+          再把「以人为中心」的记忆与整体分析做出来。那条链路做完之后，通话只是多一个数据来源而已。
+          先把主干跑通，支线再回来接。
+        </p>
       </div>
     </section>
 
@@ -555,31 +643,6 @@ table.t tr:hover td{background:var(--panel2)}
           <button class="btn sm ghost" data-open="logs">打开日志目录</button>
         </div>
         <div id="ck-runtime" class="pathbox hidden"></div>
-      </div>
-
-      <div class="card">
-        <h3>语音链路实测 <span class="tag" id="pb-tag"></span></h3>
-        <p class="sub" style="margin-top:4px">
-          上面的自检只能看出「有没有装库 / 有没有配好」，看不出「麦克风到底能不能录到声音」。
-          这里直接录一段并转写，把中间每一步的结果摊开 —— 语音不工作时，答案基本都在这。
-        </p>
-        <div class="row" style="margin-top:10px">
-          <select id="pb-kind" style="max-width:200px">
-            <option value="microphone">麦克风（听自己）</option>
-            <option value="loopback">系统声音（听对方）</option>
-          </select>
-          <select id="pb-seconds" style="max-width:120px">
-            <option value="3">录 3 秒</option>
-            <option value="5" selected>录 5 秒</option>
-            <option value="8">录 8 秒</option>
-          </select>
-          <button class="btn sm primary" id="pb-run">开始测试</button>
-        </div>
-        <div id="pb-hint" class="small dim" style="margin-top:8px">
-          点「开始测试」后对着麦克风说一句话，比如「今天天气不错」。
-        </div>
-        <div id="pb-steps" style="margin-top:10px"></div>
-        <div id="pb-text" class="hidden" style="margin-top:10px"></div>
       </div>
 
       <div id="ck-list"></div>
@@ -659,95 +722,6 @@ table.t tr:hover td{background:var(--panel2)}
         <span id="s-embed-msg" class="small dim"></span>
       </div>
 
-      <div class="card">
-        <h3>语音识别 <span class="tag">通话转写</span></h3>
-        <p class="small muted" style="margin-bottom:12px">
-          语音有两条路，代价不同，<b>选一条就行</b>。无论选哪条，文字链路都不受影响。
-        </p>
-
-        <div class="grid2" style="margin-bottom:14px">
-          <div class="chk" id="route-cloud" style="margin:0;cursor:pointer" data-route="cloud">
-            <div class="ico">☁</div>
-            <div class="body">
-              <div class="lbl">云端 ASR</div>
-              <div class="dt">填个接口地址和密钥就能用，不用下载任何东西、速度快。</div>
-              <div class="fx">代价：通话音频会上传到第三方服务商。</div>
-            </div>
-          </div>
-          <div class="chk" id="route-local" style="margin:0;cursor:pointer" data-route="local">
-            <div class="ico">⌂</div>
-            <div class="body">
-              <div class="lbl">本地模型</div>
-              <div class="dt">音频一帧都不出本机，隐私最好。</div>
-              <div class="fx">代价：要先下 80–500MB 模型，CPU 转写较慢。</div>
-            </div>
-          </div>
-        </div>
-
-        <label class="f"><span>引擎（点上面两张卡片也可以切）</span>
-          <select id="s-asr_engine">
-            <option value="mock">先不接（占位文本）</option>
-            <option value="local">本地 faster-whisper（隐私最好）</option>
-            <option value="cloud">云端 ASR（OpenAI 兼容）</option>
-          </select></label>
-
-        <!-- 两条路都用的公共设置 -->
-        <div class="grid2">
-          <label class="f"><span>识别语言</span>
-            <input type="text" id="s-asr_language" placeholder="zh" /></label>
-          <label class="f"><span>VAD 静音阈值（越小越敏感，误切越少但更容易把噪声当说话）</span>
-            <input type="number" id="s-vad_threshold" step="0.001" min="0" max="1" /></label>
-        </div>
-
-        <!-- 云 ASR -->
-        <div id="asr-cloud-fields" class="hidden">
-          <div class="grid2">
-            <label class="f"><span>云 ASR Base URL</span>
-              <input type="text" id="s-asr_base_url" placeholder="https://api.openai.com/v1" /></label>
-            <label class="f"><span>云 ASR API Key</span>
-              <input type="password" id="s-asr_api_key" /></label>
-            <label class="f"><span>云 ASR 模型</span>
-              <input type="text" id="s-asr_model" placeholder="whisper-1" /></label>
-          </div>
-        </div>
-
-        <!-- 本地模型 -->
-        <div id="asr-local-fields" class="hidden">
-          <div class="grid2">
-            <label class="f"><span>要用的模型规格</span>
-              <select id="s-whisper_model">
-                <option>tiny</option><option>base</option><option>small</option>
-                <option>medium</option><option>large-v3</option>
-              </select></label>
-            <label class="f"><span>推理设备</span>
-              <select id="s-whisper_device">
-                <option value="cpu">cpu（通用）</option>
-                <option value="cuda">cuda（需 NVIDIA 显卡）</option>
-              </select></label>
-              <label class="f"><span>计算精度</span>
-              <select id="s-whisper_compute_type">
-                <option value="int8">int8（快，推荐）</option>
-                <option value="float16">float16</option>
-                <option value="float32">float32（最准最慢）</option>
-              </select></label>
-          </div>
-          <label class="f" style="display:flex;align-items:center;gap:7px">
-            <input type="checkbox" id="s-hf-mirror" />
-            <span style="margin:0">使用国内镜像下载（huggingface 直连常超时，国内建议勾上）</span>
-          </label>
-          <div id="asr-model-list" style="margin-top:6px"></div>
-          <div id="asr-dl-box" class="hidden" style="margin-top:8px">
-            <div class="small" id="asr-dl-text"></div>
-            <div class="pbar"><i id="asr-dl-bar"></i></div>
-          </div>
-        </div>
-
-        <div class="row" style="margin-top:12px">
-          <button class="btn sm" id="s-test-asr">检查语音引擎</button>
-          <span id="s-asr-msg" class="small dim"></span>
-        </div>
-      </div>
-
       <div class="row">
         <button class="btn primary" id="s-save">保存设置</button>
         <button class="btn ghost" id="s-reset">清除运行时覆盖（回到 .env）</button>
@@ -767,7 +741,7 @@ const $$ = (s) => Array.from(document.querySelectorAll(s));
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const state = { chats: [], chatId: null, bundle: null, voice: null, subs: 0, check: null };
+const state = { chats: [], chatId: null, bundle: null, check: null };
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
@@ -811,8 +785,6 @@ $$("#nav button").forEach(b => b.addEventListener("click", () => {
 function goView(name) {
   $$("#nav button").forEach(x => x.classList.toggle("on", x.dataset.v === name));
   $$(".view").forEach(v => v.classList.toggle("on", v.id === "view-" + name));
-  // 进「自检」页时顺手刷新一次默认设备提示（切设备了这里能立刻反映）
-  if (name === "check" && typeof refreshProbeHint === "function") refreshProbeHint();
 }
 
 // ================================================================ 健康检查
@@ -827,7 +799,6 @@ async function loadHealth() {
     $("#s-providers").innerHTML = h.providers.map(x =>
       `<span class="pill ${x.available ? "ok" : "warn"}">${esc(x.kind)} · ${esc(x.name)} · ${esc(x.note)}</span>`
     ).join(" ");
-    $("#v-engine").textContent = "ASR: " + (h.providers.find(p => p.kind === "asr")?.name || "?");
   } catch (e) {
     $("#health").innerHTML = `<span class="delta-up">后端未连接</span>`;
   }
@@ -849,8 +820,6 @@ async function loadChats() {
     box.querySelectorAll(".chatitem").forEach(el =>
       el.addEventListener("click", () => selectChat(el.dataset.id)));
   }
-  const opts = state.chats.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
-  $("#v-chat").innerHTML = `<option value="">不保存</option>` + opts;
 
   if (state.chatId && !state.chats.some(c => c.id === state.chatId)) state.chatId = null;
   if (!state.chatId && state.chats.length) state.chatId = state.chats[0].id;
@@ -1284,116 +1253,12 @@ $("#paste-go").addEventListener("click", async () => {
   finally { busy("#paste-go", false); }
 });
 
-// ================================================================ 通话
-
-async function loadDevices() {
-  try {
-    const list = await api("/api/voice/devices");
-    const loops = list.filter(d => d.kind === "loopback");
-    const mics = list.filter(d => d.kind === "microphone");
-    const opt = (arr, def) => [`<option value="auto">${def}</option>`]
-      .concat(arr.map(d => `<option value="${esc(d.id)}">${esc(d.name)}${d.is_default ? "（默认）" : ""}</option>`)).join("");
-    $("#v-peer").innerHTML = opt(loops, loops.length ? "自动（默认扬声器回环）" : "没有找到回环设备");
-    $("#v-me").innerHTML = opt(mics, mics.length ? "自动（默认麦克风）" : "没有找到麦克风");
-    if (!list.length) {
-      $("#v-status").innerHTML = `<span class="delta-up">没有检测到音频设备 —— 可能没装 soundcard，或系统没有可用设备。</span>`;
-    } else {
-      $("#v-status").textContent = `检测到 ${loops.length} 个回环设备、${mics.length} 个麦克风`;
-    }
-  } catch (e) { $("#v-status").textContent = e.message; }
-}
-
-$("#v-reload").addEventListener("click", loadDevices);
-
-$("#v-start").addEventListener("click", async () => {
-  busy("#v-start", true, "启动中…");
-  try {
-    const st = await api("/api/voice/start", {
-      method: "POST",
-      body: JSON.stringify({
-        chat_id: $("#v-chat").value || null,
-        peer_device: $("#v-peer").value,
-        me_device: $("#v-me").value,
-      }),
-    });
-    $("#v-stop").disabled = false;
-    $("#v-status").innerHTML = `<span class="delta-down">采集中（${st.channels.join(" + ")}）· ${esc(st.engine)}</span>`;
-  } catch (e) {
-    $("#v-status").innerHTML = `<span class="delta-up">${esc(e.message)}</span>`;
-  } finally { busy("#v-start", false); }
-});
-
-$("#v-stop").addEventListener("click", async () => {
-  try {
-    const st = await api("/api/voice/stop", { method: "POST" });
-    $("#v-stop").disabled = true;
-    $("#v-status").textContent = `已停止，共转写 ${st.segments} 段`;
-  } catch (e) { $("#v-status").innerHTML = `<span class="delta-up">${esc(e.message)}</span>`; }
-});
-
-$("#v-manual-go").addEventListener("click", async () => {
-  const text = $("#v-manual").value.trim();
-  if (!text) return;
-  try {
-    await api("/api/voice/ingest", {
-      method: "POST",
-      body: JSON.stringify({ text, channel: $("#v-manual-ch").value, chat_id: $("#v-chat").value || null }),
-    });
-    $("#v-manual").value = "";
-  } catch (e) { $("#v-status").innerHTML = `<span class="delta-up">${esc(e.message)}</span>`; }
-});
-
-$("#v-clear").addEventListener("click", () => {
-  state.subs = 0; $("#v-count").textContent = "0 段";
-  $("#v-subs").innerHTML = `<div class="empty-hint">还没有转写内容。</div>`;
-});
-
-function pushSub(d) {
-  const box = $("#v-subs");
-  if (state.subs === 0) box.innerHTML = "";
-  state.subs++;
-  $("#v-count").textContent = state.subs + " 段";
-  const el = document.createElement("div");
-  el.className = "cap " + (d.channel === "me" ? "me" : "");
-  el.innerHTML = `
-    <span class="ch">${d.channel === "me" ? "我" : "对方"}</span>
-    <div><div class="txt">${esc(d.text)}</div>
-    <div class="meta">${esc((d.ts || "").slice(11, 19))} · 段长 ${(d.duration_ms / 1000).toFixed(1)}s · #${d.seq}</div></div>`;
-  box.appendChild(el);
-  box.scrollTop = box.scrollHeight;
-}
-
-function connectSSE() {
-  // 带 ?nostream=1 时不接长连接。EventSource 是持久连接，会让「等页面网络空闲
-  // 再截图」的自动化工具永远等不到空闲（headless 截图、CI 视觉回归都会中招）。
-  // 正常打开页面不带这个参数，行为完全不变。
-  if (location.search.includes("nostream")) return;
-  const es = new EventSource("/api/voice/stream");
-  es.onmessage = (ev) => {
-    let d; try { d = JSON.parse(ev.data); } catch { return; }
-    if (d.type === "transcript") pushSub(d);
-    else if (d.type === "level") {
-      const bar = $(d.channel === "me" ? "#v-lv-me" : "#v-lv-peer");
-      if (bar) bar.style.width = Math.min(100, Math.round((d.rms || 0) * 700)) + "%";
-    } else if (d.type === "error") {
-      $("#v-status").innerHTML = `<span class="delta-up">${esc(d.message)}</span>`;
-    } else if (d.type === "voice_status") {
-      $("#v-stop").disabled = !d.running;
-      if (!d.running) $("#v-start").disabled = false;
-    }
-  };
-  es.onerror = () => { /* EventSource 会自动重连 */ };
-}
-
 // ================================================================ 设置
 
 const SETTING_FIELDS = [
   "llm_provider", "llm_base_url", "llm_api_key", "llm_model", "llm_temperature",
   "ollama_host", "ollama_model",
   "embedder", "embed_model", "embed_base_url", "embed_api_key",
-  "asr_engine", "whisper_model", "asr_language", "asr_base_url", "asr_api_key", "asr_model",
-  "whisper_device", "whisper_compute_type",
-  "vad_threshold",
 ];
 
 async function loadSettings() {
@@ -1403,12 +1268,7 @@ async function loadSettings() {
       const el = $("#s-" + k);
       if (el && r.values[k] !== undefined && r.values[k] !== null) el.value = r.values[k];
     }
-    // hf_endpoint 在界面上是「勾选框」，不是输入框，要单独还原
-    const ep = r.values.hf_endpoint || "";
-    $("#s-hf-mirror").checked = ep.includes("hf-mirror");
     checkRetiredModel();
-    syncAsrRoute();
-    loadAsrModels();
   } catch (e) { toast("#s-msg", e.message, "err"); }
 }
 
@@ -1418,8 +1278,6 @@ $("#s-save").addEventListener("click", async () => {
     const el = $("#s-" + k);
     if (el) patch[k] = el.value;
   }
-  // 镜像开关映射成 hf_endpoint 字段
-  patch.hf_endpoint = $("#s-hf-mirror").checked ? MIRROR_ENDPOINT : "";
   busy("#s-save", true, "保存中…");
   try {
     await api("/api/settings", { method: "PUT", body: JSON.stringify(patch) });
@@ -1496,7 +1354,6 @@ async function testProvider(which, btn, msgEl) {
 
 $("#s-test-llm").addEventListener("click", () => testProvider("llm", "#s-test-llm", "#s-llm-msg"));
 $("#s-test-embed").addEventListener("click", () => testProvider("embedder", "#s-test-embed", "#s-embed-msg"));
-$("#s-test-asr").addEventListener("click", () => testProvider("asr", "#s-test-asr", "#s-asr-msg"));
 
 $("#s-list-models").addEventListener("click", async () => {
   busy("#s-list-models", true, "拉取中…");
@@ -1521,9 +1378,7 @@ $("#s-list-models").addEventListener("click", async () => {
 const CHECK_ACTION = {
   llm:      { label: "去填模型",   view: "settings" },
   embedder: { label: "去填模型",   view: "settings" },
-  asr:      { label: "选语音路线", view: "settings" },
   database: { label: "去导入记录", view: "import" },
-  audio:    { label: "看设备",     view: "voice" },
 };
 
 const STATUS_ICON = { ok: "✓", warn: "!", fail: "✕" };
@@ -1662,74 +1517,6 @@ $("#wz-close").addEventListener("click", () => {
 });
 $("#ck-run").addEventListener("click", () => loadSelfCheck());
 
-// ---------------- 语音链路实测 ----------------
-// 自检看不出「麦克风能不能录到声音」，这里补上：录一段 → 转写 → 摊开每一步。
-async function runProbe() {
-  const btn = $("#pb-run");
-  const kind = $("#pb-kind").value;
-  const seconds = Number($("#pb-seconds").value);
-  const steps = $("#pb-steps");
-  const lbl = kind === "loopback" ? "系统正在播放的声音" : "你对着麦克风说的话";
-
-  btn.disabled = true;
-  btn.textContent = `录音中…（${seconds} 秒）`;
-  $("#pb-tag").textContent = "";
-  $("#pb-text").classList.add("hidden");
-  steps.innerHTML = `<div class="small dim">正在录 ${seconds} 秒，请现在说一句话（${lbl}）…</div>`;
-
-  let r;
-  try {
-    r = await api(`/api/asr/probe?seconds=${seconds}&kind=${encodeURIComponent(kind)}`, { method: "POST" });
-  } catch (e) {
-    steps.innerHTML = `<div class="note err">测试请求失败：${esc(e.message)}</div>`;
-    btn.disabled = false; btn.textContent = "开始测试";
-    return;
-  }
-
-  const worst = r.worst || (r.ok ? "ok" : "fail");
-  const tag = $("#pb-tag");
-  tag.textContent = STATUS_TEXT[worst] || worst;
-  tag.style.color = worst === "ok" ? "var(--ok)" : worst === "warn" ? "var(--warn)" : "var(--danger)";
-
-  steps.innerHTML = (r.steps || []).map(s => `
-    <div class="chk ${esc(s.status)}">
-      <div class="ico">${STATUS_ICON[s.status] || "?"}</div>
-      <div class="body">
-        <div class="lbl">${esc(s.name)}</div>
-        <div class="dt">${esc(s.detail)}</div>
-      </div>
-    </div>`).join("");
-
-  const box = $("#pb-text");
-  if (r.text) {
-    box.className = "note ok";
-    box.innerHTML = `识别文本：<b>${esc(r.text)}</b>
-      <span class="dim">（置信度 ${r.confidence}，耗时 ${r.elapsed_sec}s，引擎 ${esc(r.engine)}）</span>`;
-  } else if (worst === "fail") {
-    box.className = "note err";
-    box.innerHTML = "没能识别出内容。看上面标红的那一步 —— 那就是原因。";
-  } else {
-    box.className = "note";
-    box.innerHTML = "没识别出文字。如果刚才确实没说话，这是正常的；说过话还是空的，就换更大的模型规格再试。";
-  }
-  box.classList.remove("hidden");
-
-  btn.disabled = false;
-  btn.textContent = "重新测试";
-}
-$("#pb-run").addEventListener("click", runProbe);
-
-// 从设备列表里摘出「默认麦克风/默认扬声器」的名字，让用户知道测的是哪个设备
-async function refreshProbeHint() {
-  try {
-    const r = await api("/api/asr/probe/devices").catch(() => null);
-    if (!r || !r.devices) return;
-    const d = r.devices.find(x => x.kind === "microphone" && x.is_default);
-    if (d) $("#pb-hint").textContent =
-      `当前默认麦克风：${d.name}。点「开始测试」后说一句话，比如「今天天气不错」。`;
-  } catch (e) { /* 提示而已，失败不影响主流程 */ }
-}
-
 $$("[data-open]").forEach(b => b.addEventListener("click", async () => {
   try { await api(`/api/runtime/open?which=${encodeURIComponent(b.dataset.open)}`, { method: "POST" }); }
   catch (e) { alert("打不开目录：" + e.message); }
@@ -1847,137 +1634,13 @@ $$("[data-preset]").forEach(btn => btn.addEventListener("click", () => {
   toast("#s-llm-msg", "已填入预设，别忘了补 API Key", "ok");
 }));
 
-// ================================================================ 语音路线
-
-const MIRROR_ENDPOINT = "https://hf-mirror.com";
-let asrTimer = null;
-
-// 选了哪条路，就只显示那条路要填的东西 —— 全堆在一起新手会晕
-function syncAsrRoute() {
-  const eng = $("#s-asr_engine").value;
-  $("#asr-cloud-fields").classList.toggle("hidden", eng !== "cloud");
-  $("#asr-local-fields").classList.toggle("hidden", eng !== "local");
-  $("#route-cloud").classList.toggle("on", eng === "cloud");
-  $("#route-local").classList.toggle("on", eng === "local");
-}
-
-$$("[data-route]").forEach(el => el.addEventListener("click", () => {
-  $("#s-asr_engine").value = el.dataset.route;
-  syncAsrRoute();
-}));
-$("#s-asr_engine").addEventListener("change", syncAsrRoute);
-
-async function loadAsrModels() {
-  let r;
-  try { r = await api("/api/asr/models"); } catch { return; }
-  const box = $("#asr-model-list");
-
-  if (!r.library_available) {
-    // 标准版没带本地语音库。要说清「为什么」和「怎么办」，不能只说不可用。
-    box.innerHTML = `
-      <div class="chk warn" style="margin:0">
-        <div class="ico">!</div>
-        <div class="body">
-          <div class="lbl">这个安装包没带本地语音识别</div>
-          <div class="dt">标准版为了控制体积没有内置（带上的话要多 300MB 左右）。</div>
-          <div class="fx">→ 想本地转写就用「完整版」安装包；或者选上面的「云端 ASR」，填个密钥立刻能用。</div>
-        </div>
-      </div>`;
-    return;
-  }
-
-  box.innerHTML = r.items.map(m => `
-    <div class="mitem ${m.installed ? "on" : ""}">
-      <span class="mn">${esc(m.size)}</span>
-      <span class="md">${esc(m.note)}</span>
-      <span class="mb">${m.installed ? `已下载 ${m.on_disk_mb} MB` : `${m.mb} MB`}</span>
-      ${m.installed
-        ? `<button class="btn sm ghost" data-del="${esc(m.size)}">删除</button>
-           <button class="btn sm" data-use="${esc(m.size)}">用这个</button>`
-        : `<button class="btn sm" data-dl="${esc(m.size)}">下载</button>`}
-    </div>`).join("")
-    + `<div class="small dim" style="margin-top:5px">存放位置：<span class="mono">${esc(r.models_root)}</span></div>`;
-
-  $$("#asr-model-list [data-dl]").forEach(b =>
-    b.addEventListener("click", () => startAsrDownload(b.dataset.dl)));
-  $$("#asr-model-list [data-del]").forEach(b =>
-    b.addEventListener("click", async () => {
-      if (!confirm(`确定删除 ${b.dataset.del} 模型？下次要用得重新下载。`)) return;
-      try {
-        await api(`/api/asr/models/${encodeURIComponent(b.dataset.del)}`, { method: "DELETE" });
-        toast("#s-asr-msg", "已删除", "ok");
-      } catch (e) { toast("#s-asr-msg", e.message, "err"); }
-      loadAsrModels();
-    }));
-  $$("#asr-model-list [data-use]").forEach(b =>
-    b.addEventListener("click", () => {
-      $("#s-whisper_model").value = b.dataset.use;
-      toast("#s-asr-msg", `已把模型规格设为 ${b.dataset.use}，记得点下方「保存设置」`, "ok");
-    }));
-
-  pollAsrProgress();
-}
-
-async function startAsrDownload(size) {
-  const mirror = $("#s-hf-mirror").checked;
-  if (!mirror && !confirm(
-    "当前用的是 HuggingFace 官方源，国内网络经常超时。\n\n" +
-    "建议先勾上「使用国内镜像下载」。\n\n" +
-    "仍要用官方源继续吗？"
-  )) return;
-
-  try {
-    const r = await api(
-      `/api/asr/models/download?size=${encodeURIComponent(size)}&mirror=${mirror ? "true" : "false"}`,
-      { method: "POST" });
-    toast("#s-asr-msg", r.message || "已开始下载", "ok");
-    $("#asr-dl-box").classList.remove("hidden");
-    if (asrTimer) clearInterval(asrTimer);
-    asrTimer = setInterval(pollAsrProgress, 1200);
-  } catch (e) { toast("#s-asr-msg", e.message, "err"); }
-}
-
-async function pollAsrProgress() {
-  let p;
-  try { p = await api("/api/asr/models/progress"); } catch { return; }
-  const box = $("#asr-dl-box");
-
-  if (!p.running && !p.done && !p.error) { box.classList.add("hidden"); return; }
-  box.classList.remove("hidden");
-
-  const bar = $("#asr-dl-bar");
-  const txt = $("#asr-dl-text");
-  bar.style.width = (p.percent || 0) + "%";
-
-  if (p.error) {
-    txt.innerHTML = `<span style="color:var(--danger)">下载失败：${esc(p.error)}</span>
-      <br><span class="dim">常见原因：网络到不了 HuggingFace（勾「国内镜像」重试）、磁盘空间不够、公司网络拦截。</span>`;
-    if (asrTimer) { clearInterval(asrTimer); asrTimer = null; }
-    return;
-  }
-  if (p.done) {
-    txt.innerHTML = `<span style="color:var(--ok)">✓ 下载完成（${p.downloaded_mb} MB）。把引擎设为「本地模型」并保存即可使用。</span>`;
-    if (asrTimer) { clearInterval(asrTimer); asrTimer = null; }
-    loadAsrModels();
-    return;
-  }
-  const remain = p.remain_sec > 0
-    ? `，约剩 ${p.remain_sec >= 60 ? Math.round(p.remain_sec / 60) + " 分钟" : p.remain_sec + " 秒"}` : "";
-  txt.innerHTML = `正在下载 <b>${esc(p.size)}</b>：${p.downloaded_mb} / ${p.expected_mb} MB`
-    + `（${p.percent}%）${remain}<br><span class="dim">源：${esc(p.endpoint)} · 下载期间可以继续用其他功能</span>`;
-}
-
-
-
 // ================================================================ 启动
 
 (async function init() {
   await loadHealth();
   await loadChats();
   await loadSettings();
-  await loadDevices();
   loadSelfCheck();
-  connectSSE();
   setInterval(loadHealth, 30000);
 
   // ?view=settings 这样的深链接，可以直接跳到某一页（也方便自动化截图）

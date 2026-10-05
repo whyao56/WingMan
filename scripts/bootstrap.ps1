@@ -54,7 +54,6 @@ $script:DataDir     = Join-Path $script:BackendDir 'data'
 $script:VenvDir     = Join-Path $script:BackendDir '.venv'               # D2
 $script:VenvPython  = Join-Path $script:VenvDir 'Scripts\python.exe'     # D2
 $script:LockFile    = Join-Path $script:BackendDir 'requirements.lock.txt'
-$script:AsrFile     = Join-Path $script:BackendDir 'requirements-asr.txt'
 $script:StampFile   = Join-Path $script:VenvDir '.wingman-deps.json'
 $script:InstallLog  = Join-Path $script:VenvDir 'wingman-last-install.log'
 $script:AppTarget   = 'app.main:app'
@@ -279,7 +278,6 @@ function Show-Help {
     Say (Resolve-Text '  --port N         指定端口（1024-65535），例如 --port 8788' '  --port N         use port N (1024-65535)')
     Say (Resolve-Text '  --setup-only     只做安装与自检，不启动服务，退出码 0' '  --setup-only     install and verify only, do not start')
     Say (Resolve-Text '  --doctor         只做体检：不改配置、不建库、不启动服务（仅生成 __pycache__ 缓存）' '  --doctor         health check only (no config/db/service; leaves __pycache__)')
-    Say (Resolve-Text '  --with-asr       额外装语音（ASR）可选依赖；失败不影响主服务' '  --with-asr       also install optional ASR deps; failure is non-fatal')
     Say (Resolve-Text '  --no-browser     启动后不自动打开浏览器' '  --no-browser     do not open the browser')
     Say (Resolve-Text '  --help           显示这份帮助' '  --help           show this help')
     Say ''
@@ -325,7 +323,7 @@ function Read-WingmanArgs {
     }
 
     $o = @{
-        Help = $false; WithAsr = $false; SetupOnly = $false; Doctor = $false; NoBrowser = $false
+        Help = $false; SetupOnly = $false; Doctor = $false; NoBrowser = $false
         PortGiven = $false; PortRaw = ''; Unknown = @(); MissingPortValue = $false
     }
 
@@ -333,7 +331,6 @@ function Read-WingmanArgs {
     while ($i -lt $tokens.Count) {
         $tok = $tokens[$i]
         if ($tok -in @('--help', '-h', '-?', '/?')) { $o.Help = $true; $i++ }
-        elseif ($tok -eq '--with-asr') { $o.WithAsr = $true; $i++ }
         elseif ($tok -eq '--setup-only') { $o.SetupOnly = $true; $i++ }
         elseif ($tok -eq '--doctor') { $o.Doctor = $true; $i++ }
         elseif ($tok -eq '--no-browser') { $o.NoBrowser = $true; $i++ }
@@ -352,7 +349,7 @@ function Resolve-ArgumentErrors {
     if ($script:Opt.Unknown.Count -gt 0) {
         $bad = ($script:Opt.Unknown -join ' ')
         SayErr ("{0} {1}" -f $script:Sym.Bad, (Resolve-Text ("无法识别的参数：$bad") ("Unknown argument(s): $bad")))
-        Say (Resolve-Text '      支持的参数：--with-asr  --port N  --setup-only  --doctor  --no-browser  --help' '      Supported: --with-asr  --port N  --setup-only  --doctor  --no-browser  --help')
+        Say (Resolve-Text '      支持的参数：--port N  --setup-only  --doctor  --no-browser  --help' '      Supported: --port N  --setup-only  --doctor  --no-browser  --help')
         SayDim (Resolve-Text '      查看完整说明：wingman.cmd --help' '      Full help: wingman.cmd --help')
         Say ''
         Exit-Now $script:ExitPreflight $true
@@ -972,11 +969,8 @@ function Show-DependencyProblems {
 }
 
 function Install-Dependencies {
-    param([bool]$NeedAsr)
     $lockHash = Get-FileSha256 -Path $script:LockFile
-    $asrHash = ''
-    if ($NeedAsr -and (Test-Path -LiteralPath $script:AsrFile -PathType Leaf)) { $asrHash = Get-FileSha256 -Path $script:AsrFile }
-    $fingerprint = Get-TextSha256 ("$lockHash|$($script:Python.Version)|$($script:VenvPython)|$asrHash")
+    $fingerprint = Get-TextSha256 ("$lockHash|$($script:Python.Version)|$($script:VenvPython)")
 
     $stamp = $null
     if (Test-Path -LiteralPath $script:StampFile -PathType Leaf) {
@@ -1038,41 +1032,16 @@ function Install-Dependencies {
         }
     }
 
-    # ---- 可选：语音（ASR）依赖，失败不影响主服务 ----
-    $asrOk = $false
-    if ($stamp -and $stamp.asr -and $stamp.asr.fingerprint -eq $asrHash -and $stamp.asr.ok) { $asrOk = $true }
-    if ($NeedAsr) {
-        if ($asrOk) {
-            SayOk ("{0} {1}" -f $script:Sym.Ok, (Resolve-Text '语音依赖已安装，跳过' 'ASR deps already installed, skipping'))
-        }
-        else {
-            Say (Resolve-Text '      安装可选语音（ASR）依赖（失败不影响主服务）' '      Installing optional ASR deps (failure is non-fatal)')
-            $pipAsr = Invoke-PipInstall -Requirements @($script:AsrFile) -LogPath (Join-Path $script:VenvDir 'wingman-last-asr-install.log')
-            if ($pipAsr.ExitCode -ne 0) {
-                SayWarn ("{0} {1}" -f $script:Sym.Warn, (Resolve-Text '语音依赖安装失败，已跳过；主服务不受影响' 'ASR deps failed to install, skipped; the main service is unaffected'))
-                $tail = @($pipAsr.Lines)
-                if ($tail.Count -gt 12) { $tail = $tail[($tail.Count - 12)..($tail.Count - 1)] }
-                foreach ($line in $tail) { Emit ('      | ' + $line) 'DarkGray' }
-                SayDim (Resolve-Text '      需要语音时：装好网络/代理后重新执行 wingman.cmd --with-asr' '      To use ASR later: rerun wingman.cmd --with-asr')
-            }
-            else {
-                $asrOk = $true
-            }
-        }
-    }
-
     $pinsJsonNow = (Get-LockPins -Path $script:LockFile)
     $stampObject = [ordered]@{
         schema          = 1
         fingerprint     = $fingerprint
         lock_sha256     = $lockHash
-        asr_sha256      = $asrHash
         python          = $script:Python.Version
         python_label    = $script:Python.Label
         venv_python     = $script:VenvPython
         installed_at    = (Get-Date).ToString('yyyy-MM-ddTHH:mm:sszzz')
         packages        = $pinsJsonNow
-        asr             = @{ wanted = $NeedAsr; ok = $asrOk; fingerprint = $asrHash }
     }
     try {
         $json = $stampObject | ConvertTo-Json -Depth 6
@@ -1082,7 +1051,7 @@ function Install-Dependencies {
         SayWarn ("{0} {1}" -f $script:Sym.Warn, (Resolve-Text '无法写入依赖指纹文件（不影响启动）' 'Could not write the dependency stamp (non-fatal)'))
     }
 
-    return @{ AsrOk = $asrOk }
+    return @{}
 }
 
 function Assert-DataDir {
@@ -1290,12 +1259,11 @@ function Wait-ServerExit {
 # ============================================================ 6. 三条主流程
 
 function Invoke-SetupOnly {
-    param([bool]$NeedAsr)
     Say ''
     SayInfo ("{0} 2/3 {1}" -f $script:Sym.Info, (Resolve-Text '准备依赖（--setup-only 不启动服务）' 'preparing dependencies (--setup-only does not start)'))
     Initialize-Venv
     Assert-DataDir
-    $out = Install-Dependencies -NeedAsr $NeedAsr
+    $null = Install-Dependencies
     $pins = Get-LockPins -Path $script:LockFile
 
     Say ''
@@ -1306,11 +1274,6 @@ function Invoke-SetupOnly {
     SayField (Resolve-Text 'Python' 'python') (Resolve-Text ("$($script:VenvPythonVersion)（$($script:Python.Label)）") ("$($script:VenvPythonVersion) ($($script:Python.Label))")) 'python' 'DarkGray'
     SayField (Resolve-Text '已锁定' 'pinned') (Resolve-Text ("$($pins.Count) 个包（与 requirements.lock.txt 完全一致）") ("$($pins.Count) packages (exactly requirements.lock.txt)")) 'pinned' 'DarkGray'
     SayField (Resolve-Text '数据目录' 'data dir') $script:DataDir 'data dir' 'DarkGray'
-    if ($NeedAsr) {
-        $asrText = (Resolve-Text '已安装' 'installed')
-        if (-not $out.AsrOk) { $asrText = (Resolve-Text '安装失败，已跳过（不影响主服务）' 'failed, skipped (non-fatal)') }
-        SayField (Resolve-Text '语音依赖' 'asr') $asrText 'asr' 'DarkGray'
-    }
     Say $script:Sym.Thin '' 'Green'
     Say (Resolve-Text '下一步：运行 wingman.cmd 启动服务（默认 http://127.0.0.1:8787/）' 'Next: run wingman.cmd to start the service')
     Say $script:Sym.Line '' 'Green'
@@ -1318,14 +1281,13 @@ function Invoke-SetupOnly {
 }
 
 function Invoke-Run {
-    param([bool]$NeedAsr)
     Assert-PortFree -Port $script:Port
 
     Say ''
     SayInfo ("{0} 2/3 {1}" -f $script:Sym.Info, (Resolve-Text '准备依赖' 'preparing dependencies'))
     Initialize-Venv
     Assert-DataDir
-    $null = Install-Dependencies -NeedAsr $NeedAsr
+    $null = Install-Dependencies
 
     Say ''
     SayInfo ("{0} 3/3 {1}" -f $script:Sym.Info, (Resolve-Text '启动服务并自证健康' 'starting the service and waiting for health'))
@@ -1567,10 +1529,10 @@ try {
     }
 
     if ($script:Opt.SetupOnly) {
-        Invoke-SetupOnly -NeedAsr $script:Opt.WithAsr
+        Invoke-SetupOnly
     }
     else {
-        Invoke-Run -NeedAsr $script:Opt.WithAsr
+        Invoke-Run
     }
 }
 catch {

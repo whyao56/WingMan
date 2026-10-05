@@ -32,8 +32,7 @@ def _trust_env_for(url: str) -> bool:
     httpx 默认 trust_env=True 会继承 HTTP_PROXY 与 Windows 注册表里的系统代理；
     本机代理软件开全局模式时，发往 127.0.0.1 的向量化请求会被代理接管 ——
     表现为「embedding 服务返回 502」而不是连接被拒。非回环保持 True。
-    （与 llm/openai_compat.py、llm/ollama.py、asr/cloud.py 里的同名实现保持一致，
-      测试 test_loopback_proxy.py 会断言四份行为相同。）
+    （与 llm/openai_compat.py、llm/ollama.py 里的同名实现保持一致。）
     """
     raw = (url or "").strip().lower()
     if "://" in raw:

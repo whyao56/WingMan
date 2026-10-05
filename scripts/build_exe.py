@@ -2,17 +2,14 @@
 
 用法（在仓库根目录）：
 
-    python scripts/build_exe.py              # 标准包（云 ASR 可用，不带本地语音模型）
-    python scripts/build_exe.py --with-asr   # 完整包（额外带上 faster-whisper，体积 +300MB）
-    python scripts/build_exe.py --zip        # 打包完顺手压成 zip 方便分发
+    python scripts/build_exe.py          # 出包
+    python scripts/build_exe.py --zip    # 打包完顺手压成 zip 方便分发
 
 产物：``dist/WingMan/WingMan.exe`` —— 整个 ``dist/WingMan`` 目录就是绿色免安装版，
 拷到任何 Windows 机器双击即可（对方不需要装 Python）。
 
-为什么默认不带 ASR：
-    faster-whisper 会拖进 ctranslate2 / onnxruntime / PyAV，还会在首次使用时
-    下载 150–500MB 的模型权重。默认带上的话，一个「聊天助手」安装包会变成
-    400MB+，而多数人第一次只跑文字链路。所以做成可选，需要的人自己开开关。
+只有一种包了：语音能力撤下之后，原先区分「标准版 / 完整版」的唯一差异
+（是否内置 faster-whisper）已经不存在 —— 那个 237MB 的完整版也随之消失。
 """
 
 from __future__ import annotations
@@ -55,8 +52,6 @@ def dir_size_mb(path: Path) -> float:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="把 WingMan 打包成 Windows 桌面程序")
-    ap.add_argument("--with-asr", action="store_true",
-                    help="把本地语音识别（faster-whisper）也打进包，体积会大幅增加")
     ap.add_argument("--no-webview", action="store_true",
                     help="不带原生窗口，改为自动打开浏览器（体积小约 40MB）")
     ap.add_argument("--zip", action="store_true", help="构建完压缩成 zip")
@@ -94,15 +89,10 @@ def main() -> int:
              str(BACKEND / "requirements-desktop.txt")])
 
     env = dict(os.environ)
-    env["WINGMAN_WITH_ASR"] = "1" if args.with_asr else "0"
     env["WINGMAN_WITH_WEBVIEW"] = "0" if args.no_webview else "1"
 
-    flavor = "完整包（含本地语音）" if args.with_asr else "标准包"
-    # 两种风味的 hiddenimports 差别很大（完整包要多收 ctranslate2 / onnxruntime 等），
-    # 共用同一个 workpath 时 PyInstaller 的增量分析缓存容易「串味」，
-    # 出现「这次明明开了 ASR，包里却没有」这种难查的问题。分开最省心。
-    workpath = WORK / ("full" if args.with_asr else "lite")
-    log(f"开始构建：{flavor}")
+    workpath = WORK / "lite"
+    log("开始构建：WingMan 桌面版")
     t0 = time.time()
 
     run([
@@ -129,8 +119,7 @@ def main() -> int:
 
     if args.zip:
         stamp = time.strftime("%Y%m%d")
-        tag = "full" if args.with_asr else "lite"
-        zp = DIST / f"{APP_NAME}-{tag}-{stamp}.zip"
+        zp = DIST / f"{APP_NAME}-{stamp}.zip"
         log(f"压缩到 {zp.name} …")
         with zipfile.ZipFile(zp, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
             for p in app_dir.rglob("*"):

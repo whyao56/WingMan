@@ -61,15 +61,14 @@ curl.exe -s http://127.0.0.1:8787/api/health
 ```json
 {"version":"0.2.1","db":"...\\backend\\data\\wingman.db","counts":{"messages":62,"facts":6,"chats":1},
  "providers":[{"kind":"llm","name":"openai_compat","available":true,"note":"https://api.deepseek.com/v1 · deepseek-flash"},
-              {"kind":"embedder","name":"hash","available":true,"note":"..."},
-              {"kind":"asr","name":"mock","available":true,"note":"..."}]}
+              {"kind":"embedder","name":"hash","available":true,"note":"..."}]}
 ```
 
 `llm` 的 `name` 是 `openai_compat`、`available` 为 `true` —— 这就证明**运行的不是 Mock，而且配置是完整的**。
 （`available` 说明配置齐了；要证明「真的连得上」，还要看上面第 ③ 条那个 ✓。）
 
 > `/api/health` 的字段是**刻意保持最小的**（只有 version / db / counts / providers）。
-> 想看配置来源、完整路径、可选依赖与 DB 统计，用 **`GET /api/health/details`**，见 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) 第 10 节。
+> 想看配置来源、完整路径、可选依赖与 DB 统计，用 **`GET /api/health/details`**，见 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) 第 9.3 节。
 
 **⑤ 启动窗口的日志**（每次启动都会打印）
 每个组件一行，前面的 `OK ` / `!! ` 就是可用性；如果还是 Mock，这里会有一句明确的警告：
@@ -132,7 +131,7 @@ curl.exe -s http://127.0.0.1:8787/api/health
 | 请求过于频繁或额度用尽（429） | 限速或余额不足 |
 | 服务端错误（500）/ 网关错误（502）/ 服务不可用（503） | 服务商那边的问题，稍后重试；中转服务不稳定很常见 |
 | 请求超时（120s） | 网络慢或服务商卡住；可换更小的模型试试 |
-| 网络错误：… / 网关错误（502）连本机服务也报 | 本机网络/代理问题，分两种场景：装依赖走代理看 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) 第 3 节；**调用模型时请求被代理劫持（包括系统代理截走发往 127.0.0.1 的请求）看第 12 节** |
+| 网络错误：… / 网关错误（502）连本机服务也报 | 本机网络/代理问题，分两种场景：装依赖走代理看 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) 第 3 节；**调用模型时请求被代理劫持（包括系统代理截走发往 127.0.0.1 的请求）看 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) 第 11 节** |
 | 响应不是 JSON / 响应里没有 choices | 该地址不是 OpenAI 兼容接口，或返回了网页（常见于把网页地址当 API 填） |
 
 ---
@@ -252,7 +251,7 @@ WingMan 离线 OpenAI 兼容 stub 已就绪（不联网，不需要真实密钥�
 把「对方那句话之前」的状态喂给引擎，看它给的选项里**有没有你当时真选的那条**。
 **命中率超过 50%，说明它真的在理解，而不是在说场面话。**
 
-低于这个数，先别折腾界面和语音 —— 去调 Prompt（ROADMAP 阶段 1.4）。
+低于这个数，先别折腾界面 —— 去调 Prompt（ROADMAP 阶段 1.4）。
 
 ---
 
@@ -281,27 +280,36 @@ WingMan 离线 OpenAI 兼容 stub 已就绪（不联网，不需要真实密钥�
 注意：想让向量化上云，只有一个入口 —— 显式配置 `EMBED_BASE_URL`（或控制台「向量模型 → Base URL」）。
 （`auto` 复用主模型端点只发生在 **OpenAI 兼容云服务**这种 Provider 上：`backend/app/memory/embedder.py` 的工厂里
 `llm_provider` 必须是 `openai_compat` / `openai` / `cloud` / `api` 之一；`ollama` 不在其中。）
-想让数据尽量不出本机：Provider 选 `Ollama`、「向量模型」选 `hash`（或留 `auto` 且不填 `EMBED_BASE_URL`）、
-「语音识别」选 `mock` 或本地 whisper。**只要有一处指向云端，那部分数据就会上传。**
+想让数据尽量不出本机：Provider 选 `Ollama`、「向量模型」选 `hash`（或留 `auto` 且不填 `EMBED_BASE_URL`）。
+**只要有一处指向云端，那部分数据就会上传。**
 
 另外三条边界（引自 COMPLIANCE，别忽略）：
 
 - 只能处理**你自己参与过**的对话；
-- 通话录音要符合你所在地的法律，只用于个人备忘；
+- 通话录音能力目前没有提供（改为「规划中」）；将来若提供，录音须符合你所在地的法律，只用于个人备忘；
 - **本项目不做自动回复**：只出建议、一键填进输入框，发送永远由你本人确认。
 
 ---
 
 ## 8. 语音（ASR）要不要接
 
-语音是**可选**能力，不接不影响前面的全部流程：
+**不用接，当前版本也没有得接。** 语音识别 / 通话实时转写已从产品中整体撤下，改为「规划中」：
 
-- 默认 `ASR = mock`（占位文本），「通话」页也能用「手动注入一句话」的方式演示实时字幕。
-- 想真转写：先 `wingman.cmd --with-asr` 装依赖，再在「设置 → 语音识别」里选 `本地 faster-whisper`（隐私最好）或 `云端 ASR`。
-- 「没有检测到音频设备」怎么办 → [TROUBLESHOOTING.md](TROUBLESHOOTING.md)。
+- `app/asr/` 模块、`/api/voice/*` 与 `/api/asr/*` 接口、`voice_log` 表、
+  `requirements-asr.txt`、`scripts/asr_bench.py` 都已删除；
+- 设置页的「语音识别」卡片、自检页的「语音链路实测」都已移除，
+  「通话」页现在只是一个「规划中」的说明页，**没有任何按钮**；
+- 因此控制台里找不到语音相关入口，也没有 `ASR_ENGINE` 这类配置。
 
-> 说明：语音采集与 ASR 的效果**本次发行没有做端到端验证**，需要你自己在设备上试。
-> 采集必须是你在「通话」页手动点「开始采集」才会启动。
+打包方面只剩一个 `WingMan-{version}-win64.zip`，不再有「标准版 / 完整版」之分，
+也没有 `--with-asr` 参数或 `WINGMAN_WITH_ASR` 环境变量。
+
+> 保留的 `scripts/bootstrap.ps1` 里的 `WithAsr` / `NeedAsr` 开关目前恒为 `false`，
+> `scripts/preflight.py` 里的 `OPTIONAL_MODULES` 是空元组 —— 它们只是为将来装可选依赖
+> 预留的同一条安装链路，不代表现在有语音功能。
+
+重做时已经想清楚的思路（双通道采集、本机转写、按话轮断句、落库与文字记录同构、开录前确认）
+记在 [ARCHITECTURE.md](ARCHITECTURE.md) 第 3.4 节；等它上线再回来看这一节怎么配。
 
 ---
 
@@ -318,6 +326,5 @@ WingMan 离线 OpenAI 兼容 stub 已就绪（不联网，不需要真实密钥�
 | Ollama 模型 | `OLLAMA_MODEL` | `qwen2.5:7b` | |
 | 向量模型模式 | `EMBEDDER` | `auto` | `auto` / `cloud` / `hash`。`auto`：有可用的 embedding 端点（显式填了 `EMBED_BASE_URL`，或 Provider 是 OpenAI 兼容云服务）就走云端，否则退化为本地 `hash` |
 | 向量模型 → Base URL | `EMBED_BASE_URL` | 空 | 想让 Ollama 场景的检索更准，就把它指向你的 embedding 服务（例：`http://127.0.0.1:1234/v1`）；留空时 `auto` 会退化为本地 `hash` |
-| 语音引擎 | `ASR_ENGINE` | `mock` | `mock` / `local` / `cloud` |
 
 （`.env` 是可选的：不建也能跑，所有配置都能在控制台里改。）

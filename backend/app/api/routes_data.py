@@ -237,10 +237,3 @@ async def build_profile(chat_id: str) -> ProfileBuildResult:
         return await profiler.build_profile(ctx, chat_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-
-@router.get("/chats/{chat_id}/voice")
-async def list_voice(chat_id: str, limit: int = 200) -> dict[str, Any]:
-    _require_chat(chat_id)
-    rows = await asyncio.to_thread(get_ctx().store.list_voice_segments, chat_id, limit)
-    return {"segments": rows, "count": len(rows)}

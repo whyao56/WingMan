@@ -318,31 +318,6 @@ def main() -> int:
           "分支概率已归一化", "概率没有归一化")
     check(bool(tree["disclaimer"]), "带免责声明", "缺少免责声明")
 
-    # ---------------------------------------------------- 7 语音注入
-    step("语音：手动注入一段转写")
-    ing = c.post(U("/api/voice/ingest"),
-                 json={"text": "喂你能听到吗", "channel": "peer", "chat_id": chat_id})
-    check(ing.status_code == 200, "注入成功，会通过 SSE 推送",
-          f"注入失败 HTTP {ing.status_code}")
-    segs = c.get(U(f"/api/chats/{chat_id}/voice")).json()
-    check(segs["count"] >= 1, f"语音记录已入库（{segs['count']} 条）", "语音记录没有入库")
-
-    # ---------------------------------------------------- 8 SSE
-    step("SSE 实时流")
-    got = False
-    try:
-        with c.stream("GET", U("/api/voice/stream"), timeout=6.0) as s:
-            for line in s.iter_lines():
-                if line.startswith("data:"):
-                    evt = json.loads(line[5:])
-                    ok(f"收到事件：{evt.get('type')}")
-                    got = True
-                    break
-    except Exception as exc:
-        bad(f"SSE 连接异常：{exc}")
-    if not got and FAIL == 0:
-        bad("SSE 没有推送任何事件")
-
     # ---------------------------------------------------- 结果
     print("\n" + "=" * 60)
     if FAIL == 0:

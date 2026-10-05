@@ -7,13 +7,13 @@
 
 本文件用两个本地假服务把这件事变成确定性实验：
 - `_FakeProxy`：对任何请求都回 **502 空体**（模拟「代理接了但转发不通」）；
-- `_FakeLoopbackService`：模拟本机 stub / Ollama / embedding / ASR 服务。
+- `_FakeLoopbackService`：模拟本机 stub / Ollama / embedding 服务。
 
 用例：
 1) 回环 base_url → 请求直连本机服务（不被代理截胡），且假代理收到 0 个请求；
 2) 非回环 base_url → 仍然走环境代理（502），证明没有误改 trust_env 语义；
 3) 回环 + 无人监听端口 → 报的是连接类错误，**不是** 502 网关错误（本缺陷的核心可观察点）；
-4) 四份 `_trust_env_for` 实现行为一致的漂移守卫。
+4) 三份 `_trust_env_for` 实现行为一致的漂移守卫。
 
 说明：这些用例只用本地 socket 与 provider 对象，不碰数据库（不涉及 backend/data/wingman.db）。
 """
@@ -29,8 +29,6 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-
-import numpy as np
 
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
@@ -77,7 +75,7 @@ class _FakeProxy(BaseHTTPRequestHandler):
 
 
 class _FakeLoopbackService(BaseHTTPRequestHandler):
-    """模拟本机 OpenAI 兼容 stub / Ollama / embedding / ASR 服务。"""
+    """模拟本机 OpenAI 兼容 stub / Ollama / embedding 服务。"""
 
     protocol_version = "HTTP/1.0"
     seen: list[str] = []
@@ -103,8 +101,6 @@ class _FakeLoopbackService(BaseHTTPRequestHandler):
             body = {"models": [{"name": "qwen2.5:7b"}]}
         elif path.endswith("/embeddings"):
             body = {"data": [{"index": 0, "embedding": [0.1, 0.2, 0.3, 0.4]}]}
-        elif path.endswith("/audio/transcriptions"):
-            body = {"text": "你好", "language": "zh"}
         else:
             body = {"error": f"unknown path {path}"}
         payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
@@ -173,8 +169,7 @@ def _free_port() -> int:
 
 
 def test_loopback_requests_bypass_env_proxy_and_reach_local_service() -> None:
-    """回环 base_url：四个 provider 都必须直连本机服务，假代理一个请求都收不到。"""
-    from app.asr.cloud import CloudASR
+    """回环 base_url：三个 provider 都必须直连本机服务，假代理一个请求都收不到。"""
     from app.llm.ollama import OllamaProvider
     from app.llm.openai_compat import OpenAICompatProvider
     from app.memory.embedder import CloudEmbedder
@@ -199,15 +194,10 @@ def test_loopback_requests_bypass_env_proxy_and_reach_local_service() -> None:
             vector = asyncio.run(embedder.embed_one("喜欢猫"))
             assert vector.shape[0] == 4, vector.shape
 
-            asr = CloudASR(base_url=f"{service.url}/v1", api_key="k")
-            pcm = (np.ones(16000, dtype=np.float32) * 0.5)
-            result = asyncio.run(asr.transcribe(pcm, sample_rate=16000))
-            assert result.text == "你好", result
-
         assert _FakeProxy.seen == [], f"回环请求被代理截胡了：{_FakeProxy.seen}"
         paths = _FakeLoopbackService.seen
         for expected in ("/v1/chat/completions", "/v1/models", "/api/chat", "/api/tags",
-                         "/v1/embeddings", "/v1/audio/transcriptions"):
+                         "/v1/embeddings"):
             assert expected in paths, f"本机服务没收到 {expected}：{paths}"
     finally:
         service.stop()
@@ -263,9 +253,8 @@ def test_dead_loopback_port_reports_connection_error_not_gateway_502() -> None:
         proxy.stop()
 
 
-def test_trust_env_helper_agrees_across_all_four_modules() -> None:
-    """四份实现必须行为一致（写范围不允许新增共用模块，所以用这个用例防漂移）。"""
-    from app.asr.cloud import _trust_env_for as asr_trust
+def test_trust_env_helper_agrees_across_all_three_modules() -> None:
+    """三份实现必须行为一致（写范围不允许新增共用模块，所以用这个用例防漂移）。"""
     from app.llm.ollama import _trust_env_for as ollama_trust
     from app.llm.openai_compat import _trust_env_for as openai_trust
     from app.memory.embedder import _trust_env_for as embed_trust
@@ -274,7 +263,6 @@ def test_trust_env_helper_agrees_across_all_four_modules() -> None:
         "openai_compat": openai_trust,
         "ollama": ollama_trust,
         "embedder": embed_trust,
-        "asr_cloud": asr_trust,
     }
     loopback = [
         "http://127.0.0.1:8787/v1",
@@ -311,7 +299,7 @@ def _collect_tests() -> list:
 
 def main() -> int:
     print("=" * 68, flush=True)
-    print("回环代理回归：本机 stub / Ollama / embedding / ASR 不得被系统代理劫持", flush=True)
+    print("回环代理回归：本机 stub / Ollama / embedding 不得被系统代理劫持", flush=True)
     print("=" * 68, flush=True)
     failures: list[tuple[str, str]] = []
     skipped = 0

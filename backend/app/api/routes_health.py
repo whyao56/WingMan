@@ -54,16 +54,9 @@ WATCH_KEYS: tuple[str, ...] = (
     "embed_base_url",
     "embed_api_key",
     "embed_model",
-    "asr_engine",
-    "asr_base_url",
-    "asr_api_key",
-    "asr_model",
 )
 
-OPTIONAL_DEPS: tuple[tuple[str, str, str], ...] = (
-    ("soundcard", "soundcard", "通话 / 系统声音采集（可选）"),
-    ("faster_whisper", "faster-whisper", "本地语音转写（可选）"),
-)
+OPTIONAL_DEPS: tuple[tuple[str, str, str], ...] = ()
 
 _SECRET_NAME_HINTS = ("api_key", "apikey", "secret", "token", "password", "passwd")
 

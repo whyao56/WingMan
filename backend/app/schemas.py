@@ -229,42 +229,11 @@ class SimTree(BaseModel):
     )
 
 
-# ============================================================= 语音
-
-
-class AudioDevice(BaseModel):
-    id: str
-    name: str
-    kind: str        # loopback | microphone
-    is_default: bool = False
-
-
-class TranscriptSegment(BaseModel):
-    seq: int
-    channel: str                 # peer | me
-    text: str
-    start_ms: int
-    end_ms: int
-    ts: str
-    duration_ms: int = 0
-    rms: float = 0.0
-    final: bool = True
-
-
-class VoiceStatus(BaseModel):
-    running: bool
-    channels: list[str] = Field(default_factory=list)
-    engine: str = ""
-    started_at: str | None = None
-    segments: int = 0
-    errors: list[str] = Field(default_factory=list)
-
-
 # ============================================================= 设置
 
 
 class ProviderInfo(BaseModel):
-    kind: str                    # llm | embedder | asr
+    kind: str                    # llm | embedder
     name: str
     available: bool = True
     note: str = ""

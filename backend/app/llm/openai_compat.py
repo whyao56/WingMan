@@ -29,8 +29,8 @@ def _trust_env_for(url: str) -> bool:
     （scripts/e2e_check.py 早就用 trust_env=False 绕开同一个坑）。
     非回环地址保持 True：用户可能确实要靠代理访问云端 API。
 
-    同一份判断在 ollama.py / memory/embedder.py / asr/cloud.py 各有一份（本任务的写范围
-    不允许新增共用模块）；backend/tests/test_loopback_proxy.py 有用例专门断言四份行为一致。
+    同一份判断在 ollama.py / memory/embedder.py 各有一份（本任务的写范围
+    不允许新增共用模块）；backend/tests/test_loopback_proxy.py 有用例专门断言三份行为一致。
     """
     raw = (url or "").strip().lower()
     if "://" in raw:

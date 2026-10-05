@@ -7,7 +7,7 @@
 #    安装依赖 → 检查端口 → 启动服务（默认不开 --reload）→ 轮询 /api/health
 #    → 打印访问地址/数据目录 → 打开浏览器（--no-browser 关闭）
 #
-#  用法：scripts/run_dev.sh [--with-asr] [--port N] [--setup-only]
+#  用法：scripts/run_dev.sh [--port N] [--setup-only]
 #                           [--doctor] [--no-browser] [--help]
 #
 #  退出码：0 成功 / 2 前置自检未通过（零副作用）/ 3 依赖准备失败 / 1 其他错误
@@ -26,7 +26,6 @@ BACKEND="$ROOT/backend"
 FRONTEND="$ROOT/frontend"
 VENV="$BACKEND/.venv"
 LOCK="$BACKEND/requirements.lock.txt"
-ASR_REQ="$BACKEND/requirements-asr.txt"
 DATA="$BACKEND/data"
 STAMP="$VENV/.wingman-deps.json"
 
@@ -34,7 +33,7 @@ MIN_MINOR=11
 MAX_TESTED_MINOR=13
 HEALTH_TIMEOUT=90
 
-WITH_ASR=0; SETUP_ONLY=0; DOCTOR=0; NO_BROWSER=0
+SETUP_ONLY=0; DOCTOR=0; NO_BROWSER=0
 PORT="${PORT:-8787}"; PORT_FROM_ENV=0
 
 ASCII_MODE=0
@@ -66,7 +65,6 @@ usage() {
   say "  --port N         指定端口（1024-65535）"
   say "  --setup-only     只做安装与自检，不启动服务"
   say "  --doctor         只做体检，不创建、不安装、不启动"
-  say "  --with-asr       额外安装语音（ASR）可选依赖；失败不影响主服务"
   say "  --no-browser     启动后不自动打开浏览器"
   say "  --help           显示这份帮助"
   say ""
@@ -81,7 +79,6 @@ die_deps()      { say ""; say "退出码 3 = 依赖准备失败"; exit 3; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --with-asr)    WITH_ASR=1; shift ;;
     --setup-only)  SETUP_ONLY=1; shift ;;
     --doctor)      DOCTOR=1; shift ;;
     --no-browser)  NO_BROWSER=1; shift ;;
@@ -189,14 +186,10 @@ PY
 }
 
 lock_fingerprint() {  # $1 = venv 解释器
-  "$1" - "$LOCK" "$ASR_REQ" "$WITH_ASR" <<'PY'
-import hashlib, sys, os
+  "$1" - "$LOCK" <<'PY'
+import hashlib, sys
 parts = []
-for path in (sys.argv[1], sys.argv[2]):
-    if os.path.isfile(path) and sys.argv[3] == "1":
-        parts.append(hashlib.sha256(open(path, "rb").read()).hexdigest())
-    elif path == sys.argv[1]:
-        parts.append(hashlib.sha256(open(path, "rb").read()).hexdigest())
+parts.append(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())
 parts.append(sys.version.split()[0])
 print(hashlib.sha256("|".join(parts).encode()).hexdigest())
 PY
@@ -348,13 +341,6 @@ else
   if ! deps_check "$vpy"; then
     bad "依赖安装完成但校验不通过 → 删除 backend/.venv 后重试"
     die_deps
-  fi
-fi
-
-if [ "$WITH_ASR" = "1" ]; then
-  say "      安装可选语音（ASR）依赖（失败不影响主服务）"
-  if ! "$vpy" -m pip install --disable-pip-version-check --no-input --progress-bar off -r "$ASR_REQ"; then
-    warn "语音依赖安装失败，已跳过"
   fi
 fi
 

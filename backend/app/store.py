@@ -109,17 +109,6 @@ CREATE TABLE IF NOT EXISTS kv (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
-
-CREATE TABLE IF NOT EXISTS voice_log (
-    id        INTEGER PRIMARY KEY AUTOINCREMENT,
-    chat_id   TEXT,
-    channel   TEXT NOT NULL,
-    ts        TEXT NOT NULL,
-    text      TEXT NOT NULL,
-    start_ms  INTEGER DEFAULT 0,
-    end_ms    INTEGER DEFAULT 0,
-    duration_ms INTEGER DEFAULT 0
-);
 """
 
 
@@ -593,27 +582,6 @@ class Store:
         merged.updated_at = _now()
         return merged
 
-    # ------------------------------------------------------------ voice log
-
-    def add_voice_segment(self, chat_id: str | None, channel: str, ts: str, text: str,
-                          start_ms: int, end_ms: int, duration_ms: int) -> None:
-        with self.conn() as c:
-            c.execute(
-                "INSERT INTO voice_log (chat_id, channel, ts, text, start_ms, end_ms, duration_ms) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (chat_id, channel, ts, text, start_ms, end_ms, duration_ms),
-            )
-
-    def list_voice_segments(self, chat_id: str, limit: int = 200) -> list[dict[str, Any]]:
-        with self.conn() as c:
-            rows = c.execute(
-                "SELECT * FROM voice_log WHERE chat_id = ? ORDER BY id DESC LIMIT ?",
-                (chat_id, limit),
-            ).fetchall()
-        out = [dict(r) for r in rows]
-        out.reverse()
-        return out
-
     # ------------------------------------------------------------ kv
 
     def kv_get(self, key: str, default: str | None = None) -> str | None:
@@ -651,7 +619,6 @@ class Store:
                 "facts": one("SELECT COUNT(*) FROM facts"),
                 "summaries": one("SELECT COUNT(*) FROM summaries"),
                 "personas": one("SELECT COUNT(*) FROM personas"),
-                "voice_segments": one("SELECT COUNT(*) FROM voice_log"),
             }
 
     def export_chat_json(self, chat_id: str) -> dict[str, Any]:

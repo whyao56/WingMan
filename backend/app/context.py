@@ -42,7 +42,6 @@ class AppContext:
 
         self._llm: Any = None
         self._embedder: Any = None
-        self._asr: Any = None
 
     # -------------------------------------------------------- 配置读取
 
@@ -99,7 +98,6 @@ class AppContext:
     def invalidate(self) -> None:
         self._llm = None
         self._embedder = None
-        self._asr = None
 
     @property
     def llm(self):
@@ -119,18 +117,9 @@ class AppContext:
             log.info("Embedder ready: %s (dim=%s)", self._embedder.name, self._embedder.dim)
         return self._embedder
 
-    @property
-    def asr(self):
-        if self._asr is None:
-            from .asr.factory import build_asr
-
-            self._asr = build_asr(self)
-            log.info("ASR engine ready: %s", self._asr.name)
-        return self._asr
-
     def provider_summary(self) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
-        for kind, obj in (("llm", self.llm), ("embedder", self.embedder), ("asr", self.asr)):
+        for kind, obj in (("llm", self.llm), ("embedder", self.embedder)):
             out.append({
                 "kind": kind,
                 "name": getattr(obj, "name", "unknown"),

@@ -28,8 +28,8 @@ def _trust_env_for(url: str) -> bool:
     httpx 默认 trust_env=True 会继承 HTTP_PROXY 环境变量与 Windows 注册表里的系统代理；
     本机代理软件开全局模式时，发往 127.0.0.1:11434 的请求会被代理接管 —— Ollama 明明在跑，
     应用却报「网关错误（502）/连不上」。非回环地址保持 True，不影响用户走代理访问云端。
-    （与 llm/openai_compat.py、memory/embedder.py、asr/cloud.py 里的同名实现保持一致，
-      测试 test_loopback_proxy.py 会断言四份行为相同。）
+    （与 llm/openai_compat.py、memory/embedder.py 里的同名实现保持一致，
+      测试 test_loopback_proxy.py 会断言三份行为相同。）
     """
     raw = (url or "").strip().lower()
     if "://" in raw:

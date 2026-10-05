@@ -164,19 +164,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--no-window", action="store_true", help="不开界面窗口，只起服务")
     p.add_argument("--browser", action="store_true", help="强制用浏览器而不是原生窗口")
     p.add_argument("--check", action="store_true", help="只做启动自检并打印，然后退出")
-    p.add_argument(
-        "--asr-test",
-        nargs="?",
-        const="",
-        default=None,
-        metavar="WAV",
-        help="语音链路自检：不传文件就从麦克风录 5 秒，传 WAV 就转写该文件。"
-             "用来确认「麦克风能不能录到 + 模型能不能转写」",
-    )
-    p.add_argument("--seconds", type=float, default=5.0,
-                   help="配合 --asr-test 使用：录多久（默认 5 秒）")
-    p.add_argument("--source", default="microphone", choices=("microphone", "loopback"),
-                   help="配合 --asr-test 使用：麦克风（听自己）还是系统回环（听对方）")
     return p.parse_args(argv)
 
 
@@ -200,9 +187,6 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.check:
             return _run_check()
-
-        if args.asr_test is not None:
-            return _run_asr_test(args.asr_test, args.seconds, args.source)
 
         wanted = args.port or cfg.port
         host = args.host or cfg.host
@@ -266,157 +250,6 @@ def main(argv: list[str] | None = None) -> int:
         _show_error("WingMan 启动出错", f"{type(exc).__name__}: {exc}")
         log.exception("启动失败")
         return 1
-
-
-def _read_wav_mono16k(path) -> tuple["object", int]:
-    """读 WAV → (int16 数组, 采样率)。顺手重采样到 16k，Whisper 只认这个。"""
-    import wave
-
-    import numpy as np
-
-    with wave.open(str(path), "rb") as w:
-        sr = w.getframerate()
-        ch = w.getnchannels()
-        raw = w.readframes(w.getnframes())
-    arr = np.frombuffer(raw, dtype=np.int16)
-    if ch > 1:
-        arr = arr.reshape(-1, ch).mean(axis=1).astype(np.int16)
-    if sr != 16000 and len(arr):
-        # 线性插值够用了；这里只是自检，不值得拉进 scipy
-        n = int(round(len(arr) * 16000 / sr))
-        src = np.linspace(0.0, 1.0, num=len(arr), endpoint=False)
-        dst = np.linspace(0.0, 1.0, num=n, endpoint=False)
-        arr = np.interp(dst, src, arr.astype(np.float64)).astype(np.int16)
-        sr = 16000
-    return arr, sr
-
-
-def _record_audio(seconds: float, source: str) -> tuple["object", int]:
-    """录一段。返回 (int16 数组, 采样率)。
-
-    直接复用 ``capture.record_once`` —— 那边的设备选择逻辑（auto / 设备 id /
-    名称子串）和实时会话是同一条路径。这里自己再写一遍没有意义，
-    而且一旦两边不一致，「自检说没事、实际通话不行」这种问题就会冒出来。
-    """
-    from .asr.capture import record_once
-
-    pcm, sr, name = record_once(seconds=seconds, kind=source)
-    if sys.stdout is not None:
-        try:
-            print(f"[音频] 录制设备：{name}", flush=True)
-        except Exception:
-            pass
-    return pcm, sr
-
-
-def _run_asr_test(wav: str, seconds: float, source: str = "microphone") -> int:
-    """`--asr-test`：把「采集 → 转写」这条链路跑一遍，把结果给人看。
-
-    为什么值得单独做：语音出问题时，用户完全无法分辨是**录不到声音**
-    还是**模型识别不准** —— 这两件事的现象一模一样（「没反应」）。
-    这个命令把中间结果摊开：设备列表、电平、耗时、识别文本。
-
-    ``source`` 传 ``loopback`` 就能验证「听对方」这条路：
-    让系统放点声音（视频/音乐），同时跑
-    ``WingMan.exe --asr-test --source loopback``，看能不能识别出来。
-    """
-    import asyncio
-
-    from .asr.base import rms
-    from .context import get_ctx
-
-    lines: list[str] = []
-    ok = True
-
-    def say(line: str = "") -> None:
-        lines.append(line)
-        if sys.stdout is not None:
-            try:
-                print(line, flush=True)
-            except Exception:
-                pass
-
-    say(f"WingMan 语音自检  {time.strftime('%Y-%m-%d %H:%M:%S')}")
-    say("=" * 62)
-
-    # ---- 1. 设备
-    try:
-        from .asr.capture import list_audio_devices
-
-        devices = list_audio_devices()
-        loops = [d for d in devices if getattr(d, "kind", "") == "loopback"]
-        say(f"[设备] 找到 {len(devices)} 个（回环 {len(loops)} 个）")
-        for d in devices:
-            tag = "回环·听对方" if getattr(d, "kind", "") == "loopback" else "麦克风·听自己"
-            star = " *默认" if getattr(d, "is_default", False) else ""
-            say(f"       - {getattr(d, 'name', '?')}  [{tag}]{star}")
-        if not loops:
-            say("       ⚠ 没有回环设备 —— 「系统声音（对方）」采集会不可用。")
-            say("         Windows 上回环跟着「默认播放设备」走，先确认扬声器在响。")
-    except Exception as exc:  # noqa: BLE001
-        say(f"[设备] 枚举失败：{type(exc).__name__}: {exc}")
-        say("       回环/麦克风采集会不可用。源码运行请 pip install soundcard。")
-        ok = False
-
-    # ---- 2. 取音频
-    try:
-        if wav:
-            from pathlib import Path
-
-            p = Path(wav)
-            if not p.is_file():
-                raise RuntimeError(f"找不到文件：{p}")
-            pcm, sr = _read_wav_mono16k(p)
-            say(f"[音频] 读入 {p.name}：{len(pcm) / max(1, sr):.1f}s @ {sr}Hz")
-        else:
-            pcm, sr = _record_audio(seconds, source)
-            say(f"[音频] 录制 {len(pcm) / max(1, sr):.1f}s @ {sr}Hz"
-                f"（来源：{'系统声音' if source == 'loopback' else '麦克风'}）")
-        level = rms(pcm.astype("float32") / 32768.0)
-        say(f"[音频] 电平 RMS = {level:.4f}"
-            + ("   ← 几乎是静音！检查设备是否选对/被静音" if level < 0.005 else ""))
-        if level < 0.002:
-            ok = False
-    except Exception as exc:  # noqa: BLE001
-        say(f"[音频] 采集失败：{type(exc).__name__}: {exc}")
-        ok = False
-        pcm = None
-
-    # ---- 3. 转写
-    if pcm is not None:
-        try:
-            ctx = get_ctx()
-            eng = ctx.asr
-            say(f"[引擎] {getattr(eng, 'name', '?')} · {getattr(eng, 'note', '')}")
-            if getattr(eng, "name", "") == "mock":
-                say("       注意：这是 Mock 引擎，输出是假的，不代表识别能力。")
-                ok = False
-            t0 = time.time()
-            res = asyncio.run(eng.transcribe(pcm, sr, language="zh"))
-            cost = time.time() - t0
-            say(f"[结果] {cost:.1f}s  语种={res.language}  置信度={res.confidence:.3f}")
-            say(f"[文本] {res.text or '(空 —— 没听出内容)'}")
-            if res.meta.get("error"):
-                say(f"[报错] {res.meta['error']}")
-                ok = False
-            if not res.text.strip():
-                ok = False
-        except Exception as exc:  # noqa: BLE001
-            say(f"[转写] 失败：{type(exc).__name__}: {exc}")
-            ok = False
-
-    say("=" * 62)
-    say("结论：" + ("链路正常" if ok else "链路有问题，看上面带 → 的提示"))
-    report = "\n".join(lines)
-
-    try:
-        LOG_DIR.mkdir(parents=True, exist_ok=True)
-        (LOG_DIR / "asr_test.txt").write_text(report, encoding="utf-8")
-        say(f"（报告已写入 {LOG_DIR / 'asr_test.txt'}）")
-    except OSError:
-        pass
-
-    return 0 if ok else 1
 
 
 def _run_check() -> int:

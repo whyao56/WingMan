@@ -18,8 +18,8 @@
 版本号默认从 backend/app/__init__.py 里读 —— 这个脚本本身就是为「防止版本号漂移」
 而写的，自己的默认值再硬编码一个版本就自相矛盾了。要覆盖用 --version 0.2.1 --tag v0.2.1。
 
-前置条件：先跑过 `python scripts/build_exe.py` 和 `--with-asr`，并归位成
-dist/WingMan 与 dist/WingMan-full（见 docs/DESKTOP.md 的发布检查清单）。
+前置条件：先跑过 `python scripts/build_exe.py`，产物归位成 dist/WingMan
+（只发一个包，见 docs/DESKTOP.md 的发布检查清单）。
 
 凭据从 git 的凭据管理器读取（git credential fill），不落盘、不进环境变量。
 需要 token 具备 repo 权限。
@@ -41,9 +41,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 API = "https://api.github.com"
 UPLOAD = "https://uploads.github.com"
 
+# 只剩一个包了：语音能力撤下后，「标准版 / 完整版」曾经唯一的差异
+# （是否内置 faster-whisper）不复存在，那个 237MB 的包随之消失。
 PACKAGES = [
-    (os.path.join("dist", "WingMan"), "WingMan-{version}-win64", "标准版"),
-    (os.path.join("dist", "WingMan-full"), "WingMan-full-{version}-win64", "完整版"),
+    (os.path.join("dist", "WingMan"), "WingMan-{version}-win64", "桌面版"),
 ]
 
 # 写在压缩包里的使用说明。新手最容易踩的坑写在最前面。
@@ -59,18 +60,10 @@ NOTE = """WingMan · 聊天僚机 {version}
     它旁边的 _internal 文件夹是程序的一部分，少一个文件都起不来。
     要挪位置就整个文件夹一起挪。
 
-标准版（WingMan-{version}-win64）
-----------------------------------------
-这个包里没有语音识别引擎，需要自己填一个云端语音识别接口：
-    界面 → 设置 → 语音识别 → 选「云端 ASR」→ 填接口地址和密钥
-不知道填什么就先不用管语音，聊天记录分析和回复建议不受影响。
-
-完整版（WingMan-full-{version}-win64）
-----------------------------------------
-语音识别可以完全在本机跑，音频不出本机。
-第一次用要下载一次模型权重（约 75MB～500MB，取决于选的规格）：
-    界面 → 设置 → 语音识别 → 选「本地模型」→ 下载
-国内网络慢的话，下载选项里勾上「使用国内镜像」。
+关于语音识别
+------------
+这个版本暂不提供「通话实时转写」，程序里的「通话」页保留了设计思路。
+聊天记录采集、人物画像、回复建议这些功能不受影响，也不需要额外的语音依赖。
 
 数据存在哪
 ----------

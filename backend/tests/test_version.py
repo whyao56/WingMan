@@ -74,8 +74,15 @@ def test_release_notes_exist_for_current_version() -> None:
     path = os.path.join(REPO, "docs", "releases", f"v{v}.md")
     assert os.path.isfile(path), f"缺少发行说明 docs/releases/v{v}.md"
     body = _read(f"docs/releases/v{v}.md")
-    # 下载页最容易出问题的地方：两个包的区别没说清，用户下错。
-    assert "WingMan-full" in body, "发行说明里没提到完整版，用户不知道该不该下它"
+    # 下载页最容易出问题的地方：用户不知道该下哪个文件、下到的包对不对。
+    # 所以发行说明必须**点名包文件名**（而不是含糊说「下载最新版」）。
+    #
+    # 注：v0.2.x 曾分「标准版 / 完整版」两个包（区别只在是否内置本地语音识别），
+    # 语音撤下后只剩一个包，早先那条「必须提到 WingMan-full」的断言随之失效 ——
+    # 断言的对象应该跟着产品走，而不是把一个已消失的产物钉死。
+    assert f"WingMan-{v}" in body, (
+        f"发行说明里没有点名包文件（应形如 WingMan-{v}-win64.zip），用户不知道下哪个"
+    )
     assert "SHA256" in body or "sha256" in body, (
         "发行说明里没有校验和 —— 用户无法确认下载到的包没被替换"
     )

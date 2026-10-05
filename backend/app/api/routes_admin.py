@@ -116,9 +116,6 @@ async def test_provider(which: str = "llm") -> dict[str, Any]:
     if which == "llm":
         ok, msg = await ctx.llm.ping()
         return {"ok": ok, "name": ctx.llm.name, "message": msg}
-    if which == "asr":
-        eng = ctx.asr
-        return {"ok": eng.available, "name": eng.name, "message": eng.note}
     if which == "embedder":
         emb = ctx.embedder
         try:

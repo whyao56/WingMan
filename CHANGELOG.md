@@ -8,6 +8,43 @@
 下一个版本的计划见 [docs/ROADMAP.md](docs/ROADMAP.md)（阶段 1「能用」/ 阶段 2「好用」）。
 目前最大的缺口是 **Prompt 调优**：默认的 Mock 引擎让整条链路能跑，但建议内容还是空的。
 
+### 移除
+
+- **通话语音转写整体撤下**，改为「规划中」。上一版做出来了，但延迟、双方串音、
+  断句切碎都还不够好；而要对齐这些，最省事的做法是把通话音频送到云端 ——
+  对一个「本地优先」的工具，这个代价不划算。所以不留半成品占位置：
+  - 后端删掉整个 `app/asr/`（识别 / 双通道采集 / 模型管理）、`api/routes_voice.py`、
+    `routes_asr_models.py`、`routes_asr_probe.py`、`app/bus.py`（只为转写 SSE 存在的
+    进程内事件总线）、`voice_log` 表、`AudioDevice` / `TranscriptSegment` / `VoiceStatus`
+    三个模型，以及 `config.py` 里全部 `asr_*` / `whisper_*` / `vad_*` / `audio_*` / `hf_endpoint` 配置；
+  - 删掉 `requirements-asr.txt`、`scripts/asr_bench.py`、`--with-asr` / `--asr-test`
+    两个命令行入口，以及 `WINGMAN_WITH_ASR` 构建开关；
+  - 前端撤下设置页的「语音识别」卡片、自检页的「语音链路实测」卡片和通话页的全部操作 UI；
+    「通话」页改为一份「规划中」说明（保留 5 条设计思路 + 一张静态效果预览，无任何按钮），
+    侧栏该导航项挂上「敬请期待」标签；
+  - 打包从两个包合并为一个：原来「完整版」比标准版多出的 91 MB 全是本地语音依赖，
+    撤下后它没有存在理由了，下载页不再需要用户纠结选哪个。
+- 语音的**设计思路完整保留**在「通话」页、[README](README.md) 与
+  [docs/ROADMAP.md](docs/ROADMAP.md)，不是删掉了想法，只是没做完不放出来。
+
+### 新增
+
+- `backend/tests/test_config_contract.py`：盯住 `.env.example` 与 `Settings` 字段的一致性。
+  这次撤下语音时 `config.py` 删干净了、测试也全绿，**但 `.env.example` 把 14 个失效的键
+  继续留在那里** —— 照着示例配环境的人会以为功能还在，填了不报错也不生效。
+  纯文本文件没人 import，删字段时最容易被忘，所以用测试把「代码里的字段」当基准比对。
+
+### 修复
+
+- `scripts/preflight.py` 里两个检查项 `check_optional_soundcard` /
+  `check_optional_faster_whisper` 在语音撤下后仍注册着，`--doctor` 会继续提示用户
+  「未安装 soundcard（可选）」。改为**数据驱动**的单一 `check_optional_modules`：
+  注册表 `OPTIONAL_MODULES` 为空时明确输出「当前版本没有需要额外安装的可选依赖」，
+  将来加可选依赖只要往注册表加一项。同时去掉 `bootstrap.ps1` 里恒为 `false` 的
+  `WithAsr` / `NeedAsr` 空开关 —— 一个永远不会通的开关，只会让下一个人以为功能只是没开。
+- `docs/TROUBLESHOOTING.md` 删掉一节后章节号顺移，`docs/MODELS.md` 里
+  「见第 10 节 / 第 12 节」的跨文件引用随之失准，已同步修正。
+
 ## [0.2.1] - 2026-10-05
 
 这一版是把用户反馈的四个问题逐个查到底的结果。其中两个**不是体验问题，是真 bug**：

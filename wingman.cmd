@@ -2,7 +2,7 @@
 rem ================================================================
 rem  WingMan launcher - the single user entry point (Windows)
 rem
-rem  Usage:  wingman.cmd [--with-asr] [--port N] [--setup-only]
+rem  Usage:  wingman.cmd [--port N] [--setup-only]
 rem                      [--doctor] [--no-browser] [--help]
 rem
 rem  This file is intentionally ASCII-only: cmd.exe echoes raw bytes

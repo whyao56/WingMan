@@ -100,7 +100,7 @@ def _fresh_ctx():
 
     context_module._CTX = None
     ctx = context_module.get_ctx()
-    ctx.update_cfg({"llm_provider": "mock", "embedder": "hash", "asr_engine": "mock"})
+    ctx.update_cfg({"llm_provider": "mock", "embedder": "hash"})
     return ctx
 
 

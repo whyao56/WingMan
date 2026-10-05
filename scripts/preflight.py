@@ -99,10 +99,9 @@ REQUIRED_MODULES: tuple[tuple[str, str, str], ...] = (
     ("multipart", "python-multipart", "上传文件解析"),
 )
 
-OPTIONAL_MODULES: tuple[tuple[str, str, str], ...] = (
-    ("soundcard", "soundcard", "通话 / 系统声音采集（可选）"),
-    ("faster_whisper", "faster-whisper", "本地语音转写（可选）"),
-)
+# 语音能力撤下后，这里暂时为空。保留这个常量是因为预检面板的分组与测试
+# 都按它工作 —— 将来要加回可选依赖，往这里加一项就行。
+OPTIONAL_MODULES: tuple[tuple[str, str, str], ...] = ()
 
 REQUIRED_TABLES: tuple[str, ...] = (
     "chats",
@@ -112,7 +111,6 @@ REQUIRED_TABLES: tuple[str, ...] = (
     "summaries",
     "personas",
     "kv",
-    "voice_log",
 )
 
 # 打印前要检查能否编码的探针字符串
@@ -906,14 +904,9 @@ def check_database(state: State) -> Check:
                 for table in REQUIRED_TABLES:
                     if table not in tables:
                         continue
-                    if table == "voice_log":
-                        counts["voice_segments"] = int(
-                            conn.execute("SELECT COUNT(*) FROM voice_log").fetchone()[0]
-                        )
-                    else:
-                        counts[table] = int(
-                            conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-                        )
+                    counts[table] = int(
+                        conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                    )
                 if "kv" in tables:
                     kv = {
                         str(row[0]): "" if row[1] is None else str(row[1])
@@ -1105,11 +1098,11 @@ def _optional_module_check(
     )
     data = {
         "module": module,
+        "dist": dist,
         "installed": installed,
         "version": row["version"],
         "purpose": purpose,
         "error": row["error"],
-        "asr_engine": _resolve(state, "asr_engine")[0],
     }
     if installed:
         return Check(check_id, title, title_en, STATUS_PASS, blocking=False, optional=True,
@@ -1118,14 +1111,14 @@ def _optional_module_check(
         check_id, title, title_en, STATUS_WARN,
         blocking=False, optional=True,
         detail=detail,
-        hint=f"需要「{purpose}」时执行 wingman.cmd --with-asr 一次装齐语音依赖；不装也能正常启动。",
-        hint_en="Optional: run wingman.cmd --with-asr to install the voice dependencies.",
+        hint=f"需要「{purpose}」时执行 pip install {dist}；不装也能正常启动。",
+        hint_en=f"Optional: pip install {dist}.",
         data=data,
     )
 
 
 def _provider_summary(state: State) -> list[dict[str, Any]]:
-    """离线推断各 provider 的可用性，规则与 app/llm|asr|memory 的工厂保持一致。
+    """离线推断各 provider 的可用性，规则与 app/llm|memory 的工厂保持一致。
 
     工厂的原则是「永不抛异常，配置不全就退化为 Mock」，所以这里也只在
     「配置写了 A 但实际会退化为 B」时说清楚，而不是判失败。
@@ -1189,29 +1182,6 @@ def _provider_summary(state: State) -> list[dict[str, Any]]:
             note = "embedder=cloud 但未配置 embed_base_url，实际会退化为本地哈希向量"
         out.append({"kind": "embedder", "name": "hash", "available": True, "note": note})
 
-    asr_kind = str(_resolve(state, "asr_engine")[0] or "mock").lower()
-    if asr_kind in ("local", "whisper", "faster_whisper"):
-        row = _module_state("faster_whisper", "faster-whisper", "本地语音转写")
-        out.append({
-            "kind": "asr",
-            "name": "local" if row["ok"] else "mock",
-            "available": bool(row["ok"]),
-            "note": (
-                f"本机 faster-whisper · {_resolve(state, 'whisper_model')[0]}"
-                if row["ok"] else "asr_engine=local 但未安装 faster-whisper，实际会退化为 Mock"
-            ),
-        })
-    elif asr_kind in ("cloud", "api", "openai"):
-        asr_base = str(_resolve(state, "asr_base_url")[0] or "").strip()
-        out.append({
-            "kind": "asr",
-            "name": "cloud" if asr_base else "mock",
-            "available": bool(asr_base),
-            "note": asr_base or "asr_engine=cloud 但未配置 asr_base_url，实际会退化为 Mock",
-        })
-    else:
-        out.append({"kind": "asr", "name": "mock", "available": True,
-                    "note": "Mock 语音（/api/voice/ingest 可手工注入文本试通链路）"})
     return out
 
 
@@ -1253,10 +1223,6 @@ def check_config(state: State) -> Check:
         "embed_base_url",
         "embed_api_key",
         "embed_model",
-        "asr_engine",
-        "asr_base_url",
-        "asr_api_key",
-        "asr_model",
     )
     keys: dict[str, Any] = {}
     for key in watch_keys:
@@ -1327,17 +1293,37 @@ def check_config(state: State) -> Check:
     )
 
 
-def check_optional_soundcard(state: State) -> Check:
-    return _optional_module_check(
-        state, "soundcard", "soundcard", "通话 / 系统声音采集（可选）",
-        "optional_soundcard", "语音依赖 soundcard", "optional soundcard",
+def check_optional_modules(state: State) -> Check:
+    """可选依赖的统一入口 —— 数据驱动，不逐个写 check_optional_xxx。
+
+    语音能力撤下后 ``OPTIONAL_MODULES`` 是空的，所以这一项恒为「pass」。
+    将来接入需要额外依赖的功能（比如聊天记录采集器）时，只往
+    ``OPTIONAL_MODULES`` 里加一项就够了：这里和预检面板会自动跟上，
+    不必再新增一个 ``check_optional_*`` 函数。
+    """
+    rows = [_optional_module_check(state, *item) for item in OPTIONAL_MODULES]
+    if not rows:
+        return Check(
+            "optional_modules", "可选依赖", "optional dependencies", STATUS_PASS,
+            blocking=False, optional=True,
+            detail="当前版本没有需要额外安装的可选依赖。",
+            data={"modules": []},
+        )
+    missing = [r for r in rows if r.status != STATUS_PASS]
+    detail = (
+        f"{len(rows)} 项可选依赖全部就绪。" if not missing
+        else "未安装（可选，不影响启动）：" + "、".join(r.data["module"] for r in missing)
     )
-
-
-def check_optional_faster_whisper(state: State) -> Check:
-    return _optional_module_check(
-        state, "faster_whisper", "faster-whisper", "本地语音转写（可选）",
-        "optional_faster_whisper", "语音依赖 faster-whisper", "optional faster-whisper",
+    return Check(
+        "optional_modules", "可选依赖", "optional dependencies",
+        STATUS_WARN if missing else STATUS_PASS,
+        blocking=False, optional=True,
+        detail=detail,
+        hint=(
+            f"需要这些能力时执行 pip install {' '.join(r.data['dist'] for r in missing)}。"
+            "不装也能正常启动。"
+        ) if missing else None,
+        data={"modules": [r.data for r in rows]},
     )
 
 
@@ -1351,8 +1337,7 @@ CHECKS: tuple[Callable[[State], Check], ...] = (
     check_port,
     check_frontend,
     check_samples,
-    check_optional_soundcard,
-    check_optional_faster_whisper,
+    check_optional_modules,
     check_config,
 )
 
@@ -1553,8 +1538,8 @@ def render_human(state: State, checks: list[Check], exit_code: int) -> str:
     )
     if exit_code == EXIT_OK:
         lines.append(t(f"结论：可以启动（{summary}）", f"RESULT: READY TO START ({summary})"))
-        lines.append(t("下一步：在仓库根目录运行 wingman.cmd；需要语音能力就加 --with-asr。",
-                       "Next: run wingman.cmd in the repository root (--with-asr for voice)."))
+        lines.append(t("下一步：在仓库根目录运行 wingman.cmd 启动服务。",
+                       "Next: run wingman.cmd in the repository root."))
     elif exit_code == EXIT_BLOCKED:
         lines.append(t(f"结论：有 {len(blockers)} 项必须先修（{summary}）",
                        f"RESULT: {len(blockers)} PROBLEM(S) MUST BE FIXED FIRST ({summary})"))
