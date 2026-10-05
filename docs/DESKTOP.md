@@ -324,6 +324,24 @@ names = sorted(ZlibArchiveReader("pyz.pyz").toc)      # 这才是权威清单
 顺带一提，`--no-window` 下的日志现在会明说「不打开界面」，不再一律印
 「直接打开界面」—— 之前那句误导过排查。
 
+### 13. 发版时的两个「静默失效」
+
+发版不像写代码，错了不会报错，只会**悄悄出错**。这一轮撞到两个：
+
+**一是校验和不可复现。** zip 条目默认记录文件 mtime，而压缩包里的
+「使用说明.txt」是打包时当场生成的 —— 时间就是那一刻。于是**同样的代码重打一次，
+字节就变了，SHA256 也跟着变**。后果不是失败，而是发行说明里印的校验和
+**永远复现不出来**：用户认真去核对，反而会以为自己下到了被篡改的包。
+修法是打包时把时间戳钉死、把遍历排序，让「校验和」成为可被独立验证的事实，
+而不是一次性的快照。现在 `make_release.py --check` 连跑两次得到完全相同的 SHA256。
+
+**二是版本号会四处漂移。** `__version__` 写在一个文件里，但还会出现在
+CHANGELOG 章节名、README 的「当前版本」、发行说明的文件名、下载链接里的 tag
+—— 四处都是手写的。这次就撞上了：exe 自检打印 `v0.1.0`，而我准备发的 tag 是 `v0.2.0`。
+不崩溃，但用户报 bug 时说不清装的是哪个包。
+这类「到处都要改、漏一处也不报错」的字段靠人记是靠不住的，
+所以加了 `backend/tests/test_version.py`：四处任一脱节就测试失败。
+
 ---
 
 ## 四、本地语音模型为什么让用户自己下
@@ -369,3 +387,24 @@ names = sorted(ZlibArchiveReader("pyz.pyz").toc)      # 这才是权威清单
 - [ ] 源码路线也没被改坏：`wingman.cmd --doctor` 仍然正常，`wingman.cmd --setup-only`
       建的 venv 与 `requirements.lock.txt` 一致
 - [ ] `git status` 里没有 `dist/`、`*.db`、`models/`
+
+### 发版（把 exe 发到 GitHub）
+
+exe **不进仓库**：`dist/` 是 gitignore 的，且 GitHub 单文件限制 100MB
+（完整版解压后 237MB 推不上去）。走 Release 附件 —— 可下载、有稳定 URL、可校验。
+
+- [ ] `backend/app/__init__.py` 里的 `__version__` 已提到本次要发的版本
+      （忘了改的后果：exe 自检报旧版本号，用户报 bug 时说不清装的是哪个包。
+      `backend/tests/test_version.py` 会盯住 CHANGELOG / README / 发行说明 / 下载链接四处）
+- [ ] 写好 `docs/releases/v<tag>.md`：两个包怎么选、解压注意什么、校验和、**诚实的限制清单**
+- [ ] **把 zip 解压到仓库之外、且改过名的目录再跑一次** `--check` 与 `--asr-test`
+      —— 我们平时都对着仓库内的 `dist/` 验证，而用户拿到的是解压到任意位置的副本。
+      这一步才证明产物没有依赖仓库环境，也顺带验证压缩包顶层目录改名没把路径搞坏
+- [ ] 打包可复现：`scripts/make_release.py --check` **连跑两次**，两次 SHA256 必须相同
+      （zip 条目会记录 mtime，不钉死时间戳的话校验和每次都不一样，
+      发行说明里印的校验和就永远复现不出来）
+- [ ] 提交并推送后**再**建 tag —— tag 指向 `main` 的当前提交，
+      先建 tag 会让它指向一个还没包含版本号提升的提交
+- [ ] `python scripts/make_release.py --version X.Y.Z`（先 `--dry-run` 看一眼）
+- [ ] 从**公开地址**（不带 token）下载一次附件，核对 SHA256 与本地一致
+- [ ] 确认 CI 在 tag 指向的那个提交上是绿的
