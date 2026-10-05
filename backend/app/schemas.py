@@ -29,6 +29,8 @@ class Msg(BaseModel):
     text: str
     msg_type: str = "text"
     ext_id: str | None = None
+    # 时间来源：exact（原始记录带的时间）| assumed（抓取时刻顶替）| manual（人工填写）
+    ts_source: str = "exact"
 
     def to_row(self) -> tuple:
         return (
@@ -40,6 +42,7 @@ class Msg(BaseModel):
             self.msg_type,
             self.text,
             self.ext_id,
+            self.ts_source,
         )
 
     def brief(self, limit: int = 200) -> str:
@@ -72,6 +75,10 @@ class ChatInfo(BaseModel):
     first_ts: str | None = None
     last_ts: str | None = None
     indexed: int = 0
+    # 归属：这个 chat 是「哪个人」在「哪个渠道」上的一段记录
+    person_id: str = ""
+    channel: str = "generic"     # qq | wechat | call | offline | generic
+    source: str = "import"       # import（手工导入）| collect（采集器写入）
 
 
 # ============================================================= 导入
@@ -227,6 +234,72 @@ class SimTree(BaseModel):
         "以上为 AI 情景推演，不是对未来的预测。它的用途是横向比较不同回复的相对优劣，"
         "请勿据此认定对方一定会如何反应。"
     )
+
+
+# ============================================================= 以人为中心
+#
+# 「人」是记忆的主键，chat 只是这个人在某个渠道上的一段记录。
+# 关系定位与阶段目标属于「人」，不属于某一次会话 ——
+# 「我和她的关系」不会因为换了平台就变成另一段关系。
+
+
+class Person(BaseModel):
+    id: str
+    name: str
+    aliases: list[str] = Field(default_factory=list)
+    relation: str = ""             # 我和 Ta 现在是什么关系
+    desired_relation: str = ""     # 我希望走到哪一步
+    stage_goal: str = ""           # 这一阶段想达成什么
+    notes: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+    # 汇总（由 person_detail 填充，列表接口也带上，方便直接渲染）
+    channel_count: int = 0
+    message_count: int = 0
+    peer_count: int = 0
+    me_count: int = 0
+    first_ts: str | None = None
+    last_ts: str | None = None
+    indexed: int = 0
+
+
+class PersonChannel(BaseModel):
+    """人下面的一个渠道 —— 界面上的「QQ 聊天 / 微信聊天 / 通话 / 当面聊天」。"""
+
+    chat_id: str
+    channel: str = "generic"
+    platform: str = ""
+    name: str = ""
+    source: str = "import"
+    message_count: int = 0
+    peer_count: int = 0
+    me_count: int = 0
+    first_ts: str | None = None
+    last_ts: str | None = None
+    indexed: int = 0
+
+
+class CollectCursor(BaseModel):
+    """采集游标：增量采集靠它判断「有没有新东西」。"""
+
+    platform: str
+    account: str = ""
+    peer_key: str
+    person_id: str = ""
+    chat_id: str = ""
+    last_ts: str = ""
+    last_ext_id: str = ""
+    fingerprint: str = ""
+    merged_count: int = 0
+    collected_from: str = ""
+    last_run_at: str = ""
+    status: str = "idle"           # idle | ok | skipped | error
+    message: str = ""
+
+
+class PersonDetail(BaseModel):
+    person: Person
+    channels: list[PersonChannel] = Field(default_factory=list)
 
 
 # ============================================================= 设置

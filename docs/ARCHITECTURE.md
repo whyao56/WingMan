@@ -15,6 +15,7 @@
 | **降级可跑** | 任何外部依赖缺失时退化为 Mock，而不是崩溃 | 每个工厂函数都返回可用实例 |
 | **Prompt 集中** | 所有提示词放一个文件，方便调优和对照 | `engine/prompts.py` |
 | **可解释** | 每条建议都附理由、证据和风险，不输出黑箱结论 | 引擎输出结构里强制带 `rationale` / `evidence` |
+| **采集要诚实** | 认不出的东西宁可挂起，也不猜一个看起来合理的值填进去 | 说话人认不出就跳过并计数；时间是顶替来的就标 `ts_source=assumed`；解密认证失败返回 `None` 而不是「大概能读」 |
 
 ---
 
@@ -23,14 +24,16 @@
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  表现层   frontend/index.html （单文件控制台，零构建）             │
-│           导入区 · 记忆区 · 指挥台 · 通话区（规划中）              │
+│           导入区 · 记忆区 · 指挥台 · 采集区 · 通话区（规划中）     │
 └────────────────────────────┬────────────────────────────────────┘
                              │ HTTP
 ┌────────────────────────────▼────────────────────────────────────┐
 │  API 层   app/api/                                               │
-│  routes_data.py  导入/列表/消息/画像                              │
-│  routes_engine.py 分析/建议/推演/策略                             │
-│  routes_admin.py  设置读写/健康检查/Provider 探测                 │
+│  routes_data.py    导入/列表/消息/画像                            │
+│  routes_engine.py  分析/建议/推演/策略                            │
+│  routes_admin.py   设置读写/健康检查/Provider 探测                │
+│  routes_collect.py 采集：探测/版本矩阵/取密钥/自动/半自动/游标     │
+│  routes_persons.py 以人为中心的会话归并与清理                      │
 └────────────────────────────┬────────────────────────────────────┘
                              │
 ┌────────────────────────────▼────────────────────────────────────┐
@@ -51,13 +54,20 @@
            │                              │
 ┌──────────▼──────────────────────────────▼───────────────────────┐
 │  数据层   SQLite  backend/data/wingman.db                       │
-│  chats · messages · embeddings · facts · summaries · personas    │
-└─────────────────────────────────────────────────────────────────┘
-           ▲
-┌──────────┴──────────────────────────────────────────────────────┐
-│  接入层   app/adapters/                                          │
-│  base(抽象) · qq · wechat · generic · registry(自动选择适配器)     │
-└─────────────────────────────────────────────────────────────────┘
+│  persons · chats · messages · embeddings · facts · summaries     │
+│  · personas · collect_cursors                                    │
+└──────────────────▲──────────────────────────▲───────────────────┘
+                   │                          │
+    ┌──────────────┴───────────┐  ┌───────────┴──────────────────┐
+    │ 接入层 app/adapters/     │  │ 采集层 app/collect/          │
+    │ base(抽象) · qq          │  │ detect 探测 · matrix 版本矩阵 │
+    │ wechat · generic         │  │ keys 取密钥 · sqlcipher 解密  │
+    │ registry(自动选适配器)   │  │ reader 认列 · pipeline 自动   │
+    │                          │  │ semi 半自动(剪贴板) · winapi  │
+    └──────────────────────────┘  └──────────────────────────────┘
+
+  两条入口都归一成同一套 `Msg` 再进数据层：
+  接入层吃「用户导出的文件」，采集层吃「客户端自己的数据库 / 剪贴板」。
 ```
 
 ---
@@ -95,7 +105,100 @@ class ChatSourceAdapter(ABC):
 **扩展一个新平台**：在 `adapters/` 新建文件实现 `ChatSourceAdapter`，
 在 `registry.py` 的 `ADAPTERS` 列表里加一行，完成。
 
-### 3.2 记忆层 `app/memory/` + `app/store.py`
+### 3.2 采集层 `app/collect/`
+
+**两条并列的路**：一条全自动（读客户端自己的本地库），一条半自动（监听剪贴板）。
+
+为什么是「并列」而不是「自动 + 兜底」：自动那条必须在**你这台机器、你这个版本**上
+拿到数据库密钥才能走通，而这一步在本机实测的两个版本上**没有走通**（结论见下）。
+所以半自动不是备胎 —— 它是当下唯一确定能跑通的通道，两边都是一等公民。
+
+| 通道 | 入口 | 适用 | 「谁说的」怎么分 |
+|---|---|---|---|
+| **自动** | 读客户端本地加密数据库 | 版本在支持矩阵内、且能拿到密钥 | 库里的说话人字段 |
+| **半自动** | 剪贴板（你复制哪条就抓哪条） | 任何版本 / 任何客户端，只要能复制 | 剪贴板块头里的称呼 |
+
+#### 自动：六道关，每道都可能合理地失败
+
+```
+① 探测  detect.py     装了吗 / 开着吗 / 版本在支持范围内吗 / 数据目录在哪
+② 取密钥 keys.py      缓存 → 用户粘贴 → 自动搜进程内存（有预算、有结论）
+③ 解密  sqlcipher.py  剥自定义头、逐页解密、套用 WAL（不套会漏掉最近的消息）
+④ 认列  reader.py     这个库里哪一列是时间、哪一列是正文、哪一列是说话人
+⑤ 读消息 reader.py    按游标取增量，判「这是我说的还是对方说的」
+⑥ 入库  pipeline.py   会话归属到人、消息去重写入、记下游标
+```
+
+每道关的失败都返回「为什么 + 下一步做什么」，而不是抛异常或返回空。
+这条链路上最贵的事不是慢，是**「看起来成功了」**：用户以为采到了、其实库里一条都没有，
+或者更糟 —— 采进一堆错归属的消息。所以 `CollectReport` 的每个字段都带人的解释。
+
+#### 版本指引是数据，不是 README 里的一段话
+
+`matrix.py` 的 `SUPPORT_MATRIX` 是一张**数据表**：每个客户端（`wechat` / `qq`）的
+进程名、数据目录模板、库文件名、支持的版本区间，以及**我实测过的版本号**。
+`judge()` 拿「装没装 + 探测到的版本」去查这张表，直接产出结论与下一步动作
+（`guide_for()`）；界面在**配置环节**就把「你的版本支不支持、不支持该做什么」摆出来。
+写在 README 里的版本表，没人会在装软件前先读一遍；写在 `matrix.py` 里，界面自己就会说。
+
+#### 自动取密钥为什么要如实报「取不到」
+
+`scan_memory_for_key()` 在 `QQ.exe` / `Weixin.exe` 的进程内存里按签名找密钥，有**时间预算**
+（正式 60 秒、预演 12 秒），超了就是超了。它返回 `KeyAttempt` 结论对象而不是布尔值 ——
+因为「没找到」有两种完全不同的原因：**扫完了确实没有** vs **时间到了还没扫完**。
+混成一个 `False`，用户就会以为「这功能不行」，而实际只是预算给少了。
+
+本机实测结论（83.78M 候选 × 2 套参数各扫 419 秒未命中；hex 候选 QQ 8 个全灭、微信 0 处）
+写在 `keys.py` 的模块文档里，界面照实转述，不粉饰。
+
+#### 半自动：剪贴板是唯一通道
+
+不是偷懒选的 —— UIA **读不到**消息文本（微信整个主窗口只有 2 个 UIA 节点，
+QQ 内容区只有一个 `Chrome_RenderWidgetHostHWND`）。所以「监听你复制了什么」
+是唯一不依赖版本、不依赖密钥的通用做法。
+
+```
+剪贴板变化  winapi.py     GetClipboardSequenceNumber() 只在内容真变时 +1
+    │                     （轮询到同一个号就什么都不做，不会重复入库）
+    ▼
+切块解析    clipboard.py  称呼: 正文 ／ 称呼 + 时间戳（QQ NT 多选复制的主形态）
+    │                     ／ 称呼 + 时间戳 + 同行正文
+    ▼
+归属判定    semi.py       称呼对得上 → 直接落库；对不上 → 挂起等你在界面里选
+```
+
+两条底线，不做成可关闭的选项：
+
+1. **认不出说话人就挂起，不猜。** 挂起项在界面上等你选「这是谁」或「丢弃」；
+   `assume_peer`（认不出一律当对方）默认**关**，要显式打开才生效。
+2. **没带时间就如实标。** 剪贴板里经常没有时间戳，用抓取时刻顶替可以，
+   但必须写成 `ts_source='assumed'` 单独存一列 —— 混进真时间轴，会让
+   「上周聊了什么」这类结论建立在假时间上。也可以选 `ask` 模式：先挂起等你填。
+
+半自动的状态（待确认项、计数）会落盘，进程重启能捞回来；已落库的不会重复捞。
+
+#### 几个关键实现取舍
+
+| 取舍 | 为什么 |
+|---|---|
+| `Scored.tags`（机器判断）与 `Scored.why`（给人看的理由）**分成两个字段** | 「命中登录账号」是「未命中登录账号」的子串，人看的文案不能拿去当判据 |
+| 解密认证失败**返回 `None`**，不返回半个结果 | fail-closed：宁可报「解不开」，也不能吐出一堆看似正常、实际是垃圾的数据 |
+| 认列**按数据认**，不写死版本映射 | 升级会改列名（QQ 的列名就是数字 `40011`/`40033`），认不出就如实报候选列 |
+| 解密结果与认列结果都**缓存** | 几十上百 MB 的库逐页 HMAC 要几百毫秒~几秒；按 `(主库大小, mtime, WAL 大小, WAL mtime, salt)` 做指纹 |
+| `Name2Id` 要区分「单列 + rowid 当 id」（`rowid_map`）与「两列 alias」 | 微信 4.x 是前者；当成后者会静默少解一级，alias 全空却不报错 |
+| Windows 专有 API 一律**延迟到调用时**才碰，不在模块级导入 | `ctypes.wintypes` 在 Linux 上导不进来（`'v'` 类型码只有 Windows 版 `_ctypes` 认）。写成模块级 import 的话，**非 Windows 上连 import 都失败** —— 功能不可用是对的，「导入就炸」不是 |
+
+> 最后一条是踩出来的：它在 `winapi.py` 和 `clipboard.py` 里各出现了一次。
+> 现在 `winapi.py` 统一决定 `wintypes` 是什么（Windows 用真身，真身不存在才退到最小替身，
+> 且 Windows 上导不进来会 re-raise 而不用替身盖过去），`clipboard.py` 从它取。
+> 守卫测试 `test_collect_offwindows.py` 模拟 Linux 环境、逐个模块重导一遍钉住它。
+
+守卫测试：`test_collect_cipher.py`（自造库往返解密到字节级）、
+`test_collect_reader.py`（合成库认列与增量）、`test_collect_clipboard.py`（三种复制形态）、
+`test_collect_semi.py`（挂起/确认/去重/复用已有的人）、`test_collect_api.py`（HTTP 契约）、
+`test_collect_offwindows.py`（非 Windows 上整层必须能被导入）。
+
+### 3.3 记忆层 `app/memory/` + `app/store.py`
 
 记忆分三种粒度，这是本项目的关键设计：
 
@@ -117,7 +220,7 @@ class ChatSourceAdapter(ABC):
 1. **事实抽取** —— 分批把消息喂给模型，要求输出 `{key, value, confidence, evidence}` 三元组，写进 `facts`；
 2. **画像综合** —— 读取全部 facts + 抽样对话，生成 `peer_profile` / `taboos` / `stage`，写进 `personas`。
 
-### 3.3 模型层 `app/llm/`
+### 3.4 模型层 `app/llm/`
 
 ```python
 class ChatProvider(ABC):
@@ -136,7 +239,7 @@ class ChatProvider(ABC):
 | `ollama.py` | 本地 Ollama，`format: json` 模式 |
 | `mock.py` | **无 Key 也能跑通全流程**，基于关键词的规则化输出 |
 
-### 3.4 通话转写（规划中）
+### 3.5 通话转写（规划中）
 
 **这个能力目前没有提供。** 语音识别 / 通话实时转写已从产品中整体撤下，改为「规划中」：
 `app/asr/` 模块、`/api/voice/*` 与 `/api/asr/*` 接口、`voice_log` 表、
@@ -158,7 +261,7 @@ class ChatProvider(ABC):
 撤下它的直接原因是这几个问题没解决：端到端延迟、双方串音、以及纯能量 VAD 在噪音下断句太碎。
 重做时要一并解决，才值得放出来。
 
-### 3.5 引擎层 `app/engine/`
+### 3.6 引擎层 `app/engine/`
 
 四步流水线，详见 **[ENGINE_DESIGN.md](ENGINE_DESIGN.md)**：
 
@@ -180,11 +283,20 @@ class ChatProvider(ABC):
 ## 4. 数据模型
 
 ```sql
-chats(id PK, platform, name, peer_name, me_name, created_at)
+-- 「人」是记忆的真正主键，chat 只是这个人在某个渠道上的一段记录。
+persons(id PK, name, aliases,           -- aliases: JSON 数组，跨平台认人的依据
+        relation, desired_relation, stage_goal, notes,
+        created_at, updated_at)
+
+chats(id PK, platform, name, peer_name, me_name, created_at,
+      person_id,                        -- 归到哪个人名下（可空，未归并时）
+      channel,                          -- 渠道标记：qq / wechat / ...
+      source)                           -- import（手工导入）| collect（采集写入）
 
 messages(id PK AUTOINCREMENT,
          chat_id FK, platform, sender, role,   -- role: me | peer | system
          ts, msg_type, text, ext_id,
+         ts_source,                     -- exact | assumed | manual（时间从哪来）
          UNIQUE(chat_id, sender, ts, text))     -- 幂等去重
 
 embeddings(message_id PK FK, model, dim, vec BLOB)   -- float32 紧凑存储
@@ -198,11 +310,29 @@ summaries(id PK, chat_id FK, kind, period, content, created_at)
 personas(chat_id PK FK, goal, my_style, peer_profile, taboos, stage, updated_at)
 
 kv(key PK, value)      -- 设置项等零散配置
+
+-- 采集游标：增量采集的唯一依据
+collect_cursors(id PK, platform, account, peer_key, person_id, chat_id,
+                last_ts, last_ext_id, fingerprint, merged_count,
+                collected_from, last_run_at, status, message,
+                UNIQUE(platform, account, peer_key))
 ```
+
+**为什么 `ts_source` 要单独存一列**：采集（尤其是从剪贴板采集）经常拿不到消息的原始时间，
+只能用抓取时刻顶替。顶替不是问题，**顶替了不说才是问题** —— 混进真时间轴，
+「上周聊了什么」这类结论就建立在假时间上了。所以它是一列数据，不是靠「时间看起来对不对」去猜。
+
+**为什么游标不只看时间**：同一个时间点可能有多条同秒消息，平台也可能改历史消息。
+只比时间会漏、只比条数会错位；所以 `(最后一条的 ts, 文本哈希) + 已采条数` 两项一起比。
 
 **为什么向量存 BLOB 而不是用 sqlite-vec**：脚手架阶段追求零编译依赖。
 几万条消息在内存里做 numpy 余弦相似度只要几毫秒，完全够用。
 上万条以上再换 `sqlite-vec` 或 `faiss`，接口不变（`retriever.py` 里预留了 `VectorIndex` 抽象）。
+
+**表结构变更是迁移，不是重建**：`chats.person_id/channel/source` 与 `messages.ts_source`
+都是后加的列，走 `ALTER TABLE ADD COLUMN` + 回填（老库的行补成 `exact`）。
+`scripts/verify_migration.py` 在**真实库的副本**上验证「消息不丢 / 无悬空引用 /
+init 幂等 / 新会话立刻有归属」，避免升级一次丢一批数据。
 
 ---
 
@@ -222,6 +352,44 @@ kv(key PK, value)      -- 设置项等零散配置
 | POST | `/api/chats/{id}/simulate` | 对某条选项做多轮推演 |
 | GET/PUT | `/api/settings` | 读写运行时设置（覆盖 .env） |
 | POST | `/api/settings/test` | 测试模型连通性 |
+
+以人为中心的归并（`routes_persons.py`）：
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET/POST | `/api/persons` | 人员列表 / 新建 |
+| GET | `/api/persons/{id}` | 人 + 名下各渠道会话明细 |
+| DELETE | `/api/persons/{id}` | 删除（会话与消息按外键级联） |
+| POST | `/api/persons/{id}/merge` | 把另一个人的会话并到这个人名下 |
+| GET | `/api/persons/{id}/messages` | 跨渠道按时间取这个人的消息 |
+| POST | `/api/persons/{id}/channels` | 把一个会话挂到这个人名下 |
+| DELETE | `/api/persons/{id}/channels/{chat_id}` | 摘掉某个会话 |
+
+采集（`routes_collect.py`）—— 17 条，分四组：
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/collect/clients` | 探测本机装了哪些客户端，给**结论 + 下一步动作** |
+| GET | `/api/collect/clients/{key}` | 单个客户端的详情（数据目录、库文件、账号） |
+| GET | `/api/collect/matrix` | 支持矩阵（含「我实测过的版本」标记） |
+| POST | `/api/collect/key/check` | 校验一个用户粘贴的密钥对不对 |
+| POST | `/api/collect/key/scan` | 去进程内存里找密钥（有预算、有结论） |
+| POST | `/api/collect/preview` | 只走到「能不能拿到密钥」就停，**不写库** |
+| POST | `/api/collect/run` | 全自动采集一遍 |
+| GET / DELETE | `/api/collect/cursors` | 查看 / 重置增量游标（重置会回报真删了几条） |
+| POST | `/api/collect/inspect` | 打开一个已解密的库，报「哪些列像是时间/正文/说话人」 |
+| POST | `/api/collect/semi/start` | 开启半自动监听（指定采谁） |
+| POST | `/api/collect/semi/stop` | 停止监听 |
+| GET | `/api/collect/semi/status` | 状态与计数 |
+| GET | `/api/collect/semi/poll` | 轮询新增的抓取块（用 id 定位，不用下标） |
+| POST | `/api/collect/semi/commit` | 确认写入（可改文本与时间，标 `manual`） |
+| POST | `/api/collect/semi/discard` | 丢弃某个抓取块 |
+| POST | `/api/collect/semi/clear` | 清空**待确认**列表（不动已落库的） |
+
+> `/api/collect/*` 全部挂在 `/api/collect` 前缀下，只有这一处注册。
+> 曾经 `routes_persons.py` 里也有一份 `/api/collect/cursors`，
+> 而 FastAPI 里**先注册的会静默屏蔽后一个** —— 路径相同、注解不同、表现随注册顺序变，
+> 是最难查的一类 bug。现在归属明确：采集的接口全在 `routes_collect.py`。
 
 ---
 
@@ -276,7 +444,9 @@ kv(key PK, value)      -- 设置项等零散配置
 
 | 难点 | 现状 | 对策 |
 |---|---|---|
-| 微信 PC 端数据库加密 | 只做文件导入，不碰本地加密库 | 见 ROADMAP「可选进阶」；合规风险自负 |
+| 微信 / QQ 本地库加密 | 已实现 SQLCipher 4 解密，但**密钥拿不到** —— 本机实测自动搜内存未命中 | 密钥手动粘贴可走通；同时把剪贴板半自动做成并列通道，不依赖密钥 |
+| 客户端升级改列名 | 认列按数据认，仍可能在全新版本上认不出 | 不写死映射，认不出就报候选列 + 允许 `schema_overrides` 手工指定并记住 |
+| 剪贴板拿不到原始时间 | 半自动模式常见 | 用抓取时刻顶替但标 `ts_source='assumed'` 单独存；也可选 `ask` 模式先挂起 |
 | 模型编造反事实 | 画像里混入模型幻觉 | 事实带 `evidence` 指向 message_id，前端可点开核对 |
 | 上下文超长 | 几万条消息塞不进窗口 | 分层记忆：摘要层 + 事实层 + 检索层 |
 

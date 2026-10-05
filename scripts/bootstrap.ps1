@@ -913,7 +913,7 @@ for name, want in pins.items():
         continue
     if got != want:
         problems.append({"pkg": name, "want": want, "got": got, "how": "version"})
-for mod in ("fastapi", "uvicorn", "pydantic", "pydantic_settings", "httpx", "numpy", "starlette"):
+for mod in ("fastapi", "uvicorn", "pydantic", "pydantic_settings", "httpx", "numpy", "starlette", "cryptography"):
     try:
         __import__(mod)
     except Exception as exc:

@@ -97,6 +97,7 @@ REQUIRED_MODULES: tuple[tuple[str, str, str], ...] = (
     ("httpx", "httpx", "模型调用与端到端检查的 HTTP 客户端"),
     ("numpy", "numpy", "向量检索"),
     ("multipart", "python-multipart", "上传文件解析"),
+    ("cryptography", "cryptography", "解密客户端数据库（自动采集）"),
 )
 
 # 语音能力撤下后，这里暂时为空。保留这个常量是因为预检面板的分组与测试

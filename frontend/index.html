@@ -101,6 +101,8 @@ nav button .soon{
 }
 .chatitem:hover{background:var(--panel3)}
 .chatitem.on{background:var(--accent-weak);color:var(--accent)}
+/* 会话项可聚焦（右键菜单能用 Shift+F10 唤出），所以焦点圈必须看得见 */
+.chatitem:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .chatitem .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chatitem .ct{font-size:12px;color:var(--dim);flex:none}
 .chatitem.on .ct{color:var(--accent)}
@@ -305,6 +307,66 @@ table.t tr:hover td{background:var(--panel2)}
   padding:9px 11px;word-break:break-all;margin-top:8px;line-height:1.85;
 }
 
+/* ---------- 模态弹窗 ----------
+   删会话、改会话设置这类「要么确认要么取消」的操作都走这里。
+   不用 window.confirm/prompt 的原因：它们没法做倒计时、没法排版长声明，
+   而且在原生窗口里放不下「删掉会连带失去什么」这种必须说清的事。 */
+.modal-mask{
+  position:fixed;inset:0;background:rgba(18,24,40,.38);z-index:60;
+  display:grid;place-items:center;padding:24px;
+}
+.modal{
+  background:var(--panel);border:1px solid var(--border2);border-radius:12px;
+  box-shadow:0 14px 44px rgba(18,24,40,.2);
+  width:min(580px,100%);max-height:86vh;display:flex;flex-direction:column;
+}
+.modal .mhead{padding:18px 20px 12px;border-bottom:1px solid var(--border)}
+.modal .mhead h3{margin:0;font-size:15.5px;font-weight:620}
+.modal .mhead .msub{font-size:12.5px;color:var(--dim);margin-top:5px}
+.modal .mbody{padding:16px 20px;overflow-y:auto;font-size:13.5px;line-height:1.85;color:var(--muted)}
+.modal .mfoot{
+  padding:15px 20px;display:flex;gap:9px;justify-content:flex-end;align-items:center;
+  border-top:1px solid var(--border);
+}
+.modal .mfoot .mnote{margin-right:auto;font-size:12.5px;color:var(--dim)}
+
+/* 删除前的声明块：必须是「看着不舒服」的样子，不能长得像普通提示 */
+.declare{background:var(--danger-bg);border:1px solid var(--danger-line);border-radius:var(--r-sm);padding:14px 16px}
+.declare .dt{font-weight:620;color:var(--danger);margin-bottom:7px;font-size:13.5px}
+.declare ul{margin:8px 0 0;padding-left:19px;line-height:1.9}
+.declare li{margin-bottom:2px}
+.declare .dl{color:var(--danger);font-weight:600}
+
+/* 倒计时没走完时按钮长这样：能看见、不能点、还告诉你在等什么 */
+.btn.waiting{position:relative;background:var(--panel3);border-color:var(--border2);color:var(--dim);cursor:progress}
+.btn.waiting::after{
+  content:"";position:absolute;left:0;bottom:-1px;height:2px;border-radius:2px;
+  background:var(--danger);width:var(--wait,0%);transition:width .25s linear;
+}
+
+/* ---------- 右键菜单 ---------- */
+.ctxmenu{
+  position:fixed;z-index:70;padding:5px;min-width:158px;
+  background:var(--panel);border:1px solid var(--border2);border-radius:var(--r-sm);
+  box-shadow:0 8px 28px rgba(18,24,40,.17);
+}
+.ctxmenu button{
+  display:flex;align-items:center;gap:9px;width:100%;text-align:left;
+  padding:8px 11px;border-radius:6px;font-size:13px;color:var(--text);
+  background:transparent;border:0;cursor:pointer;
+}
+.ctxmenu button:hover{background:var(--accent-weak);color:var(--accent)}
+.ctxmenu button.danger{color:var(--danger)}
+.ctxmenu button.danger:hover{background:var(--danger-bg);color:var(--danger)}
+.ctxmenu .csep{height:1px;background:var(--border);margin:5px 3px}
+.ctxmenu .ctitle{padding:6px 11px 7px;font-size:12px;color:var(--dim);font-weight:600;letter-spacing:.3px}
+
+/* 表单块：弹窗里的输入项 */
+.frow{display:grid;grid-template-columns:112px 1fr;gap:11px;align-items:center;margin-bottom:11px}
+.frow > span{font-size:13px;color:var(--muted)}
+.frow input{width:100%}
+.fhint{font-size:12.5px;color:var(--dim);line-height:1.8;margin-top:-3px;margin-bottom:12px}
+
 /* ---------- 上手三步 ---------- */
 .steps3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}
 @media(max-width:860px){.steps3{grid-template-columns:1fr}}
@@ -320,6 +382,29 @@ table.t tr:hover td{background:var(--panel2)}
 .step3 .st{font-weight:620;font-size:14px;margin-bottom:4px}
 .step3 .sd{font-size:12.5px;color:var(--muted);line-height:1.7;margin-bottom:12px}
 .step3 .sa{font-size:12.5px}
+
+/* ---- 采集页 ----
+   注意这里一个类名都不能和上面重名：同名类会**静默覆盖**前面的定义
+   （`.cap` 就踩过一次 —— 它是通话字幕行用的）。所以这里的都以 `s` 打头。 */
+.act{display:grid;gap:6px;margin:8px 0 0}
+.act li{list-style:none;font-size:13px;color:var(--muted);padding-left:16px;position:relative;line-height:1.75}
+.act li::before{content:"";position:absolute;left:4px;top:10px;width:5px;height:5px;border-radius:50%;background:var(--border2)}
+.act.warn li{color:var(--danger)}
+.scap{border:1px solid var(--border);border-radius:var(--r-sm);background:var(--panel2);padding:12px 14px;margin-bottom:10px}
+.scap.pending{border-color:var(--warn-line);background:var(--warn-bg)}
+.scap.done{border-color:var(--ok-line);background:var(--ok-bg)}
+.scap .hd{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+.scap .it{display:grid;grid-template-columns:96px 1fr;gap:10px;align-items:start;padding:9px 0;border-top:1px dashed var(--border2)}
+.scap .it:first-of-type{border-top:0}
+.scap .tx{font-size:13.5px;line-height:1.7;word-break:break-word}
+.seg{display:inline-flex;border:1px solid var(--border2);border-radius:20px;overflow:hidden;background:var(--panel)}
+.seg button{border:0;background:transparent;padding:3px 12px;font-size:12.5px;cursor:pointer;color:var(--muted);font-family:inherit}
+.seg button.on{background:var(--accent);color:#fff}
+.seg button.on[data-role="peer"]{background:var(--peer)}
+.mat{width:100%;border-collapse:collapse;font-size:12.5px}
+.mat th,.mat td{border-bottom:1px solid var(--border);padding:7px 9px;text-align:left;vertical-align:top;line-height:1.65}
+.mat th{color:var(--dim);font-weight:560;white-space:nowrap}
+.mat code{font-family:var(--mono);font-size:12px;background:var(--panel3);padding:1px 5px;border-radius:4px}
 </style>
 </head>
 <body>
@@ -333,12 +418,13 @@ table.t tr:hover td{background:var(--panel2)}
       <button data-v="copilot" class="on"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5a3.5 3.5 0 0 1-3.5 3.5H8l-4 3.5V6.5A3.5 3.5 0 0 1 7.5 3h9A3.5 3.5 0 0 1 20 6.5z"/></svg></i>指挥台</button>
       <button data-v="memory"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3h11a1 1 0 0 1 1 1v17l-6.5-4-6.5 4V4a1 1 0 0 1 1-1z"/></svg></i>记忆</button>
       <button data-v="import"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="m7.5 9.5 4.5 4.5 4.5-4.5"/><path d="M4 20h16"/></svg></i>导入</button>
+      <button data-v="collect"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h10.5a2 2 0 0 1 2 2v11"/><path d="M13 3.5 16.5 5.5 13 7.5"/><path d="M20 18.5H9.5a2 2 0 0 1-2-2v-11"/><path d="M11 20.5 7.5 18.5 11 16.5"/></svg></i>采集<span id="nav-collect" class="navdot hidden"></span></button>
       <button data-v="voice"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z"/><path d="M19 11a7 7 0 0 1-14 0"/><path d="M12 18v3"/></svg></i>通话<span class="soon">敬请期待</span></button>
       <button data-v="check"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.3 2.4 2.4 4.6-5"/></svg></i>自检<span id="nav-badge" class="navdot hidden"></span></button>
       <button data-v="settings"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5h16"/><path d="M4 12h16"/><path d="M4 17.5h16"/><circle cx="9" cy="6.5" r="2.1"/><circle cx="15" cy="12" r="2.1"/><circle cx="8" cy="17.5" r="2.1"/></svg></i>设置</button>
     </nav>
     <div class="sidebody">
-      <div class="sidelabel">会话</div>
+      <div class="sidelabel">会话 <span style="font-weight:500;letter-spacing:0;color:var(--dim)">· 右键可设置</span></div>
       <div id="chatlist"><div class="empty-hint">还没有导入任何聊天记录</div></div>
     </div>
     <div style="padding:10px 14px;border-top:1px solid var(--border)">
@@ -501,6 +587,113 @@ table.t tr:hover td{background:var(--panel2)}
       </div>
 
       <div id="imp-result"></div>
+    </section>
+
+    <!-- ============ 采集 ============ -->
+    <!--
+      这一页的顺序就是用户心里问题的顺序：
+        ① 我的版本支不支持（程序回答，不是文档回答）
+        ② 能不能自动采（先预览，确认了再写库）
+        ③ 采不动怎么办（半自动：不依赖版本和密钥，随时可用）
+        ④ 采到哪了（游标）
+    -->
+    <section class="view" id="view-collect">
+      <h2>采集聊天记录</h2>
+      <p class="sub">
+        「我的版本支不支持」这个问题由程序自己回答 —— 点一下检查，它会告诉你本机的
+        微信 / QQ 是什么版本、能不能自动读、下一步具体做什么。
+        自动读不通也不要紧：半自动采集不依赖版本和密钥，随时能用。
+      </p>
+
+      <div class="card">
+        <h3>① 先看你的客户端 <span class="tag" id="cl-tag">还没检查</span></h3>
+        <div class="row" style="margin-bottom:12px">
+          <button class="btn primary" id="cl-check">检查本机版本</button>
+          <button class="btn" id="cl-matrix">看看支持哪些版本</button>
+          <span id="cl-msg" class="small dim"></span>
+        </div>
+        <div id="cl-list"><div class="empty-hint">点上面的按钮 —— 它会读本机实际装的版本再给结论，不用你自己对照文档。</div></div>
+      </div>
+
+      <div class="card">
+        <h3>② 自动采集 <span class="tag">需要数据库密钥</span></h3>
+        <p class="small muted" style="margin-bottom:12px">
+          密钥只存在于运行中的客户端进程内存里。程序会先试自动找，找不到可以手动粘贴。
+          <b>没验证过的密钥不会用来写库</b> —— 先「预览」一次最稳。
+        </p>
+        <div class="row">
+          <label class="f" style="margin:0;flex:0 0 auto;min-width:140px">
+            <span>客户端</span>
+            <select id="ac-client">
+              <option value="qq">QQ（NT 9.9.x）</option>
+              <option value="wechat">微信 4.x</option>
+              <option value="wechat3">微信 3.x（旧版）</option>
+            </select>
+          </label>
+          <label class="f" style="margin:0;flex:1;min-width:280px">
+            <span>数据库密钥（64 位十六进制；留空就让程序自己找）</span>
+            <input type="text" id="ac-key" placeholder="x'1a2b…' 或 64 位十六进制" />
+          </label>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn" id="ac-check">校验密钥</button>
+          <button class="btn" id="ac-scan">自动找密钥</button>
+          <button class="btn" id="ac-preview">先预览</button>
+          <button class="btn primary" id="ac-run">开始采集</button>
+          <span id="ac-msg" class="small dim"></span>
+        </div>
+        <div id="ac-report"></div>
+      </div>
+
+      <div class="card">
+        <h3>③ 半自动采集 <span class="tag">不依赖版本和密钥</span></h3>
+        <p class="small muted" style="margin-bottom:12px">
+          开启后，你在 QQ / 微信里选中消息按 <span class="mono">Ctrl+C</span>，
+          内容和时间会立刻被接住，并归到对的人名下。
+          <b>认不出是谁说的，程序会停下来问你，不会替你猜。</b>
+        </p>
+        <div class="row">
+          <label class="f" style="margin:0;flex:0 0 auto;min-width:130px">
+            <span>客户端</span>
+            <select id="sc-client">
+              <option value="qq">QQ</option>
+              <option value="wechat">微信</option>
+            </select>
+          </label>
+          <label class="f" style="margin:0;flex:1;min-width:220px">
+            <span>采谁（打一个字就能选库里已有的人，也可以直接填新称呼）</span>
+            <input type="text" id="sc-person" list="sc-persons" placeholder="例：小鹿" />
+            <datalist id="sc-persons"></datalist>
+          </label>
+          <label class="f" style="margin:0;flex:0 0 auto;min-width:210px">
+            <span>复制里没带时间时</span>
+            <select id="sc-time">
+              <option value="assumed">用抓取时刻，标成「推定」</option>
+              <option value="ask">停下来问我</option>
+            </select>
+          </label>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn primary" id="sc-start">开始监听</button>
+          <button class="btn" id="sc-stop">停止</button>
+          <button class="btn ghost sm" id="sc-clear">清理已处理的记录</button>
+          <span id="sc-msg" class="small dim"></span>
+        </div>
+        <div id="sc-hint" style="margin-top:12px"></div>
+        <div id="sc-list" style="margin-top:12px"></div>
+      </div>
+
+      <div class="card">
+        <h3>④ 采集进度 <span class="tag">游标</span></h3>
+        <p class="small muted" style="margin-bottom:10px">
+          下次采集从这里继续。怀疑漏采了就重置一次，下次会重新全量采 —— 已经入库的消息不动。
+        </p>
+        <div class="row" style="margin-bottom:10px">
+          <button class="btn sm" id="cur-load">刷新</button>
+          <span id="cur-msg" class="small dim"></span>
+        </div>
+        <div id="cur-list"><div class="empty-hint">还没有采集过。</div></div>
+      </div>
     </section>
 
     <!-- ============ 通话（规划中） ============ -->
@@ -775,16 +968,340 @@ function busy(btn, on, label) {
   }
 }
 
+// ---------------------------------------------------------------- 模态弹窗
+//
+// 为什么不用 window.confirm / prompt：
+//   1) 删除这种操作要说清「会连带失去什么」，原生弹窗只能塞一行字；
+//   2) 需要一个「读完声明、倒计时结束才能点」的按钮，原生做不到；
+//   3) 原生弹窗在自动化截图里根本不出现，等于没法回归验证。
+// 所以自己实现一套最小的：一个遮罩 + 一个卡片，销毁时把定时器一并清掉。
+
+let _modalHooks = [];
+
+function closeModal() {
+  const mask = document.getElementById("modal-mask");
+  if (mask) mask.remove();
+  const hooks = _modalHooks;
+  _modalHooks = [];
+  for (const fn of hooks) { try { fn(); } catch (e) { /* 清理失败不该影响关闭 */ } }
+}
+
+function openModal({ title, sub = "", body = "", wide = false }) {
+  closeModal();
+  const mask = document.createElement("div");
+  mask.id = "modal-mask";
+  mask.className = "modal-mask";
+  mask.innerHTML = `
+    <div class="modal" role="dialog" aria-modal="true"${wide ? ' style="width:min(680px,100%)"' : ""}>
+      <div class="mhead">
+        <h3>${esc(title)}</h3>
+        ${sub ? `<div class="msub">${esc(sub)}</div>` : ""}
+      </div>
+      <div class="mbody">${body}</div>
+      <div class="mfoot"></div>
+    </div>`;
+  // 只有点在遮罩本身（而不是卡片内部）才关闭
+  mask.addEventListener("mousedown", (e) => { if (e.target === mask) closeModal(); });
+  document.body.appendChild(mask);
+  const card = mask.querySelector(".modal");
+  // 焦点给第一个输入框，键盘用户不用先 Tab 半天
+  const first = card.querySelector("input, textarea, select");
+  if (first) setTimeout(() => first.focus(), 30);
+  return { root: card, body: card.querySelector(".mbody"), foot: card.querySelector(".mfoot") };
+}
+
+function modalButton(label, cls, onClick) {
+  const b = document.createElement("button");
+  b.className = "btn " + cls;
+  b.textContent = label;
+  if (onClick) b.addEventListener("click", onClick);
+  return b;
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (document.getElementById("modal-mask")) closeModal();
+  else closeCtxMenu();
+});
+
+/**
+ * 倒计时确认框：`seconds` 秒之内确认按钮不可点。
+ *
+ * 用于删除这类不可逆操作 —— 不是走形式，是逼着人多看一眼自己删的是什么。
+ * 倒计时期间按钮上直接写秒数，底部进度条同步走，让人知道还要等多久。
+ */
+function confirmWithCountdown({ title, sub = "", body, confirmLabel, seconds = 5, doneNote, onConfirm }) {
+  const h = openModal({ title, sub, body });
+  let left = seconds;
+  let timer = null;
+
+  const note = document.createElement("span");
+  note.className = "mnote";
+  note.textContent = `请先读完上面的声明，${seconds} 秒后才可确认。`;
+
+  const cancel = modalButton("取消", "ghost", () => closeModal());
+  const ok = modalButton(confirmLabel, "danger waiting", null);
+  ok.disabled = true;
+
+  const paint = () => {
+    ok.textContent = left > 0 ? `${confirmLabel}（${left}s）` : confirmLabel;
+    ok.style.setProperty("--wait", `${Math.round(((seconds - left) / seconds) * 100)}%`);
+  };
+  paint();
+  ok.addEventListener("click", async () => {
+    ok.disabled = true;
+    cancel.disabled = true;
+    try {
+      await onConfirm();
+      closeModal();
+    } catch (e) {
+      // 失败时把弹窗留在原地，让用户能重试或取消，而不是「点了一下就没反应了」
+      ok.disabled = false;
+      cancel.disabled = false;
+      note.textContent = "删除失败：" + e.message;
+    }
+  });
+
+  h.foot.append(note, cancel, ok);
+  timer = setInterval(() => {
+    left -= 1;
+    if (left <= 0) {
+      clearInterval(timer);
+      timer = null;
+      ok.disabled = false;
+      ok.classList.remove("waiting");
+      note.textContent = doneNote || "声明已读完，现在可以确认。";
+    }
+    paint();
+  }, 1000);
+  _modalHooks.push(() => { if (timer) clearInterval(timer); });
+  return h;
+}
+
+// ---------------------------------------------------------------- 右键菜单
+
+let _ctxEl = null;
+
+function closeCtxMenu() {
+  if (_ctxEl) { _ctxEl.remove(); _ctxEl = null; }
+}
+
+function openCtxMenu(x, y, items, { title = "" } = {}) {
+  closeCtxMenu();
+  const el = document.createElement("div");
+  el.className = "ctxmenu";
+  if (title) {
+    const t = document.createElement("div");
+    t.className = "ctitle";
+    t.textContent = title;
+    el.appendChild(t);
+  }
+  for (const it of items) {
+    if (it.sep) {
+      const s = document.createElement("div");
+      s.className = "csep";
+      el.appendChild(s);
+      continue;
+    }
+    const b = document.createElement("button");
+    b.textContent = it.label;
+    if (it.danger) b.className = "danger";
+    b.addEventListener("click", () => { closeCtxMenu(); it.run(); });
+    el.appendChild(b);
+  }
+  // 先放到左上角量一次尺寸，再按视口边缘翻转 —— 否则贴近右侧/底部时会被裁掉
+  el.style.left = "0px";
+  el.style.top = "0px";
+  document.body.appendChild(el);
+  const r = el.getBoundingClientRect();
+  el.style.left = Math.max(8, Math.min(x, window.innerWidth - r.width - 8)) + "px";
+  el.style.top = Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) + "px";
+  _ctxEl = el;
+}
+
+document.addEventListener("mousedown", (e) => {
+  if (_ctxEl && !_ctxEl.contains(e.target)) closeCtxMenu();
+});
+window.addEventListener("blur", closeCtxMenu);
+window.addEventListener("resize", closeCtxMenu);
+document.addEventListener("scroll", closeCtxMenu, true);
+
+// ---------------------------------------------------------------- 会话操作
+//
+// 会话的「设置」和「删除」都从左侧列表的右键菜单进 —— 这是聊天类软件的肌肉记忆。
+// 记忆页那几个按钮保留（那里也能改、也能删），两处走的是同一套实现。
+
+function chatPlatformLabel(platform) {
+  return ({ qq: "QQ", wechat: "微信", generic: "通用" })[platform] || (platform || "未知");
+}
+
+/** 改会话名 / 改双方称呼 / 重新判定「哪边是我」。 */
+function openChatSettingsDialog(chat) {
+  const h = openModal({
+    title: "会话设置",
+    sub: `ID：${chat.id} · ${chatPlatformLabel(chat.platform)} · ${chat.message_count} 条消息`,
+    body: `
+      <div class="frow"><span>会话名称</span>
+        <input type="text" id="cs-name" value="${esc(chat.name)}" placeholder="列表里显示的名字" /></div>
+      <div class="frow"><span>对方称呼</span>
+        <input type="text" id="cs-peer" value="${esc(chat.peer_name)}" placeholder="不知道就留空" /></div>
+      <div class="frow"><span>我的称呼</span>
+        <input type="text" id="cs-me" value="${esc(chat.me_name)}" placeholder="不知道就留空" /></div>
+      <div class="frow"><span>我可能用的昵称</span>
+        <input type="text" id="cs-me-names" value="${esc(chat.me_name)}" placeholder="多个用逗号分隔" /></div>
+      <div class="fhint">
+        最后一项是<b>重新判定角色</b>用的：填上你在记录里用过的所有昵称（比如「我, 小明, 阿明」），
+        系统会把匹配到的消息改判成「我」说的，其余归给对方。<b>只在不填时不动</b>；
+        一次纠正会覆盖整条会话 —— 导完先看一眼「记忆」页第一条消息的归属对不对。
+      </div>`,
+  });
+
+  const note = document.createElement("span");
+  note.className = "mnote";
+  h.foot.append(
+    note,
+    modalButton("取消", "ghost", () => closeModal()),
+    modalButton("保存", "primary", async (e) => {
+      const btn = e.currentTarget;
+      const name = h.root.querySelector("#cs-name").value.trim();
+      if (!name) { note.textContent = "会话名称不能为空。"; return; }
+      busy(btn, true, "保存中…");
+      try {
+        const r = await api(`/api/chats/${encodeURIComponent(chat.id)}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            name,
+            peer_name: h.root.querySelector("#cs-peer").value.trim(),
+            me_name: h.root.querySelector("#cs-me").value.trim(),
+            me_names: h.root.querySelector("#cs-me-names").value.trim(),
+          }),
+        });
+        closeModal();
+        if (r.roles_changed) {
+          alert(`已保存。有 ${r.roles_changed} 条消息的角色被重新判定。\n记忆页的「对方/我」信息已刷新。`);
+        }
+        await loadChats();
+        loadHealth();
+      } catch (err) {
+        busy(btn, false);
+        note.textContent = err.message;
+      }
+    }),
+  );
+}
+
+/** 删除会话：先摊开「会失去什么」，再倒计时够久了才允许点。 */
+async function openChatDeleteDialog(chat) {
+  // 事实条数要单独问一次 —— 它不在会话列表里，而「会丢掉几条记忆」恰恰是关键信息
+  let facts = null;
+  try {
+    const rows = await api(`/api/chats/${encodeURIComponent(chat.id)}/facts`);
+    facts = Array.isArray(rows) ? rows.length : null;
+  } catch (e) { facts = null; }
+
+  const factsLine = facts === null
+    ? `<li>抽取出来的全部事实（本条会话下的事实会一并删除）</li>`
+    : `<li>抽取出来的 <span class="dl">${facts}</span> 条事实</li>`;
+
+  confirmWithCountdown({
+    title: "删除会话前请确认",
+    sub: `${chat.name} · ${chatPlatformLabel(chat.platform)}`,
+    confirmLabel: "我确认，删除",
+    seconds: 6,
+    doneNote: "声明已读完，现在可以确认删除。",
+    body: `
+      <div class="declare">
+        <div class="dt">这个操作不可撤销，删除后无法恢复。</div>
+        下列内容会<b>一起永久消失</b>：
+        <ul>
+          <li><span class="dl">${chat.message_count}</span> 条聊天消息</li>
+          ${factsLine}
+          <li>已经建好的向量索引（<span class="dl">${chat.indexed}</span> 条）</li>
+          <li>这份记录推导出的<b>人物画像</b>与会话摘要</li>
+        </ul>
+      </div>
+      <div class="fhint" style="margin-top:12px">
+        导入的原始文件不受影响，随时可以重新导入。但重新导入<b>不会</b>恢复人工改过的称呼、
+        校订过的事实 —— 那些是额外劳动。如果只是想腾出列表位置，先点「导出 JSON」留一份。
+      </div>`,
+    onConfirm: async () => {
+      await api(`/api/chats/${encodeURIComponent(chat.id)}`, { method: "DELETE" });
+      if (state.chatId === chat.id) state.chatId = null;
+      await loadChats();
+      loadHealth();
+    },
+  });
+}
+
+/** 既给记忆页的按钮用，也给右键菜单用 —— 一处实现，两处入口。 */
+async function exportChat(chatId = state.chatId, msgEl = "#mem-msg") {
+  if (!chatId) return;
+  try {
+    const data = await api(`/api/chats/${encodeURIComponent(chatId)}/export`);
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `wingman-${chatId}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (e) { toast(msgEl, e.message, "err"); }
+}
+
+/** 只改名字的轻量入口 —— 右键菜单里最常点的就是它。 */
+function openRenameDialog(chat) {
+  const h = openModal({
+    title: "重命名会话",
+    sub: `ID：${chat.id}`,
+    body: `<div class="frow"><span>会话名称</span>
+             <input type="text" id="rn-name" value="${esc(chat.name)}" /></div>
+           <div class="fhint">只改列表里显示的名字，不动消息、事实与画像。
+             想连「对方 / 我」的称呼一起改，用「会话设置…」。</div>`,
+  });
+  const note = document.createElement("span");
+  note.className = "mnote";
+  const save = async () => {
+    const name = h.root.querySelector("#rn-name").value.trim();
+    if (!name) { note.textContent = "名称不能为空。"; return; }
+    const btn = h.foot.querySelector(".btn.primary");
+    busy(btn, true, "保存中…");
+    try {
+      await api(`/api/chats/${encodeURIComponent(chat.id)}`, {
+        method: "PATCH", body: JSON.stringify({ name }),
+      });
+      closeModal();
+      await loadChats();
+    } catch (e) { busy(btn, false); note.textContent = e.message; }
+  };
+  h.root.querySelector("#rn-name").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") save();
+  });
+  h.foot.append(note, modalButton("取消", "ghost", () => closeModal()),
+                modalButton("保存", "primary", save));
+}
+
+/** 会话右键菜单。列表项和记忆页都复用它。 */
+function openChatMenu(x, y, chat) {
+  openCtxMenu(x, y, [
+    { label: "打开", run: () => { selectChat(chat.id); goView("memory"); } },
+    { sep: true },
+    { label: "重命名…", run: () => openRenameDialog(chat) },
+    { label: "会话设置…", run: () => openChatSettingsDialog(chat) },
+    { label: "导出 JSON", run: () => exportChat(chat.id) },
+    { sep: true },
+    { label: "删除会话…", danger: true, run: () => openChatDeleteDialog(chat) },
+  ], { title: `${chat.name}（${chat.message_count} 条）` });
+}
+
 // ================================================================ 导航
 
-$$("#nav button").forEach(b => b.addEventListener("click", () => {
-  $$("#nav button").forEach(x => x.classList.toggle("on", x === b));
-  $$(".view").forEach(v => v.classList.toggle("on", v.id === "view-" + b.dataset.v));
-}));
+$$("#nav button").forEach(b => b.addEventListener("click", () => goView(b.dataset.v)));
 
 function goView(name) {
   $$("#nav button").forEach(x => x.classList.toggle("on", x.dataset.v === name));
   $$(".view").forEach(v => v.classList.toggle("on", v.id === "view-" + name));
+  // 采集页进入时才拉数据、开轮询；离开就停 —— 一直轮询一个看不见的页面纯属浪费
+  if (name === "collect") collectOnEnter();
+  else semiPollStop();
 }
 
 // ================================================================ 健康检查
@@ -813,12 +1330,29 @@ async function loadChats() {
     box.innerHTML = `<div class="empty-hint">还没有导入任何聊天记录</div>`;
   } else {
     box.innerHTML = state.chats.map(c => `
-      <div class="chatitem ${c.id === state.chatId ? "on" : ""}" data-id="${esc(c.id)}">
+      <div class="chatitem ${c.id === state.chatId ? "on" : ""}" data-id="${esc(c.id)}" tabindex="0"
+           title="${esc(c.name)} · ${c.message_count} 条（右键可重命名 / 设置 / 删除）">
         <span class="nm">${esc(c.name)}</span>
         <span class="ct">${c.message_count}</span>
       </div>`).join("");
-    box.querySelectorAll(".chatitem").forEach(el =>
-      el.addEventListener("click", () => selectChat(el.dataset.id)));
+    box.querySelectorAll(".chatitem").forEach(el => {
+      el.addEventListener("click", () => selectChat(el.dataset.id));
+      // 右键菜单：这是会话设置的唯一入口，所以也要能用键盘唤出来（Shift+F10 / 菜单键）
+      el.addEventListener("contextmenu", (e) => {
+        const chat = state.chats.find(c => c.id === el.dataset.id);
+        if (!chat) return;
+        e.preventDefault();
+        openChatMenu(e.clientX, e.clientY, chat);
+      });
+      el.addEventListener("keydown", (e) => {
+        if (e.key !== "ContextMenu" && !(e.shiftKey && e.key === "F10")) return;
+        const chat = state.chats.find(c => c.id === el.dataset.id);
+        if (!chat) return;
+        e.preventDefault();
+        const r = el.getBoundingClientRect();
+        openChatMenu(r.left + 12, r.bottom - 4, chat);
+      });
+    });
   }
 
   if (state.chatId && !state.chats.some(c => c.id === state.chatId)) state.chatId = null;
@@ -1113,26 +1647,13 @@ $("#mem-profile").addEventListener("click", async () => {
   finally { busy("#mem-profile", false); }
 });
 
-$("#mem-export").addEventListener("click", async () => {
-  try {
-    const data = await api(`/api/chats/${encodeURIComponent(state.chatId)}/export`);
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `wingman-${state.chatId}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  } catch (e) { toast("#mem-msg", e.message, "err"); }
-});
+$("#mem-export").addEventListener("click", () => exportChat());
 
-$("#mem-del").addEventListener("click", async () => {
-  if (!confirm("确定删除这条会话及其全部消息？不可恢复。")) return;
-  try {
-    await api(`/api/chats/${encodeURIComponent(state.chatId)}`, { method: "DELETE" });
-    state.chatId = null;
-    await loadChats();
-    loadHealth();
-  } catch (e) { toast("#mem-msg", e.message, "err"); }
+// 删除走统一的「声明 + 倒计时」弹窗（与左侧列表右键菜单同一个实现）
+$("#mem-del").addEventListener("click", () => {
+  const chat = state.chats.find(c => c.id === state.chatId);
+  if (!chat) { toast("#mem-msg", "先选一个会话", "err"); return; }
+  openChatDeleteDialog(chat);
 });
 
 $("#p-save").addEventListener("click", async () => {
@@ -1633,6 +2154,568 @@ $$("[data-preset]").forEach(btn => btn.addEventListener("click", () => {
   checkRetiredModel();
   toast("#s-llm-msg", "已填入预设，别忘了补 API Key", "ok");
 }));
+
+// ================================================================ 采集
+//
+// 这一页有四个决定它是「能用」还是「看着像能用」的地方：
+//
+//   1. **版本指引在程序里，不在文档里。** 文档不会知道用户装的是哪个版本，
+//      所以支持矩阵是接口返回的数据（来自实测），前端只负责把它和「本机实际
+//      版本」放一起，给出一句照做的事。写死在前端等于下次改版本要改两处。
+//   2. **写库前必须能「先看看」。** 采集是不可逆地把东西塞进记忆，
+//      所以「预览」和「采集」是两个按钮，不是一个。
+//   3. **半自动的待确认条目上不能有默认值。** 归属、时间都是空白开着的，
+//      用户不点就不落库 —— 界面上也不能有「看起来已经选好了」的样子。
+//   4. **轮询不重绘没变化的内容。** 待确认条目上有正在填的时间输入框，
+//      每 1.2 秒重绘一次会把人家正在打的字抹掉。所以先比签名再决定画不画。
+
+const CL = { qq: "QQ", wechat: "微信 4.x", wechat3: "微信 3.x（旧版）" };
+const VERDICT = {
+  supported:     { cls: "ok",   text: "可以自动采集" },
+  untested:      { cls: "warn", text: "在支持范围内，但这个具体版本我没实测过" },
+  unsupported:   { cls: "warn", text: "不在已验证的版本范围内" },
+  not_installed: { cls: "bad",  text: "没找到（没装或读不到）" },
+  unknown:       { cls: "",     text: "状态未知" },
+};
+
+const cs = {
+  clients: null, matrix: null, persons: [], report: null,
+  semi: null, semiSig: "", decisions: {}, rest: {}, timer: null,
+};
+
+const cut = (s, n = 220) => { const t = String(s || ""); return t.length > n ? t.slice(0, n) + "…" : t; };
+const baseName = (p) => String(p || "").split(/[\\/]/).pop();
+function fmtSize(n) {
+  n = Number(n || 0);
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+  return (n / 1024 / 1024).toFixed(1) + " MB";
+}
+
+// ---------------------------------------------------------------- ① 版本
+
+async function loadClients() {
+  const b = $("#cl-check");
+  busy(b, true, "检查中…");
+  $("#cl-msg").textContent = "正在读本机实际装的版本和数据库位置，第一次要几秒…";
+  try {
+    const d = await api("/api/collect/clients");
+    cs.clients = d.clients || [];
+    cs.matrix = d.matrix || [];
+    $("#cl-msg").textContent = "";
+    paintClients(d.summary || {});
+  } catch (e) {
+    toast("#cl-msg", e.message, "err");
+  } finally {
+    busy(b, false);
+  }
+}
+
+function paintClients(summary) {
+  const ready = summary.auto_ready || [];
+  $("#cl-tag").textContent = ready.length
+    ? `可以自动采：${ready.map(k => CL[k] || k).join("、")}`
+    : "自动采集暂时不可用 —— 用下面的半自动";
+  $("#cl-list").innerHTML = (cs.clients || []).map(c => {
+    const v = VERDICT[c.verdict] || VERDICT.unknown;
+    const accts = (c.accounts || []).map(a => `
+      <div class="small dim" style="margin-top:6px">
+        账号 <span class="mono">${esc(a.account)}</span> ·
+        ${a.message_db_count} 个消息库（${fmtSize(a.database_bytes)}）${
+          a.unmerged_wal_bytes ? `，另有未合并的 WAL ${fmtSize(a.unmerged_wal_bytes)}` : ""}${
+          a.has_messages ? "" : " · <b>还没有消息库：先在客户端里点开要采的会话</b>"}
+      </div>`).join("");
+    const roots = (c.roots || []).map(r =>
+      `<div class="small dim">数据目录：<span class="mono">${esc(r)}</span></div>`).join("");
+    return `<div style="padding:14px 0;border-top:1px solid var(--border)">
+      <div class="row" style="gap:8px">
+        <b>${esc(c.name)}</b>
+        <span class="pill ${v.cls}">${esc(v.text)}</span>
+        ${c.version ? `<span class="mono dim">你装的是 ${esc(c.version)}</span>` : ""}
+        ${c.running ? `<span class="pill ok">正在运行</span>` : `<span class="pill">没在运行</span>`}
+      </div>
+      <div class="small" style="margin-top:6px">${esc(c.headline || "")}</div>
+      <ul class="act">${(c.actions || []).map(a => `<li>${esc(a)}</li>`).join("")}</ul>
+      ${accts}${roots}
+      ${(c.problems || []).length ? `<ul class="act warn">${c.problems.map(p => `<li>${esc(p)}</li>`).join("")}</ul>` : ""}
+      ${(c.risks || []).length ? `<div class="small dim" style="margin-top:6px">注意：${esc(c.risks[0])}</div>` : ""}
+    </div>`;
+  }).join("") + `
+    <div class="small dim" style="margin-top:12px">
+      判断过程没有猜：上面的版本是从 exe 的版本信息里读出来的，
+      「有没有消息库」是实际扫数据目录得到的。
+    </div>`;
+}
+
+function paintMatrix() {
+  const rows = cs.matrix || [];
+  if (!rows.length) return;
+  $("#cl-tag").textContent = "内置版本矩阵";
+  $("#cl-list").innerHTML = `
+    <div class="small muted" style="margin-bottom:10px">
+      这是程序内置的版本矩阵（结论全部来自实测）。点「检查本机版本」会拿你的实际版本对照它。
+    </div>
+    <table class="mat">
+      <thead><tr><th>客户端</th><th>支持范围</th><th>我实测过的版本</th><th>采之前要做什么</th></tr></thead>
+      <tbody>${rows.map(r => `<tr>
+        <td><b>${esc(r.name)}</b>
+          <div class="dim"><code>${esc(r.client)}</code> · 自动读取：${esc(r.can_auto_read)}</div></td>
+        <td>${esc(r.range)}</td>
+        <td>${esc(r.tested)}</td>
+        <td>
+          <div class="dim">${esc(r.layout)}</div>
+          <ul class="act">${(r.guide || []).map(g => `<li>${esc(g)}</li>`).join("")}</ul>
+          <div class="dim">账号目录形如 ${esc(r.account_hint)}</div>
+        </td></tr>`).join("")}</tbody>
+    </table>`;
+}
+
+// ---------------------------------------------------------------- ② 自动
+
+function paintReport(rep) {
+  cs.report = rep;
+  const box = $("#ac-report");
+  if (!rep) { box.innerHTML = ""; return; }
+  const ok = rep.ok;
+  const head = `<div style="margin-top:14px;padding:12px 14px;border-radius:var(--r-sm);
+      border:1px solid ${ok ? "var(--ok-line)" : "var(--warn-line)"};
+      background:${ok ? "var(--ok-bg)" : "var(--warn-bg)"}">
+      <span class="pill ${ok ? "ok" : "warn"}">${rep.dry_run ? "预览" : "采集"}</span>
+      <span class="small" style="margin-left:6px">${esc(rep.describe || "")}</span>
+    </div>`;
+  const probs = (rep.problems || []).length ? `
+    <div style="margin-top:10px"><b class="small" style="color:var(--danger)">没跑通的地方</b>
+      <ul class="act warn">${rep.problems.map(p => `<li>${esc(p)}</li>`).join("")}</ul></div>` : "";
+  const steps = (rep.next_steps || []).length ? `
+    <div style="margin-top:10px"><b class="small">下一步可以这样做</b>
+      <ul class="act">${rep.next_steps.map(p => `<li>${esc(p)}</li>`).join("")}</ul></div>` : "";
+  const notes = (rep.notes || []).length ? `
+    <div class="small" style="margin-top:10px;color:var(--warn)">
+      ${rep.notes.map(n => `<div>注意：${esc(n)}</div>`).join("")}</div>` : "";
+  const dbs = (rep.dbs || []).map(d => {
+    const chats = (d.chats || []).length ? `
+      <table class="mat" style="margin-top:8px">
+        <thead><tr><th>会话</th><th>读到</th><th>写入</th><th>归到的人</th><th>时间范围</th></tr></thead>
+        <tbody>${d.chats.map(c => `<tr>
+          <td>${esc(c.name || c.peer_key)}</td>
+          <td>${c.read}</td><td>${c.inserted}</td>
+          <td><span class="mono">${esc(c.person_id || "—")}</span>${
+            c.person_created ? ' <span class="pill info">新建</span>' : ""}</td>
+          <td class="dim">${esc((c.first_ts || "").slice(0, 16))} ~ ${esc((c.last_ts || "").slice(0, 16))}</td>
+        </tr>`).join("")}</tbody>
+      </table>` : "";
+    return `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
+      <div class="row" style="gap:8px">
+        <span class="mono">${esc(baseName(d.db))}</span>
+        <span class="pill ${d.ok ? "ok" : "bad"}">${d.ok ? "读通了" : "没读通"}</span>
+        <span class="small dim">账号 ${esc(d.account || "—")}</span>
+      </div>
+      <div class="small muted">密钥：${esc(d.key_method || "未取得")}${
+        d.key_detail ? " · " + esc(cut(d.key_detail, 160)) : ""}</div>
+      ${d.decrypt_note ? `<div class="small muted">解密：${esc(cut(d.decrypt_note, 160))}</div>` : ""}
+      ${d.mapping_note ? `<div class="small muted">认列：${esc(cut(d.mapping_note, 160))}</div>` : ""}
+      ${(d.problems || []).length ? `<ul class="act warn">${
+        d.problems.map(p => `<li>${esc(p)}</li>`).join("")}</ul>` : ""}
+      ${chats}</div>`;
+  }).join("");
+  box.innerHTML = head + probs + steps + notes + dbs;
+}
+
+async function collectPreview() {
+  const b = $("#ac-preview");
+  busy(b, true, "预演中…");
+  toast("#ac-msg", "完整走一遍链路但不写库，稍等…");
+  try {
+    const rep = await api("/api/collect/preview", {
+      method: "POST",
+      body: JSON.stringify({
+        client: $("#ac-client").value,
+        key: $("#ac-key").value.trim(),
+        max_messages: 500,
+        dry_run: true,
+      }),
+    });
+    paintReport(rep);
+    toast("#ac-msg", rep.ok ? "预览完成，看看报告" : "预览没跑通，看下面的原因",
+          rep.ok ? "ok" : "err");
+  } catch (e) {
+    toast("#ac-msg", e.message, "err");
+  } finally {
+    busy(b, false);
+  }
+}
+
+async function collectRun() {
+  const b = $("#ac-run");
+  busy(b, true, "采集中…");
+  toast("#ac-msg", "会把读到的消息写进库里，稍等…");
+  try {
+    const rep = await api("/api/collect/run", {
+      method: "POST",
+      body: JSON.stringify({ client: $("#ac-client").value, key: $("#ac-key").value.trim() }),
+    });
+    paintReport(rep);
+    toast("#ac-msg", `写入 ${rep.inserted} 条`, rep.inserted ? "ok" : "err");
+    if (rep.inserted) { await loadChats(); loadCursors(); }
+  } catch (e) {
+    toast("#ac-msg", e.message, "err");
+  } finally {
+    busy(b, false);
+  }
+}
+
+async function collectCheckKey() {
+  const b = $("#ac-check");
+  const key = $("#ac-key").value.trim();
+  if (!key) { toast("#ac-msg", "先把密钥粘进来（64 位十六进制）。", "err"); return; }
+  busy(b, true, "校验中…");
+  try {
+    const r = await api("/api/collect/key/check",
+      { method: "POST", body: JSON.stringify({ client: $("#ac-client").value, key }) });
+    toast("#ac-msg", r.detail, r.ok && r.verified ? "ok" : "err");
+  } catch (e) {
+    toast("#ac-msg", e.message, "err");
+  } finally {
+    busy(b, false);
+  }
+}
+
+async function collectScanKey() {
+  const b = $("#ac-scan");
+  busy(b, true, "搜内存中…");
+  toast("#ac-msg", "在客户端进程内存里找密钥，最多 60 秒…");
+  try {
+    const r = await api("/api/collect/key/scan",
+      { method: "POST", body: JSON.stringify({ client: $("#ac-client").value, budget_s: 60 }) });
+    toast("#ac-msg", cut(r.detail, 200), r.ok ? "ok" : "err");
+    if (r.ok && r.key) $("#ac-key").value = r.key;
+  } catch (e) {
+    toast("#ac-msg", e.message, "err");
+  } finally {
+    busy(b, false);
+  }
+}
+
+// ---------------------------------------------------------------- ③ 半自动
+
+async function loadPersons() {
+  try {
+    cs.persons = await api("/api/persons");
+  } catch { cs.persons = []; }
+  const pick = (p) => p.name + (p.aliases?.length ? `（${p.aliases.join("、")}）` : "");
+  $("#sc-persons").innerHTML = cs.persons.map(p =>
+    `<option value="${esc(p.name)}">${esc(pick(p))} · ${p.message_count} 条</option>`).join("");
+}
+
+async function semiStart() {
+  const name = $("#sc-person").value.trim();
+  if (!name) {
+    toast("#sc-msg", "先填「采谁」—— 不指定的话抓到的消息没有归属，只能挂在那里。", "err");
+    return;
+  }
+  const hit = cs.persons.find(p => p.name === name || (p.aliases || []).includes(name));
+  const b = $("#sc-start");
+  busy(b, true, "开启中…");
+  try {
+    await api("/api/collect/semi/start", {
+      method: "POST",
+      body: JSON.stringify({
+        client: $("#sc-client").value,
+        peer_name: name,
+        person_id: hit ? hit.id : "",
+        missing_time: $("#sc-time").value,
+      }),
+    });
+    toast("#sc-msg", hit
+      ? `已开启，记录会归到已有的「${hit.name}」名下（不会再建一个同名的人）`
+      : `已开启，会为「${name}」新建一个人`, "ok");
+    cs.semiSig = "";
+    await semiTick();
+    semiPollStart();
+  } catch (e) {
+    toast("#sc-msg", e.message, "err");
+  } finally {
+    busy(b, false);
+  }
+}
+
+async function semiStop() {
+  try {
+    await api("/api/collect/semi/stop", { method: "POST" });
+    cs.semiSig = "";
+    await semiTick();
+    toast("#sc-msg", "已停止监听", "ok");
+  } catch (e) {
+    toast("#sc-msg", e.message, "err");
+  }
+}
+
+async function semiClear() {
+  try {
+    const r = await api("/api/collect/semi/clear", { method: "POST" });
+    cs.semiSig = "";
+    await semiTick();
+    toast("#sc-msg", r.removed ? `清理了 ${r.removed} 条已处理的记录` : "没有可清理的", "ok");
+  } catch (e) {
+    toast("#sc-msg", e.message, "err");
+  }
+}
+
+function semiPollStart() {
+  if (cs.timer) return;
+  cs.timer = setInterval(() => {
+    if (!$("#view-collect").classList.contains("on")) return;
+    semiTick().catch(() => {});
+  }, 1200);
+}
+
+function semiPollStop() {
+  if (cs.timer) { clearInterval(cs.timer); cs.timer = null; }
+}
+
+async function semiTick() {
+  const snap = await api("/api/collect/semi/poll");
+  paintSemi(snap);
+}
+
+function paintSemi(snap) {
+  cs.semi = snap;
+  const st = snap.state || {};
+  $("#sc-hint").innerHTML = st.active
+    ? `<span class="pill ok">监听中</span>
+       <span class="small muted" style="margin-left:6px">${esc(st.poll_hint || "")}</span>
+       <div class="small dim" style="margin-top:6px">已写入 <b>${st.committed || 0}</b> 条${
+         st.skipped_duplicate ? `，跳过重复 ${st.skipped_duplicate} 条` : ""}${
+         st.last_error ? ` · <span style="color:var(--danger)">${esc(st.last_error)}</span>` : ""}</div>`
+    : `<span class="pill">未开启</span>
+       <span class="small muted" style="margin-left:6px">${esc(st.poll_hint || "")}</span>`;
+
+  const all = snap.captures || [];
+  const sig = JSON.stringify(all.map(c => [c.id, c.status, c.written, (c.items || []).length]));
+  if (sig === cs.semiSig) return;   // 没变就别重绘：输入框里可能正有字
+  cs.semiSig = sig;
+
+  const pend = all.filter(c => c.status === "pending");
+  $("#nav-collect").classList.toggle("hidden", !pend.length);
+  const box = $("#sc-list");
+  if (!all.length) {
+    box.innerHTML = `<div class="empty-hint">还没抓到内容。去客户端里选中消息按 Ctrl+C 试试。</div>`;
+    return;
+  }
+  box.innerHTML = pend.map(capHtml)
+    .concat(all.filter(c => c.status !== "pending").slice(-6).reverse().map(capHtml))
+    .join("");
+}
+
+function capHtml(c) {
+  const pending = c.status === "pending";
+  const cls = pending ? "pending" : (c.status === "committed" ? "done" : "");
+  const pill = pending ? `<span class="pill warn">等你确认</span>`
+    : c.status === "committed" ? `<span class="pill ok">已写入 ${c.written} 条</span>`
+      : `<span class="pill">已丢弃</span>`;
+  const items = (c.items || []).map(it => {
+    const d = (cs.decisions[c.id] || {})[it.id] || {};
+    const role = d.role || it.role || "";
+    const ts = d.ts || it.ts || "";
+    const who = it.sender || (role === "me" ? "我" : "");
+    const seg = pending
+      ? `<div class="seg" data-cap="${esc(c.id)}" data-item="${esc(it.id)}">
+           <button data-role="me" class="${role === "me" ? "on" : ""}">我</button>
+           <button data-role="peer" class="${role === "peer" ? "on" : ""}">对方</button>
+         </div>`
+      : `<div class="small">${esc(role === "me" ? "我" : (role === "peer" ? (who || "对方") : "—"))}</div>`;
+    const time = pending
+      ? `<div class="row" style="gap:6px;margin-bottom:6px">
+           <input type="text" data-time="${esc(c.id)}|${esc(it.id)}" style="max-width:190px"
+             placeholder="2026-09-28 21:03:15" value="${esc(ts.replace("T", " ").slice(0, 19))}" />
+           ${it.ts_source === "assumed" ? '<span class="pill warn">时间推定</span>' : ""}
+           ${it.ts_source === "clipboard" ? '<span class="pill ok">时间来自剪贴板</span>' : ""}
+           ${it.needs_time ? `<button class="btn sm ghost" data-usecap="${esc(c.id)}|${esc(it.id)}">用抓取时刻</button>` : ""}
+           ${it.needs_time ? `<span class="small" style="color:var(--warn)">这条没带时间，要你定</span>` : ""}
+         </div>`
+      : `<div class="small dim">${esc(ts.replace("T", " ").slice(0, 19) || "（无时间）")}${
+          it.ts_source === "assumed" ? ' <span class="pill warn">时间推定</span>' : ""}${
+          it.ts_source === "manual" ? ' <span class="pill info">手工填的</span>' : ""}</div>`;
+    return `<div class="it">${seg}
+      <div>${time}<div class="tx">${esc(it.text)}</div>
+      ${!pending && who ? `<div class="small dim">${esc(who)}</div>` : ""}</div></div>`;
+  }).join("");
+  const foot = pending ? `
+    <div class="row" style="margin-top:10px">
+      <select data-rest="${esc(c.id)}" style="max-width:230px">
+        <option value="">只按上面选的来</option>
+        <option value="peer">剩下的都算对方说的</option>
+        <option value="me">剩下的都算我说的</option>
+      </select>
+      <button class="btn primary sm" data-commit="${esc(c.id)}">确认写入</button>
+      <button class="btn danger sm" data-discard="${esc(c.id)}">丢弃</button>
+      <span class="small dim">${esc(c.note || "")}</span>
+    </div>` : `
+    <div class="small dim" style="margin-top:8px">${esc(c.note || "")}${
+      (c.problems || []).length ? " · " + esc(c.problems.join("；")) : ""}</div>`;
+  return `<div class="scap ${cls}">
+    <div class="hd">${pill}
+      <span class="small dim">${esc(c.at_text || "")} 抓到</span>
+      ${pending ? `<span class="small dim">${(c.items || []).length} 条待确认</span>` : ""}
+    </div>
+    ${items}${foot}</div>`;
+}
+
+async function semiCommit(capId) {
+  const dec = cs.decisions[capId] || {};
+  const items = {};
+  for (const [id, d] of Object.entries(dec)) {
+    const patch = {};
+    if (d.role) patch.role = d.role;
+    if (d.ts) patch.ts = d.ts;
+    if (d.use_capture_time) patch.use_capture_time = true;
+    if (Object.keys(patch).length) items[id] = patch;
+  }
+  try {
+    const r = await api("/api/collect/semi/commit", {
+      method: "POST",
+      body: JSON.stringify({
+        capture_id: capId, items, apply_to_rest: cs.rest[capId] || "",
+      }),
+    });
+    const cap = r.capture || {};
+    if (r.ok) {
+      toast("#sc-msg", `已写入 ${cap.written || 0} 条`, "ok");
+      delete cs.decisions[capId]; delete cs.rest[capId];
+      cs.semiSig = "";
+      await semiTick();
+      await loadChats();
+    } else {
+      // 没写进去：把原因原样告诉用户，别让他猜为什么点了没反应
+      toast("#sc-msg", (cap.problems || []).join("；") || "还有条目没说清，没有写入。", "err");
+      cs.semiSig = "";
+      await semiTick();
+    }
+  } catch (e) {
+    toast("#sc-msg", e.message, "err");
+  }
+}
+
+async function semiDiscard(capId) {
+  try {
+    await api("/api/collect/semi/discard", {
+      method: "POST", body: JSON.stringify({ capture_id: capId, reason: "用户在界面上丢弃" }),
+    });
+    cs.semiSig = "";
+    await semiTick();
+    toast("#sc-msg", "已丢弃这一条", "ok");
+  } catch (e) {
+    toast("#sc-msg", e.message, "err");
+  }
+}
+
+function bindCollectEvents() {
+  $("#cl-check").addEventListener("click", loadClients);
+  $("#cl-matrix").addEventListener("click", paintMatrix);
+  $("#ac-preview").addEventListener("click", collectPreview);
+  $("#ac-run").addEventListener("click", collectRun);
+  $("#ac-check").addEventListener("click", collectCheckKey);
+  $("#ac-scan").addEventListener("click", collectScanKey);
+  $("#sc-start").addEventListener("click", semiStart);
+  $("#sc-stop").addEventListener("click", semiStop);
+  $("#sc-clear").addEventListener("click", semiClear);
+  $("#cur-load").addEventListener("click", loadCursors);
+
+  // 待确认条目的交互走事件委托：内容会随轮询重绘，逐个绑会丢监听
+  $("#sc-list").addEventListener("click", (e) => {
+    const roleBtn = e.target.closest(".seg button");
+    if (roleBtn) {
+      const seg = roleBtn.closest(".seg");
+      const cap = seg.dataset.cap, item = seg.dataset.item;
+      const cur = cs.decisions[cap] || (cs.decisions[cap] = {});
+      const d = cur[item] || (cur[item] = {});
+      d.role = roleBtn.dataset.role;
+      seg.querySelectorAll("button").forEach(b => b.classList.toggle("on", b === roleBtn));
+      return;
+    }
+    const useCap = e.target.closest("[data-usecap]");
+    if (useCap) {
+      const [cap, item] = useCap.dataset.usecap.split("|");
+      const cur = cs.decisions[cap] || (cs.decisions[cap] = {});
+      const d = cur[item] || (cur[item] = {});
+      d.use_capture_time = true;
+      useCap.classList.add("on");
+      useCap.textContent = "已选：用抓取时刻";
+      toast("#sc-msg", "这条会用抓取时刻，并标成「推定」", "ok");
+      return;
+    }
+    const commit = e.target.closest("[data-commit]");
+    if (commit) return void semiCommit(commit.dataset.commit);
+    const discard = e.target.closest("[data-discard]");
+    if (discard) return void semiDiscard(discard.dataset.discard);
+  });
+  $("#sc-list").addEventListener("change", (e) => {
+    const rest = e.target.closest("[data-rest]");
+    if (rest) cs.rest[rest.dataset.rest] = rest.value;
+  });
+  $("#sc-list").addEventListener("input", (e) => {
+    const t = e.target.closest("[data-time]");
+    if (!t) return;
+    const [cap, item] = t.dataset.time.split("|");
+    const cur = cs.decisions[cap] || (cs.decisions[cap] = {});
+    const d = cur[item] || (cur[item] = {});
+    const v = t.value.trim();
+    // 「2026-09-28 21:03:15」这种写法人最顺手，接口要 ISO，在这里转一次
+    d.ts = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(v) ? v.replace(" ", "T") : v;
+  });
+
+  // 游标重置
+  $("#cur-list").addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-cur]");
+    if (!btn) return;
+    const [platform, , peer_key] = btn.dataset.cur.split("|");
+    busy(btn, true, "…");
+    try {
+      const r = await api("/api/collect/cursors", {
+        method: "DELETE",
+        body: JSON.stringify({ platform, peer_key }),
+      });
+      toast("#cur-msg", r.detail || "已重置", r.removed ? "ok" : "err");
+      await loadCursors();
+    } catch (err) {
+      toast("#cur-msg", err.message, "err");
+      busy(btn, false);
+    }
+  });
+}
+
+async function loadCursors() {
+  try {
+    const d = await api("/api/collect/cursors");
+    const rows = d.cursors || [];
+    if (!rows.length) {
+      $("#cur-list").innerHTML = `<div class="empty-hint">还没有采集过。</div>`;
+      return;
+    }
+    $("#cur-list").innerHTML = `<table class="mat">
+      <thead><tr><th>客户端</th><th>账号</th><th>对方</th><th>上次采到</th><th>状态</th><th></th></tr></thead>
+      <tbody>${rows.map(c => `<tr>
+        <td>${esc(CL[c.platform] || c.platform)}</td>
+        <td class="mono">${esc(c.account || "—")}</td>
+        <td>${esc(c.peer_key)}</td>
+        <td class="dim">${esc((c.last_ts || "").slice(0, 16) || "—")}</td>
+        <td>${esc(c.status)}${c.message ? ` <span class="dim">${esc(cut(c.message, 40))}</span>` : ""}</td>
+        <td><button class="btn sm ghost"
+          data-cur="${esc(c.platform)}|${esc(c.account)}|${esc(c.peer_key)}">重置</button></td>
+      </tr>`).join("")}</tbody></table>`;
+  } catch (e) {
+    toast("#cur-msg", e.message, "err");
+  }
+}
+
+function collectOnEnter() {
+  if (!cs.clients) loadClients();
+  loadPersons();
+  loadCursors();
+  semiTick().then(semiPollStart).catch(() => {});
+}
+
+bindCollectEvents();
 
 // ================================================================ 启动
 

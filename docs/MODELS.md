@@ -304,12 +304,18 @@ WingMan 离线 OpenAI 兼容 stub 已就绪（不联网，不需要真实密钥�
 打包方面只剩一个 `WingMan-{version}-win64.zip`，不再有「标准版 / 完整版」之分，
 也没有 `--with-asr` 参数或 `WINGMAN_WITH_ASR` 环境变量。
 
-> 保留的 `scripts/bootstrap.ps1` 里的 `WithAsr` / `NeedAsr` 开关目前恒为 `false`，
-> `scripts/preflight.py` 里的 `OPTIONAL_MODULES` 是空元组 —— 它们只是为将来装可选依赖
-> 预留的同一条安装链路，不代表现在有语音功能。
+> **关于那两条「预留开关」**：`bootstrap.ps1` 里恒为 `false` 的 `WithAsr` / `NeedAsr`
+> 已经**删掉**了 —— 一个永远不会通的开关，只会让下一个人以为功能只是没开。
+> 现在 `scripts/preflight.py` 的 `OPTIONAL_MODULES` 仍然保留（空元组），
+> 是因为预检面板的分组与测试都按它工作：将来要加可选依赖，往这张表加一项就会自动跟上。
+>
+> 采集功能需要的 `cryptography` **不是可选依赖**，它在 `REQUIRED_MODULES` 里、
+> 是**阻断性**的：缺了它 `preflight.py` 直接给 `fail` 并以退出码 `2` 收场，
+> 因为自动采集的 SQLCipher 解密全靠它。安装链路（`requirements.txt` /
+> `requirements.lock.txt` / 启动器）都会带上它。
 
 重做时已经想清楚的思路（双通道采集、本机转写、按话轮断句、落库与文字记录同构、开录前确认）
-记在 [ARCHITECTURE.md](ARCHITECTURE.md) 第 3.4 节；等它上线再回来看这一节怎么配。
+记在 [ARCHITECTURE.md](ARCHITECTURE.md) 第 3.5 节；等它上线再回来看这一节怎么配。
 
 ---
 

@@ -8,6 +8,86 @@
 下一个版本的计划见 [docs/ROADMAP.md](docs/ROADMAP.md)（阶段 1「能用」/ 阶段 2「好用」）。
 目前最大的缺口是 **Prompt 调优**：默认的 Mock 引擎让整条链路能跑，但建议内容还是空的。
 
+### 新增
+
+- **采集聊天记录**（新页面）：不用先导出文件，直接从客户端拿记录。两条并列的通道 ——
+  **自动采集**（读客户端本地库）与**半自动采集**（选中消息复制，程序读剪贴板）。
+  - `backend/app/collect/` 新增一整层：`detect`（探测进程 / 版本 / 数据目录）、
+    `matrix`（**版本支持矩阵，写进软件而不是 README**）、`keys`（取密钥）、
+    `sqlcipher`（解密）、`reader`（认列 + 读消息）、`pipeline`（六道关编排）、
+    `clipboard` + `semi`（半自动通道）、`winapi`（进程 / 版本信息 / 剪贴板）。
+  - `backend/app/api/routes_collect.py`：17 条接口。`/preview` 走完整链路但**不写库**；
+    `/semi/*` 是半自动采集的生命周期、轮询与待确认队列。
+  - 前端新增「采集」页，四张卡片对应四个问题：① 我的版本支不支持
+    ② 自动采集能不能跑 ③ 采不动怎么办 ④ 采到哪了。配图 `docs/images/ui-collect.png`。
+  - 数据模型：消息与导入完全同构，只多两个标记 —— `chats.source`
+    （`import` / `collect`）与 `messages.ts_source`（`exact` / `assumed` / `manual`）。
+    「时间推定」必须能被查出来、筛掉、在界面上标出来，否则真时间轴上混进假时间，
+    「她平时几点找我说话」这类结论就是错的。
+- `backend/tests/test_collect_cipher.py`：**按 SQLCipher 规格自己造库再解回来**。
+  真库密钥拿不到的时候，这是唯一能证明解密器写对的验证方式；顺带钉住
+  「错密钥一个都不能放过」和「认证失败返回 `None` 而不是垃圾」。
+- `backend/tests/test_collect_clipboard.py`：剪贴板解析。覆盖 QQ 多选复制主形态
+  （每条消息前面一个「称呼 + 空格 + 时间」）、`称呼:` 形态、认不出说话人时必须拒绝、
+  正文里的日期不许被当成消息时间、长名字不能被前缀短名字吃掉。
+- `backend/tests/test_collect_semi.py`：半自动采集。归属有依据就直接落库、
+  没依据就挂起、`apply_to_rest` 批量、`assumed` 时间要标出来、防重只在时间不可信时启用、
+  **不复用已有的人就会多出一个同名的人**。
+- `backend/tests/test_collect_api.py`：接口契约。含一项真的写系统剪贴板的端到端
+  （默认跳过，要显式开 `WINGMAN_E2E_CLIPBOARD=1`）。
+- `backend/tests/test_collect_offwindows.py`：**采集层在非 Windows 上必须能被导入**。
+  这条守卫是踩出来的（见「修复」），做法是模拟那个环境：改掉 `sys.platform`、
+  给 `builtins.__import__` 打补丁让取 `ctypes.wintypes` 一律失败，
+  然后把采集层每个模块**逐个**重新导入 —— 逐个而不是只导入口，是为了出问题时
+  能直接点名是哪个文件，而不是给一个「反正整层都导不进来」的结论。
+- `backend/app/api/routes_persons.py`：人物实体、渠道归属、跨渠道时间线
+  （「以人为中心」的数据层与接口）。
+- `scripts/verify_migration.py`：在**真实数据库的副本**上验证结构迁移，全程不碰真库。
+- `backend/tests/test_config_contract.py`：盯住 `.env.example` 与 `Settings` 字段的一致性。
+  这次撤下语音时 `config.py` 删干净了、测试也全绿，**但 `.env.example` 把 14 个失效的键
+  继续留在那里** —— 照着示例配环境的人会以为功能还在，填了不报错也不生效。
+  纯文本文件没人 import，删字段时最容易被忘，所以用测试把「代码里的字段」当基准比对。
+
+### 修复
+
+- `/api/collect/matrix` 返回列表但响应注解写成了 `dict`，FastAPI 会按注解校验返回值，
+  接口实际是 500 —— 在界面上表现成「点了没反应」。这类错只有真发一次请求才发现得了。
+- 重置采集游标时，`account` 对不上就静默删 0 条，接口照样返回成功：
+  用户点「重置」以为好了，下次采集还是从老位置继续。改为允许不传 `account`
+  （表示「这个平台上这个人的游标全重置」），并**如实返回删了几条**。
+- `/api/collect/cursors` 一度同时注册在 `routes_persons.py` 和 `routes_collect.py`。
+  运行时先注册的那个生效、后一个完全收不到请求 —— 改哪一份都不一定有用，
+  而读代码看不出来（两处都在）。现在只留 `routes_collect.py` 一处。
+- `/preview` 会跑到「在进程内存里搜密钥」那一步，默认预算 60 秒，用户点一下要等一分钟
+  才看到结论。预演压缩到 12 秒，并把这件事写进报告的 `notes` 里 ——
+  不然用户会把「预演取不到密钥」当成「这条路彻底走不通」。
+- 半自动采集整块内容都是重复时，`skipped_duplicate` 计数走不到（提前返回了），
+  而那一刻恰恰是用户最需要看到「刚才那次复制没进库」的时候。
+- 半自动采集只填了称呼、库里已有同名的人时，会按「对方称呼」再新建一个人 ——
+  采一次多一个「小鹿」，而这两个小鹿的消息永远检索不到一起。
+  改为先按名字/别名**精确**复用已有的人（不做模糊匹配，合并永远由用户显式发起）。
+- **采集层在非 Windows 上「导入即失败」**：`winapi.py` 和 `clipboard.py` 顶上各有一行
+  模块级的 `from ctypes import wintypes`，而 `ctypes.wintypes` 里的 `VARIANT_BOOL`
+  用了 `'v'` 类型码 —— 那个码只有 Windows 版的 `_ctypes` 认识，于是 Linux 上直接抛
+  `ValueError: _type_ 'v' not supported`。它跟有没有调用无关，属于**模块级语句**。
+  CI 跑在 Ubuntu 上、采集的路由又会把整条链拉起来，所以表现是
+  **本地 Windows 全绿、一推上去整个测试矩阵全红**，而报错跟采集看起来毫无关系；
+  更麻烦的是它有**两处**，只改一处不够。
+  现在由 `winapi.py` 统一决定 `wintypes` 是什么：Windows 上用真身，真身不存在才退到
+  一份最小替身（**Windows 上导不进来会直接 re-raise，不许用替身把真故障盖过去**），
+  `clipboard.py` 从它取 —— 只留一份实现。
+  新增 `test_collect_offwindows.py` 钉住它，并附一条反向用例防止守卫自己变成空测。
+- `Store.reset_cursor` 增加 `messages.ts_source` 迁移：老库自动补 `exact`，
+  保证「原来的记录都是真时间」这个事实不被新字段的默认值说反。
+- （0.2.x 遗留）`scripts/preflight.py` 里两个检查项 `check_optional_soundcard` /
+  `check_optional_faster_whisper` 在语音撤下后仍注册着，`--doctor` 会继续提示用户
+  「未安装 soundcard（可选）」。改为**数据驱动**的单一 `check_optional_modules`：
+  注册表 `OPTIONAL_MODULES` 为空时明确输出「当前版本没有需要额外安装的可选依赖」，
+  将来加可选依赖只要往注册表加一项。同时去掉 `bootstrap.ps1` 里恒为 `false` 的
+  `WithAsr` / `NeedAsr` 空开关 —— 一个永远不会通的开关，只会让下一个人以为功能只是没开。
+- （0.2.x 遗留）`docs/TROUBLESHOOTING.md` 删掉一节后章节号顺移，`docs/MODELS.md` 里
+  「见第 10 节 / 第 12 节」的跨文件引用随之失准，已同步修正。
+
 ### 移除
 
 - **通话语音转写整体撤下**，改为「规划中」。上一版做出来了，但延迟、双方串音、
@@ -27,23 +107,23 @@
 - 语音的**设计思路完整保留**在「通话」页、[README](README.md) 与
   [docs/ROADMAP.md](docs/ROADMAP.md)，不是删掉了想法，只是没做完不放出来。
 
-### 新增
+### 说明
 
-- `backend/tests/test_config_contract.py`：盯住 `.env.example` 与 `Settings` 字段的一致性。
-  这次撤下语音时 `config.py` 删干净了、测试也全绿，**但 `.env.example` 把 14 个失效的键
-  继续留在那里** —— 照着示例配环境的人会以为功能还在，填了不报错也不生效。
-  纯文本文件没人 import，删字段时最容易被忘，所以用测试把「代码里的字段」当基准比对。
-
-### 修复
-
-- `scripts/preflight.py` 里两个检查项 `check_optional_soundcard` /
-  `check_optional_faster_whisper` 在语音撤下后仍注册着，`--doctor` 会继续提示用户
-  「未安装 soundcard（可选）」。改为**数据驱动**的单一 `check_optional_modules`：
-  注册表 `OPTIONAL_MODULES` 为空时明确输出「当前版本没有需要额外安装的可选依赖」，
-  将来加可选依赖只要往注册表加一项。同时去掉 `bootstrap.ps1` 里恒为 `false` 的
-  `WithAsr` / `NeedAsr` 空开关 —— 一个永远不会通的开关，只会让下一个人以为功能只是没开。
-- `docs/TROUBLESHOOTING.md` 删掉一节后章节号顺移，`docs/MODELS.md` 里
-  「见第 10 节 / 第 12 节」的跨文件引用随之失准，已同步修正。
+- **自动采集的密钥在本机这两个版本上取不到**，而且是有依据的取不到：实测
+  QQ NT 9.9.20.37051 / 微信 4.1.13.12，内存里的十六进制候选全部校验失败（微信 0 处），
+  二进制滑窗穷举按可读内存推算单线程上千小时；按 salt 收缩到 88 MB 后
+  8,784 万候选 × 2 套参数各跑 419 秒（约 21 万/秒）仍未命中。
+  所以半自动采集是**并列的一等公民**，不是「失败后的安慰」。
+  完整实测记录见 `backend/app/collect/keys.py` 的模块文档。
+- **版本指引写进软件、不写进 README**：文档不会知道用户装的是哪个版本。
+  支持矩阵是 `collect/matrix.py` 里的数据（含「我实测过的版本」），
+  界面把探测结果和矩阵合起来给结论 + 下一步动作，四档结论每一档都带照做的事。
+- **工作区清理（不影响仓库内容）**：`build/` 下 33 个一次性侦察脚本与原始日志
+  （探测、内存嗅探、密钥穷举、UIA 试探等）已从工作目录删掉、另存备份。
+  它们**从来没有进过仓库**（`build/` 下只有 `wingman.spec` 是跟踪的），
+  所以这里不计入「移除」—— 但结论必须留下：已写进 `collect/keys.py` 与
+  `collect/matrix.py` 的模块文档里。已搬进测试套件的两个：
+  `_selftest_cipher.py` → `test_collect_cipher.py`、`_probe_clip.py` → `test_collect_clipboard.py`。
 
 ## [0.2.1] - 2026-10-05
 
