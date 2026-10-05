@@ -78,6 +78,35 @@ def rms(pcm: np.ndarray) -> float:
     return float(np.sqrt(np.mean(arr * arr)))
 
 
+def to_float_mono(pcm: np.ndarray, *, scale_guard: bool = True) -> np.ndarray:
+    """把各种常见形式的 PCM 规整成单通道 float32，值域 ±1.0。
+
+    为什么要一个专门的函数：**「int16 量级的 float32」是个静默陷阱**。
+    调用方先 ``np.frombuffer(raw, np.int16).astype(np.float32)`` 再传进来，
+    dtype 是 float32 但数值还在 ±32768 —— 如果只按 dtype 判断要不要归一化，
+    就会把放大三万倍的波形喂给模型，输出一堆乱码，而且**不报任何错**。
+
+    所以这里不只看 dtype，还用峰值兜底：float32 但峰值明显超过 1.5 的，
+    一律按 int16 量级处理。
+    """
+    arr = np.asarray(pcm)
+    if arr.ndim > 1:
+        arr = arr.mean(axis=1)
+
+    if arr.dtype == np.int16:
+        return (arr.astype(np.float32) / 32768.0)
+    if arr.dtype in (np.int32, np.int64):
+        return (arr.astype(np.float32) / 2147483648.0)
+
+    out = arr.astype(np.float32)
+    if scale_guard and out.size:
+        peak = float(np.max(np.abs(out)))
+        # 正常的浮点音频不会超过 1.0 太多；超了基本就是没归一化
+        if peak > 1.5:
+            out = out / (32768.0 if peak > 256 else 127.0)
+    return out
+
+
 # ---------------------------------------------------------------- 抽象
 
 
@@ -85,6 +114,28 @@ class ASREngine(ABC):
     name: str = "base"
     available: bool = True
     note: str = ""
+
+    @property
+    def ready(self) -> bool:
+        """现在这一刻**真的能转写**吗？
+
+        和 ``available`` 的区别很关键，别混用：
+
+        - ``available`` = 「这个引擎对象构造得出来」。对本地 whisper 来说，
+          只要 ``faster-whisper`` 库在，它就是 True —— 哪怕模型权重一个字节
+          都还没下载。
+        - ``ready`` = 「现在拿一段音频进来就能出字」。
+
+        自检面板必须看 ``ready``。只看 ``available`` 会把「模型还没下载」
+        报成绿色的「已完成」，用户配完发现没反应又不知道卡在哪 ——
+        这正是本项目最想消灭的那类问题。
+        """
+        return bool(self.available)
+
+    @property
+    def not_ready_reason(self) -> str:
+        """``ready`` 为假时，用人话说明差在哪。自检面板直接展示这句。"""
+        return ""
 
     @abstractmethod
     async def transcribe(

@@ -11,6 +11,7 @@ import asyncio
 import logging
 import sys
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,7 +22,7 @@ from . import __version__
 from .api import ROUTERS
 from .asr.capture import get_session
 from .bus import bus
-from .config import FRONTEND_DIR, get_settings
+from .config import FRONTEND_DIR, LOG_DIR, get_settings
 from .context import get_ctx
 from .llm.base import LLMError
 
@@ -29,11 +30,43 @@ logger = logging.getLogger("wingman")
 
 
 def _setup_logging(level: str) -> None:
+    """控制台 + 滚动文件双写。
+
+    打包成 exe 后没有控制台，stdout 直接进黑洞 —— 日志文件是唯一能
+    事后排查的地方，所以这里不是「顺便加一下」，是必需品。
+    """
+    handlers: list[logging.Handler] = []
+
+    # 没有控制台（pythonw / --noconsole）时不要往 stdout 写，某些环境下会抛异常
+    if sys.stdout is not None and getattr(sys.stdout, "write", None):
+        # 冻结后 stdout 会回落到 Windows 本地代码页（中文机器上是 GBK），
+        # 中文日志直接变乱码。显式改成 UTF-8，解不出来的字符也别抛异常。
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+        except (AttributeError, OSError, ValueError):
+            pass
+        handlers.append(logging.StreamHandler(sys.stdout))
+
+    try:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        file_handler = RotatingFileHandler(
+            LOG_DIR / "wingman.log",
+            maxBytes=2 * 1024 * 1024,
+            backupCount=3,
+            encoding="utf-8",
+        )
+        file_handler.setFormatter(logging.Formatter(
+            "%(asctime)s | %(levelname)-7s | %(name)-26s | %(message)s"
+        ))
+        handlers.append(file_handler)
+    except OSError:
+        pass  # 磁盘只读之类，不因为这个把程序挡住
+
     logging.basicConfig(
         level=getattr(logging, str(level).upper(), logging.INFO),
         format="%(asctime)s | %(levelname)-7s | %(name)-26s | %(message)s",
         datefmt="%H:%M:%S",
-        stream=sys.stdout,
+        handlers=handlers or None,
         force=True,
     )
     logging.getLogger("httpx").setLevel(logging.WARNING)

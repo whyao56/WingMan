@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import subprocess
+import sys
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException
@@ -11,6 +15,7 @@ from .. import __version__
 from ..config import EDITABLE_KEYS, SECRET_KEYS, mask_secret
 from ..context import get_ctx
 from ..schemas import HealthOut, ProviderInfo
+from ..selfcheck import runtime_paths
 
 router = APIRouter(prefix="/api", tags=["admin"])
 
@@ -25,6 +30,44 @@ async def health() -> HealthOut:
         counts=counts,
         providers=[ProviderInfo(**p) for p in ctx.provider_summary()],
     )
+
+
+# ---------------------------------------------------------------- 自检
+
+
+@router.get("/selfcheck")
+async def selfcheck() -> dict[str, Any]:
+    """给新手看的体检报告。每一项都带「缺什么、怎么补」。"""
+    ctx = get_ctx()
+    result = await asyncio.to_thread(ctx.self_check)
+    result["runtime"] = ctx.runtime_info()
+    result["paths"] = runtime_paths()
+    return result
+
+
+@router.post("/runtime/open")
+async def open_path(which: str = "data") -> dict[str, Any]:
+    """在系统文件管理器里打开数据/日志目录。
+
+    只允许白名单里的目录 —— 这个接口不接受任意路径，免得变成一个
+    「用浏览器就能打开本机任意目录」的洞。
+    """
+    paths = runtime_paths()
+    if which not in paths:
+        raise HTTPException(status_code=400, detail=f"未知目录：{which}")
+    target = Path(paths[which])
+    if not target.exists():
+        target.mkdir(parents=True, exist_ok=True)
+    try:
+        if sys.platform == "win32":
+            os.startfile(str(target))  # type: ignore[attr-defined]
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(target)])
+        else:
+            subprocess.Popen(["xdg-open", str(target)])
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"打开目录失败：{exc}") from exc
+    return {"ok": True, "path": str(target)}
 
 
 @router.get("/settings")

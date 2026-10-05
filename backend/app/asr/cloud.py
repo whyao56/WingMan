@@ -41,6 +41,16 @@ class CloudASR(ASREngine):
             return "未配置 ASR base_url"
         return f"{self.base_url} · {self.model}（音频将上传到该服务）"
 
+    @property
+    def ready(self) -> bool:
+        # 云 ASR 没有「权重下载」这一步，配好地址就算能用。
+        # 能不能连通要真的发一次请求才知道，自检面板里另有「语音链路实测」负责。
+        return self.available
+
+    @property
+    def not_ready_reason(self) -> str:
+        return "" if self.available else "没有填接口地址（base_url）"
+
     async def transcribe(
         self, pcm: np.ndarray, sample_rate: int = 16000, language: str = "zh"
     ) -> ASRResult:

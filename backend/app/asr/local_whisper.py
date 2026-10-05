@@ -21,7 +21,7 @@ from typing import Any
 
 import numpy as np
 
-from .base import ASREngine, ASRResult
+from .base import ASREngine, ASRResult, to_float_mono
 
 log = logging.getLogger("wingman.asr.whisper")
 
@@ -54,8 +54,44 @@ class LocalWhisperASR(ASREngine):
     @property
     def note(self) -> str:
         if not self.available:
-            return "未安装 faster-whisper（pip install faster-whisper）"
+            return "未安装 faster-whisper（当前程序未内置本地语音识别）"
+        try:
+            from .models import is_installed
+
+            if not is_installed(self.model_size):
+                return f"本地 faster-whisper · 模型 {self.model_size} 尚未下载"
+        except Exception:
+            pass
         return f"本地 faster-whisper · {self.model_size} · {self.device}/{self.compute_type}"
+
+    @property
+    def ready(self) -> bool:
+        """库在 **且** 权重已下载，才叫真的能用。缺一个都转写不了。"""
+        if not self.available:
+            return False
+        try:
+            from .models import is_installed
+
+            return is_installed(self.model_size)
+        except Exception:
+            return False
+
+    @property
+    def not_ready_reason(self) -> str:
+        if not self.available:
+            return "这个程序没有内置 faster-whisper 语音识别库"
+        try:
+            from .models import installed_sizes, is_installed
+
+            if not is_installed(self.model_size):
+                have = installed_sizes()
+                return (
+                    f"模型 {self.model_size} 还没下载"
+                    + (f"（已下载：{'、'.join(have)}）" if have else "")
+                )
+        except Exception:
+            return "无法确认模型状态"
+        return ""
 
     # ------------------------------------------------------ 模型
 
@@ -66,9 +102,25 @@ class LocalWhisperASR(ASREngine):
                 return _model_cache[key]
             from faster_whisper import WhisperModel
 
-            log.info("加载 whisper 模型 %s（首次会下载，请稍候）…", self.model_size)
+            from .models import is_installed, model_dir
+
+            # 没下模型就直接加载会静默卡住几分钟，用户只会觉得「死了」。
+            # 明确报错，让他去界面点「下载模型」。
+            if not is_installed(self.model_size):
+                raise RuntimeError(
+                    f"本地模型 {self.model_size} 还没下载。"
+                    f"请到「设置 → 语音识别」里点「下载」，"
+                    f"或改用云端 ASR。预期位置：{model_dir(self.model_size)}"
+                )
+
+            path = model_dir(self.model_size)
+            log.info("加载本地 whisper 模型 %s ← %s", self.model_size, path)
+            # 传本地目录而不是模型名：这样完全不碰 HuggingFace，
+            # 离线也能用，也不会意外触发下载。
             model = WhisperModel(
-                self.model_size, device=self.device, compute_type=self.compute_type
+                str(path),
+                device=self.device,
+                compute_type=self.compute_type,
             )
             _model_cache[key] = model
             return model
@@ -78,11 +130,8 @@ class LocalWhisperASR(ASREngine):
     async def transcribe(
         self, pcm: np.ndarray, sample_rate: int = 16000, language: str = "zh"
     ) -> ASRResult:
-        arr = np.asarray(pcm)
-        if arr.dtype != np.float32:
-            arr = arr.astype(np.float32) / (32768.0 if arr.dtype == np.int16 else 1.0)
-        if arr.ndim > 1:
-            arr = arr.mean(axis=1)
+        # 统一规整：兼容 int16、以及「int16 量级的 float32」这类错误输入
+        arr = to_float_mono(pcm)
         dur_ms = int(len(arr) / max(1, sample_rate) * 1000)
         if len(arr) < sample_rate * 0.2:      # 短于 200ms 基本是噪声
             return ASRResult(text="", language=language, duration_ms=dur_ms)

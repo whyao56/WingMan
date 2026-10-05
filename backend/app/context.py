@@ -6,9 +6,19 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
-from .config import DATA_DIR, EDITABLE_KEYS, Settings, get_settings
+from .config import (
+    APP_DIR,
+    DATA_DIR,
+    EDITABLE_KEYS,
+    IS_FROZEN,
+    LOG_DIR,
+    Settings,
+    _migrate_loose_data,
+    get_settings,
+)
 from .store import Store
 
 log = logging.getLogger("wingman")
@@ -17,9 +27,12 @@ log = logging.getLogger("wingman")
 class AppContext:
     def __init__(self) -> None:
         self.settings: Settings = get_settings()
+        # 冻结态下用户目录才是可写的；顺手把可能落在 exe 旁边的旧数据搬过来
+        _migrate_loose_data()
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         self.store = Store(self.settings.db_path)
         self.store.init()
+        self.started_at = time.time()
 
         # 运行时覆盖（控制台写入的），key 与 Settings 字段名一致
         raw = self.store.kv_all()
@@ -125,6 +138,23 @@ class AppContext:
                 "note": getattr(obj, "note", ""),
             })
         return out
+
+    # -------------------------------------------------------- 自检
+
+    def self_check(self) -> dict[str, Any]:
+        """完整自检结果。包含会阻塞的设备枚举，调用方请用 to_thread。"""
+        from .selfcheck import run
+
+        return run(self).as_dict()
+
+    def runtime_info(self) -> dict[str, Any]:
+        return {
+            "frozen": IS_FROZEN,
+            "app_dir": str(APP_DIR),
+            "data_dir": str(DATA_DIR),
+            "log_dir": str(LOG_DIR),
+            "uptime_sec": round(time.time() - self.started_at, 1),
+        }
 
 
 _CTX: AppContext | None = None

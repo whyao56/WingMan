@@ -36,7 +36,6 @@ venv/
 
 # ---- Node / 前端 ----
 node_modules/
-dist/
 .vite/
 
 # ---- 编辑器 / 系统 ----
@@ -48,3 +47,15 @@ Thumbs.db
 # ---- 本地实验 ----
 scratch/
 notes-local/
+logs/
+# 开发态下载的语音模型权重（几百 MB，绝不能进仓库）
+models/
+
+# ---- 打包产物 ----
+# 注意：build/wingman.spec 是要提交的，只忽略 PyInstaller 的工作目录
+build/_pyinstaller/
+build/_work/
+dist/
+*.exe
+*.pdb
+.venv-build/

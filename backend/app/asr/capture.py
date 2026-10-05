@@ -143,6 +143,54 @@ def _pick_device(spec: str, kind: str) -> Any:
     return None
 
 
+# ================================================================ 一次性录音
+
+
+def record_once(
+    seconds: float = 5.0,
+    kind: str = "microphone",
+    spec: str = "auto",
+    sample_rate: int = 16000,
+) -> tuple[Any, int, str]:
+    """录一小段，返回 ``(int16 数组, 采样率, 设备名)``。
+
+    存在的意义是给「语音自检」用：实时会话是**多线程 + 环形缓冲**的一套东西，
+    排查问题时太重了 —— 用户只是想知道「麦克风到底能不能录到声音」。
+    这里就直录一段，把设备名和波形一起带出来，让中间环节可观测。
+
+    固定 16kHz：Whisper 只认这个采样率，这里少一次重采样就少一个坑。
+    """
+    import numpy as np
+
+    sc = _soundcard()
+    if sc is None:
+        raise RuntimeError(
+            "采集库 soundcard 不可用。源码运行请 pip install soundcard；"
+            "打包版请换用带语音的完整版安装包。"
+        )
+
+    dev = _pick_device(spec, kind)
+    if dev is None:
+        hint = (
+            "系统里找不到回环设备。「系统声音」的回环跟随默认播放设备，"
+            "先确认扬声器/耳机在出声，或到「通话」页手动指定设备。"
+            if kind == "loopback"
+            else "系统里找不到麦克风。检查设备是否插好，"
+                 "以及 Windows「隐私和安全性 → 麦克风」是否允许桌面应用访问。"
+        )
+        raise RuntimeError(hint)
+
+    frames = dev.record(samplerate=sample_rate, numframes=int(sample_rate * seconds))
+    arr = np.asarray(frames)
+    if arr.ndim > 1:
+        arr = arr.mean(axis=1)
+    # soundcard 给的是 ±1.0 的 float32；转 int16 后统一交给
+    # asr.base.to_float_mono 规整，避免各处重复处理量纲
+    arr = np.clip(arr.astype(np.float32), -1.0, 1.0)
+    pcm = (arr * 32767.0).astype(np.int16)
+    return pcm, sample_rate, str(getattr(dev, "name", "") or kind)
+
+
 # ================================================================ VAD
 
 

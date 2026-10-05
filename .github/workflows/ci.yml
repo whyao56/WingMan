@@ -34,9 +34,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
+          pip install -r backend/requirements-dev.txt
 
       - name: 后端语法检查
         run: python -m compileall -q backend/app backend/tests scripts
+
+      - name: 单元测试（音频管线 / 引擎状态 / 量纲回归）
+        working-directory: backend
+        run: python -m pytest tests/ -q
 
       - name: 端到端冒烟测试（Mock Provider，无需任何 API Key）
         working-directory: backend
