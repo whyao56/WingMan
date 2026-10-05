@@ -429,6 +429,7 @@ WingMan/
 │   ├── tests/                   # 冒烟测试 + 回环代理 / 版本号一致性 / 前端资源守卫
 │   │                            # + 采集层六个守卫：cipher / clipboard / reader / semi / api
 │   │                            #   / offwindows（非 Windows 上必须能 import）
+│   │                            # + 隐私守卫：仓库里不许出现真人姓名
 │   ├── requirements.txt         # 依赖下限声明（人类可读）
 │   ├── requirements.lock.txt    # 精确版本锁定（启动器安装的就是它）
 │   ├── requirements-desktop.txt # 打包工具链（pyinstaller / pywebview）
@@ -475,6 +476,8 @@ set WINGMAN_E2E_CLIPBOARD=1
 backend\.venv\Scripts\python.exe backend\tests\test_collect_api.py
 REM 非 Windows 上必须也能 import（模拟 Linux，防「本地全绿、CI 全红」）
 backend\.venv\Scripts\python.exe backend\tests\test_collect_offwindows.py
+REM 仓库里不许出现真人姓名（用例 / 文档 / 界面提示统一用虚构的「小鹿」）
+backend\.venv\Scripts\python.exe backend\tests\test_privacy_pseudonyms.py
 ```
 
 > `WINGMAN_E2E_CLIPBOARD=1` 那一项会**临时改写系统剪贴板**（结束后把原内容还回去）。
