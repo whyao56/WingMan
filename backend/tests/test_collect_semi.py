@@ -639,6 +639,27 @@ def test_start_works_when_the_person_already_has_a_channel() -> None:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_committing_a_capture_leaves_an_activity_trace() -> None:
+    """落库成功要留一条 collect_semi 痕迹（需求 11「有动作就有痕迹」）。
+
+    痕迹是对象详情「历史」Tab 的数据源；漏写不会报错，只会让「这个人的数据
+    是怎么来的」永远是空的 —— 所以单列一条用例钉住。
+    """
+    tmp = _tmp_dir()
+    try:
+        store, cb, semi = _modules(tmp)
+        sc = _started(semi, store, person_id="")
+        _feed(sc, _FakeWatcher([]), _cap(cb, [
+            _item(cb, sender="小鹿", text="留个痕", ts="2026-09-28T21:03:15",
+                  role="peer", ts_source="clipboard"),
+        ]))
+        acts = store.list_activity(kind="collect_semi")
+        assert [a.kind for a in acts] == ["collect_semi"], acts
+        assert "1" in acts[0].summary
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main() -> int:
     import traceback
 
