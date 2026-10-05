@@ -24,7 +24,7 @@ WingMan 是一个本地优先的「对话参谋」系统。它做两件事：
 
 | 下载 | 大小 | 说明 |
 |---|---|---|
-| **[`WingMan-0.2.1-win64.zip`](https://github.com/whyao56/WingMan/releases/download/v0.2.1/WingMan-0.2.1-win64.zip)** | 31 MB | 唯一的包。聊天记录分析、人物画像、回复建议都在里面 |
+| **[`WingMan-0.3.0-win64.zip`](https://github.com/whyao56/WingMan/releases/download/v0.3.0/WingMan-0.3.0-win64.zip)** | 34 MB | 唯一的包。聊天记录分析、人物画像、回复建议、采集都在里面 |
 
 早期版本曾分成「标准版 / 完整版」两个包，区别只在**是否内置本地语音识别**。
 语音撤下后这个区别消失了，现在只有一个包。
@@ -171,7 +171,7 @@ python -m uvicorn app.main:app --reload --port 8787
 
 ## 版本与状态
 
-- **当前版本：v0.2.1**（版本号定义在 `backend/app/__init__.py`，变更记录见 [CHANGELOG.md](CHANGELOG.md)）
+- **当前版本：v0.3.0**（版本号定义在 `backend/app/__init__.py`，变更记录见 [CHANGELOG.md](CHANGELOG.md)）
 - **状态：有成品包可用了。** [Releases](https://github.com/whyao56/WingMan/releases) 提供免安装的
   Windows 桌面版（双击即用，不需要 Python）；源码路线同样可用。
   **最大的缺口是建议内容本身** —— 默认的 Mock 引擎让整条链路跑得通，但给的建议还是规则生成的，
