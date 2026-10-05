@@ -11,7 +11,10 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
+
+import pytest
 
 REPO = Path(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -83,4 +86,46 @@ def test_the_guard_does_not_spell_the_name_out_itself() -> None:
     assert not leaked, (
         "守卫文件自己把名字写成了明文：" + "、".join(leaked)
         + "。请保持 \\uXXXX 转义写法（理由见本文件开头的说明）。"
+    )
+
+
+def _git(*args: str) -> tuple[int, str]:
+    """跑一条 git 命令。拿不到 git（比如只拷了源码目录）就当失败，由调用方决定怎么办。"""
+    try:
+        proc = subprocess.run(["git", *args], cwd=REPO, capture_output=True,
+                              text=True, encoding="utf-8", errors="replace")
+    except OSError:
+        return 127, ""
+    return proc.returncode, proc.stdout
+
+
+def test_the_history_does_not_contain_the_name_either() -> None:
+    """**历史提交**里也不许有 —— 把当前文件改掉是清不干净的。
+
+    这条是重写历史之后补上的。起因：名字是先落进提交、后来才在工作区里改掉的，
+    于是 `git log -S` 一搜就能搜出来。而公开仓库的历史会被完整 clone 走，
+    所以「当前文件干净」并不等于「没泄漏」—— 差的那一步就是把历史一起重写。
+
+    浅克隆（CI 默认 `fetch-depth: 1`）里根本没有历史可搜，这时**跳过而不是通过**：
+    「搜不到」和「搜过且干净」是两件事，混为一谈会让这条守卫在 CI 上变成摆设。
+    """
+    if _git("rev-parse", "--is-inside-work-tree")[0] != 0:
+        pytest.skip("不在 git 工作区里（只拷了源码目录？），跳过历史扫描")
+    shallow = _git("rev-parse", "--is-shallow-repository")
+    if shallow[0] == 0 and shallow[1].strip() == "true":
+        pytest.skip("浅克隆，历史不完整 —— 跳过（不是「已验证干净」）")
+
+    hits: list[str] = []
+    for bad, why in FORBIDDEN.items():
+        code, out = _git("log", "--all", "-S", bad, "--oneline")
+        if code != 0:
+            pytest.skip(f"git log 执行失败（退出码 {code}），跳过历史扫描")
+        commits = [line.split(" ", 1)[0] for line in out.strip().splitlines()] if out.strip() else []
+        if commits:
+            hits.append(f"「{bad}」（{why}）出现在 {len(commits)} 个提交里："
+                        + "、".join(commits[:5]) + ("…" if len(commits) > 5 else ""))
+    assert not hits, (
+        "git 历史里还有不该出现的真实姓名：\n  " + "\n  ".join(hits)
+        + "\n只改工作区是不够的 —— 已经提交过的内容要重写历史才清得掉，"
+          "而且公开仓库的历史别人 clone 得到。"
     )
