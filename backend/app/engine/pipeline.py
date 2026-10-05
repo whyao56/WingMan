@@ -78,6 +78,22 @@ async def run_analysis(
     trace["retrieved"] = len(pack.retrieved)
     trace["facts"] = len(pack.facts)
 
+    # 留存这一次输出（需求 11「有动作就有痕迹」）。写不进去也不能影响这次结果 ——
+    # 用户要的是建议，留存是附带；但失败了要能在日志里看到，不能静默。
+    try:
+        chat = ctx.store.get_chat(chat_id)
+        trace["run_id"] = ctx.store.save_run(
+            person_id=(chat.person_id if chat else ""),
+            chat_ids=[chat_id],
+            peer_message=peer_message,
+            analysis=analysis.model_dump(),
+            strategy=strategy.model_dump(),
+            options=[o.model_dump() for o in options],
+            trace=trace,
+        )
+    except Exception as exc:      # pragma: no cover - 留存失败不该挡住建议
+        log.warning("留存本次分析失败（不影响返回）：%s", exc)
+
     return SuggestionBundle(
         analysis=analysis,
         strategy=strategy,

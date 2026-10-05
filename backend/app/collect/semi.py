@@ -302,6 +302,16 @@ class SemiCollector:
         if inserted < len(rows):
             cap.problems.append(
                 f"{len(rows) - inserted} 条库里已经有了一模一样的内容，已忽略。")
+        if inserted:
+            # 留一条动作痕迹（需求 11）。半自动采集是「你复制我接住」，同样要有痕迹。
+            try:
+                store.log_activity(
+                    "collect_semi", person_id=self.state.person_id, chat_id=chat_id,
+                    summary=f"半自动采集新增 {inserted} 条",
+                    detail=f"来源 {self.state.client}，复制 {len(cap.items)} 条",
+                )
+            except Exception as exc:      # pragma: no cover - 痕迹写不进去不该挡住采集
+                log.warning("记录半自动采集痕迹失败：%s", exc)
         return cap
 
     def commit(self, capture_id: str, decisions: dict[str, Any] | None = None) -> Capture | None:

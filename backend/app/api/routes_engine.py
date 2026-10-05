@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -89,8 +90,33 @@ async def simulate(chat_id: str, payload: dict[str, Any] = Body(...)) -> SimTree
     pack = await build_context(ctx, chat_id, message, use_retrieval=False)
     try:
         return await simulator.simulate(
-            ctx, pack, option_text, option_id=str(payload.get("option_id") or "")
+            ctx, pack, option_text,
+            option_id=str(payload.get("option_id") or ""),
+            run_id=int(payload.get("run_id") or 0),
         )
     except Exception as exc:
         log.exception("推演失败")
         raise HTTPException(status_code=502, detail=f"推演失败：{exc}") from exc
+
+
+# ================================================================ 历史输出（需求 11）
+
+
+@router.get("/history/runs/{run_id}")
+async def get_history_run(run_id: int) -> dict[str, Any]:
+    """取一次指挥台运行的完整内容（含分析、策略、候选与推演），供回看 / 复用。
+
+    里面是模型生成的回复原文，属隐私数据 —— 只在本机，不额外渲染。
+    """
+    run = await asyncio.to_thread(get_ctx().store.get_run, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail=f"没有这次输出：{run_id}")
+    return run.model_dump()
+
+
+@router.delete("/history/runs/{run_id}")
+async def delete_history_run(run_id: int) -> dict[str, Any]:
+    removed = await asyncio.to_thread(get_ctx().store.delete_run, run_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail=f"没有这次输出：{run_id}")
+    return {"ok": True, "deleted": removed}

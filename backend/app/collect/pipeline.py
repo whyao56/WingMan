@@ -577,6 +577,16 @@ def _collect_one_chat(store, msgs: list[reader.RawMessage],
         collected_from=req.since.isoformat() if req.since else "",
         status="ok",
         message=f"读到 {co.read} 条，新写入 {inserted} 条")
+    # 留一条动作痕迹（需求 11）：只在真有新消息时记，否则每次「无变动」都留痕会淹没历史。
+    if inserted:
+        try:
+            store.log_activity(
+                "collect_auto", person_id=person_id, chat_id=chat_id,
+                summary=f"自动采集「{name}」新增 {inserted} 条",
+                detail=f"读到 {co.read} 条，库里已有 {skipped} 条",
+            )
+        except Exception as exc:      # pragma: no cover - 痕迹写不进去不该挡住采集
+            log.warning("记录自动采集痕迹失败：%s", exc)
     return co
 
 

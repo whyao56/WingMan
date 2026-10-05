@@ -15,7 +15,9 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException
 
 from ..context import get_ctx
-from ..schemas import Person, PersonDetail
+from ..schemas import (
+    Fact, Person, PersonDetail, PersonOverview, PersonPersona,
+)
 
 log = logging.getLogger("wingman.api.persons")
 router = APIRouter(prefix="/api", tags=["persons"])
@@ -139,6 +141,155 @@ async def person_messages(
         get_ctx().store.person_messages, person_id, min(limit, 2000), before_id
     )
     return {"person_id": person_id, "messages": rows, "has_more": len(rows) >= min(limit, 2000)}
+
+
+# ================================================================ 对象详情（需求 1）
+
+_PERSON_FACT_SUBJECTS = ("peer", "me", "relationship")
+
+
+@router.get("/persons/{person_id}/overview", response_model=PersonOverview)
+async def person_overview(person_id: str) -> PersonOverview:
+    """对象详情聚合：基础字段 + 渠道 + 计数 + 最近消息/输出/痕迹 + 待办。
+
+    一次请求把对象详情页首屏要的东西给全，省掉前端拼接五六个接口。
+    """
+    detail = await asyncio.to_thread(get_ctx().store.person_detail, person_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail=f"这个人不存在：{person_id}")
+    ctx = get_ctx()
+    providers = ctx.provider_summary()
+
+    def build() -> PersonOverview:
+        store = ctx.store
+        person = detail.person
+        facts = store.list_facts_for_person(person_id)
+        runs = store.list_runs(person_id, limit=5)
+        activity = store.list_activity(person_id=person_id, limit=20)
+        todos: list[str] = []
+        for p in providers:
+            if p["kind"] == "llm" and (not p["available"] or p["name"] == "mock"):
+                todos.append("还没配置大模型（当前是演示用的 mock），指挥台给不出真实建议。")
+                break
+        if not detail.channels:
+            todos.append("还没有绑定任何渠道，去「采集」导一段或采一段。")
+        if person.message_count == 0:
+            todos.append("这个对象名下还没有聊天记录。")
+        if not person.relation and not person.stage_goal:
+            todos.append("还没填关系 / 阶段目标，指挥台的建议会偏泛。")
+        return PersonOverview(
+            person=person,
+            channels=detail.channels,
+            counts={
+                "channels": len(detail.channels),
+                "messages": person.message_count,
+                "peer": person.peer_count,
+                "me": person.me_count,
+                "facts": len(facts),
+                "runs": len(runs),
+            },
+            recent_messages=store.person_messages(person_id, limit=20),
+            recent_runs=runs,
+            activity=activity,
+            todos=todos,
+        )
+
+    return await asyncio.to_thread(build)
+
+
+# ================================================================ 对象级事实
+
+
+@router.get("/persons/{person_id}/facts", response_model=list[Fact])
+async def list_person_facts(person_id: str, subject: str | None = None) -> list[Fact]:
+    """对象级 + 该对象名下渠道级的事实合并视图，逐条标 `scope`（person / chat）。"""
+    _require_person(person_id)
+    return await asyncio.to_thread(
+        get_ctx().store.list_facts_for_person, person_id, subject
+    )
+
+
+@router.post("/persons/{person_id}/facts", response_model=Fact)
+async def add_person_fact(person_id: str, payload: dict[str, Any] = Body(...)) -> Fact:
+    """新增一条**对象级**事实（不绑具体渠道）。"""
+    _require_person(person_id)
+    subject = str(payload.get("subject") or "peer")
+    if subject not in _PERSON_FACT_SUBJECTS:
+        subject = "peer"
+    fact = Fact(
+        person_id=person_id, scope="person", subject=subject,
+        key=str(payload.get("key") or "").strip(),
+        value=str(payload.get("value") or "").strip(),
+        confidence=float(payload.get("confidence") or 0.9),
+        evidence=str(payload.get("evidence") or "手动添加"),
+    )
+    if not fact.key or not fact.value:
+        raise HTTPException(status_code=422, detail="key 和 value 不能为空。")
+    saved = await asyncio.to_thread(get_ctx().store.upsert_person_fact, person_id, fact)
+    if saved is None:
+        raise HTTPException(status_code=404, detail=f"这个人不存在：{person_id}")
+    return saved
+
+
+@router.delete("/persons/{person_id}/facts/{fact_id}")
+async def delete_person_fact(person_id: str, fact_id: int) -> dict[str, Any]:
+    """删一条属于这个人的事实（对象级或它的渠道级）。
+
+    先确认这条事实确实在这个人的视野里，避免用错 person_id 就删到别人家的记忆。
+    """
+    _require_person(person_id)
+    store = get_ctx().store
+    mine = {f.id for f in await asyncio.to_thread(store.list_facts_for_person, person_id)}
+    if fact_id not in mine:
+        raise HTTPException(status_code=404, detail=f"这条事实不属于这个人：{fact_id}")
+    await asyncio.to_thread(store.delete_fact, fact_id)
+    return {"ok": True, "deleted": fact_id}
+
+
+# ================================================================ 对象级人物设定
+
+
+@router.get("/persons/{person_id}/persona", response_model=PersonPersona)
+async def get_person_persona(person_id: str) -> PersonPersona:
+    _require_person(person_id)
+    return await asyncio.to_thread(get_ctx().store.get_person_persona, person_id)
+
+
+@router.put("/persons/{person_id}/persona", response_model=PersonPersona)
+async def put_person_persona(person_id: str, payload: dict[str, Any] = Body(...)) -> PersonPersona:
+    _require_person(person_id)
+    allowed = {k: str(v) for k, v in payload.items()
+               if k in ("goal", "my_style", "peer_profile", "taboos", "stage")}
+    saved = await asyncio.to_thread(
+        get_ctx().store.save_person_persona, person_id, allowed
+    )
+    if saved is None:
+        raise HTTPException(status_code=404, detail=f"这个人不存在：{person_id}")
+    return saved
+
+
+# ================================================================ 历史留存（需求 11）
+
+
+@router.get("/persons/{person_id}/history")
+async def person_history(person_id: str, kind: str = "", limit: int = 50) -> dict[str, Any]:
+    """这个对象的历史输出（engine_runs）与动作痕迹（activity_log）。
+
+    `kind` 过滤的是动作痕迹的类别（import / collect_auto / collect_semi / edit / profile）。
+    """
+    _require_person(person_id)
+    store = get_ctx().store
+    size = max(1, min(int(limit or 50), 200))
+
+    def build() -> dict[str, Any]:
+        return {
+            "person_id": person_id,
+            "runs": [r.model_dump() for r in store.list_runs(person_id, limit=size)],
+            "activity": [a.model_dump() for a in
+                         store.list_activity(person_id=person_id, kind=kind, limit=size)],
+        }
+
+    return await asyncio.to_thread(build)
 
 
 # ================================================================ 渠道归属

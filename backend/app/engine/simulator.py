@@ -77,6 +77,7 @@ async def simulate(
     option_text: str,
     *,
     option_id: str = "",
+    run_id: int = 0,
 ) -> SimTree:
     user = prompts.simulate_user(
         profile=pack.profile_text,
@@ -97,9 +98,21 @@ async def simulate(
     if not branches:
         log.warning("推演没有产出任何分支")
 
-    return SimTree(
+    tree = SimTree(
         option_id=option_id,
         option_text=option_text,
         branches=branches,
         advice=str(data.get("advice") or "")[:600],
     )
+
+    # 留存本次推演，供「历史」回看。`run_id=0` 表示这次推演没关联到某次运行。
+    # 同样：写不进去也不影响返回，只记日志。
+    try:
+        ctx.store.save_sim_run(
+            run_id=run_id, option_id=option_id, option_text=option_text,
+            branches=[b.model_dump() for b in tree.branches], advice=tree.advice,
+        )
+    except Exception as exc:      # pragma: no cover - 留存失败不该挡住推演
+        log.warning("留存本次推演失败（不影响返回）：%s", exc)
+
+    return tree
