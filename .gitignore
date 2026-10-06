@@ -54,6 +54,10 @@ _shots/
 # 本地语音模型权重（几百 MB）。语音能力已撤下，这里是给旧开发目录留的兜底：
 # 万一还有残留的 faster-whisper-* 目录，也不该进仓库。
 models/
+# `git filter-branch` 重写历史时的工作目录。**必须忽略**：里面有全部 ref 的
+# 旧 hash 快照和「旧 → 新」映射表，是纯内部产物。它曾因为一次 `git add -A`
+# 被误提交进去（当时正好在重写历史），所以在这里钉死。
+.git-rewrite/
 
 # ---- 打包产物 ----
 # 注意：build/wingman.spec 是要提交的，只忽略 PyInstaller 的工作目录
