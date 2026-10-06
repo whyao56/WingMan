@@ -137,3 +137,108 @@ async def list_models(which: str = "llm") -> dict[str, Any]:
     except Exception as exc:
         return {"models": [], "note": str(exc)[:200]}
     return {"models": models, "note": ""}
+
+
+# ---------------------------------------------------------------- 桌面壳（需求 9）
+
+
+@router.get("/desktop/state")
+async def desktop_state() -> dict[str, Any]:
+    """界面问一句：现在有没有原生窗口？
+
+    有 → 右上角的 × 已经被后端接管，界面不用自己画一个；
+    没有（浏览器模式）→ 界面左上角给一个 × 按钮，走同一套选择流程。
+    """
+    from .. import desktop
+
+    return desktop.desktop_state()
+
+
+@router.post("/desktop/close")
+async def desktop_close(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+    """用户在「关闭程序 / 后台运行」里选完之后回调这里。
+
+    `background` 在没有原生窗口时（浏览器模式）退化成「什么都不做」——
+    服务本来就是一个独立进程，关掉标签页它就还在跑。文案会把这点说清楚，
+    而不是假装自己隐藏了一个并不存在的窗口。
+    """
+    from .. import desktop
+
+    action = str(payload.get("action") or "").strip()
+    if action not in {"quit", "background", "cancel"}:
+        raise HTTPException(status_code=422, detail="action 只能是 quit / background / cancel。")
+    return await asyncio.to_thread(desktop.close_action, action)
+
+
+@router.post("/desktop/show")
+async def desktop_show() -> dict[str, Any]:
+    """把「后台运行」藏起来的窗口调回来。
+
+    存在的理由：`desktop.py` 的单实例分支靠这个接口把老进程的窗口 show 出来。
+    不这么做的话，第二次双击 `WingMan.exe` 会开出一个**没有服务的空壳窗口**，
+    关掉它并不会停掉真正在跑的那个进程 —— 用户会觉得「关闭程序失灵了」。
+    """
+    from .. import desktop
+
+    return await asyncio.to_thread(desktop.show_window)
+
+
+# ---------------------------------------------------------------- 检查更新（需求 5）
+
+
+REPO_URL = "https://github.com/whyao56/WingMan"
+RELEASES_API = "https://api.github.com/repos/whyao56/WingMan/releases/latest"
+
+
+def _ver_tuple(v: str) -> tuple:
+    """把版本号拆成可比较的元组。非数字段按 0 处理，不抛错。"""
+    parts = []
+    for chunk in str(v or "").strip().lstrip("v").split("."):
+        digits = "".join(ch for ch in chunk if ch.isdigit())
+        parts.append(int(digits) if digits else 0)
+    return tuple(parts) or (0,)
+
+
+@router.get("/update/check")
+async def update_check() -> dict[str, Any]:
+    """问一次 GitHub 上有没有新版本。
+
+    **只有你点按钮时才会联网**，平时不查 —— 一个聊天记录工具没有理由
+    开机就往外面发请求。查不到（断网、被墙、限流）不是错误，是要如实说
+    清楚的一件事：不知道就说不知道，别把「查不到」说成「已是最新」。
+    """
+    import json as _json
+    import urllib.request
+
+    def _fetch() -> dict[str, Any]:
+        req = urllib.request.Request(
+            RELEASES_API,
+            headers={"User-Agent": f"WingMan/{__version__}",
+                     "Accept": "application/vnd.github+json"},
+        )
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            return _json.loads(resp.read().decode("utf-8", "ignore"))
+
+    try:
+        data = await asyncio.to_thread(_fetch)
+    except Exception as exc:
+        return {
+            "ok": False, "current": __version__,
+            "error": f"{type(exc).__name__}: {str(exc)[:160]}",
+            "hint": "没查到不等于已是最新 —— 可能是断网、代理或 GitHub 访问不了。"
+                    "可以直接打开项目地址自己看一眼。",
+            "repo": REPO_URL,
+        }
+
+    latest = str(data.get("tag_name") or "").lstrip("v")
+    return {
+        "ok": True,
+        "current": __version__,
+        "latest": latest,
+        "has_update": _ver_tuple(latest) > _ver_tuple(__version__),
+        "name": str(data.get("name") or ""),
+        "published_at": str(data.get("published_at") or ""),
+        "notes": str(data.get("body") or "")[:4000],
+        "page": str(data.get("html_url") or f"{REPO_URL}/releases"),
+        "repo": REPO_URL,
+    }

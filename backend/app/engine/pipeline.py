@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
@@ -44,21 +45,33 @@ def store_peer_message(store: Any, chat_id: str, text: str) -> int | None:
 
 async def run_analysis(
     ctx: Any,
-    chat_id: str,
+    chat_ids: str | Sequence[str],
     peer_message: str,
     *,
     persist: bool = True,
     top_k: int = 30,
 ) -> SuggestionBundle:
+    """跑一次「分析 → 策略 → 建议」。
+
+    `chat_ids` 可以是单条渠道，也可以是同一对象下被勾选的**多条渠道**（需求 8）：
+    第一条是主渠道（新消息写进它、检索锚点取它），其余渠道的上下文合并进来。
+    留存时把**全部勾选的渠道**记进 `chat_ids`，这样历史里能复原「这次是看着哪几个
+    渠道给的结论」。
+    """
     t0 = time.perf_counter()
     trace: dict[str, Any] = {}
 
+    ids = [chat_ids] if isinstance(chat_ids, str) else [str(c) for c in chat_ids if c]
+    if not ids:
+        raise KeyError("没有选定任何会话")
+    primary = ids[0]
+
     if persist:
-        mid = store_peer_message(ctx.store, chat_id, peer_message)
+        mid = store_peer_message(ctx.store, primary, peer_message)
         trace["stored_message_id"] = mid
 
     t = time.perf_counter()
-    pack = await build_context(ctx, chat_id, peer_message, top_k=top_k)
+    pack = await build_context(ctx, ids, peer_message, top_k=top_k)
     trace["context_ms"] = round((time.perf_counter() - t) * 1000)
 
     t = time.perf_counter()
@@ -77,14 +90,15 @@ async def run_analysis(
     trace["llm"] = getattr(ctx.llm, "name", "unknown")
     trace["retrieved"] = len(pack.retrieved)
     trace["facts"] = len(pack.facts)
+    trace["chat_ids"] = list(ids)
 
     # 留存这一次输出（需求 11「有动作就有痕迹」）。写不进去也不能影响这次结果 ——
     # 用户要的是建议，留存是附带；但失败了要能在日志里看到，不能静默。
     try:
-        chat = ctx.store.get_chat(chat_id)
+        chat = ctx.store.get_chat(primary)
         trace["run_id"] = ctx.store.save_run(
             person_id=(chat.person_id if chat else ""),
-            chat_ids=[chat_id],
+            chat_ids=list(ids),
             peer_message=peer_message,
             analysis=analysis.model_dump(),
             strategy=strategy.model_dump(),

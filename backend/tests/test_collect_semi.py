@@ -29,6 +29,7 @@ import shutil
 import sys
 import tempfile
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 BACKEND = Path(__file__).resolve().parents[1]
@@ -122,7 +123,7 @@ def _feed(semi, watcher, *captures):
 
 
 def _started(semi, store, *, client="qq", peer_name="小鹿", person_id="",
-             me_names=("我",), missing_time="assumed", peer_names=None):
+             me_names=("我",), missing_time="inferred", peer_names=None):
     """把采集器摆成「已经开始监听」的状态，但不真的起后台线程。
 
     `start()` 会起线程 + 建真实剪贴板观察器；这里只复用它对状态的初始化
@@ -325,23 +326,67 @@ def test_commit_can_also_fix_the_text_and_the_time() -> None:
 # ================================================================ 时间：诚实
 
 
-def test_missing_time_is_recorded_as_assumed_not_as_a_real_time() -> None:
-    """剪贴板没带时间 → 用抓取时刻顶替，但必须标成 `assumed`。
+def test_missing_time_is_inferred_from_the_timeline_not_stamped_now() -> None:
+    """剪贴板没带时间 → **按会话时间线推定**，不是直接盖一个「抓取时刻」。
 
-    真时间轴上混进假时间，「他平时几点找我说话」这类结论就是错的。
-    单独存一列的意义就在这里：能查、能筛、能在界面上标出来。
+    需求 3 的核心：记录的是消息自己的时刻。旧行为把 `datetime.now()`
+    写进 `ts`，等于把「你什么时候复制的」当成「她什么时候说的」——
+    随手一按差几秒，回头补录几天前的记录就差几天，而「他平时几点找我说话」
+    这类结论直接建立在这个字段上。
+
+    这里断言两件事，缺一不可：
+    1. 推定出来的时间**排在库中最后一条消息之后**（时间线是单调的）；
+    2. 它**不晚于采集时刻**（消息不可能来自未来），且来源标成 `inferred`。
     """
     tmp = _tmp_dir()
     try:
         store, cb, semi = _modules(tmp)
         sc = _started(semi, store)
+        # 先往会话里放一条「已知的上一句」，作为时间线锚点
+        store.upsert_chat(sc.state.chat_id, "qq", name="小鹿", peer_name="小鹿")
+        store.insert_messages([semi.Msg(
+            chat_id=sc.state.chat_id, platform="qq", sender="小鹿", role="peer",
+            ts=semi._parse_iso("2026-09-28T21:00:00"), text="上一句")])
+
         cap = _feed(sc, _FakeWatcher([]), _cap(cb, [
             _item(cb, sender="小鹿", text="我先睡了", role="peer"),
         ]))[0]
         assert cap.status == "committed", cap.problems
-        row = store.list_messages(sc.state.chat_id, limit=10)[0]
-        assert row["ts"], "assumed 也要有一个时间，否则消息会掉出时间轴"
-        assert row["ts_source"] == "assumed"
+        row = store.list_messages(sc.state.chat_id, limit=10)[-1]
+        assert row["text"] == "我先睡了"
+        assert row["ts_source"] == "inferred", row["ts_source"]
+        assert semi._parse_iso(row["ts"]) > semi._parse_iso("2026-09-28T21:00:00"), \
+            f"推定时间没有排在锚点之后：{row['ts']}"
+        # 采集时刻是另一个字段，单独留着 —— 「她何时说的」与「我何时抓的」不该互相顶替
+        assert row["captured_at"], "采集时刻也要留下，两者是两件事"
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_inferred_time_never_runs_into_the_future() -> None:
+    """锚点已经很新（就是刚刚）时，推定时间不能越过采集时刻。
+
+    批量复制十几条消息时最容易踩：`锚点 + 条数` 很容易冲到将来，
+    于是聊天记录里出现「明天的消息」。这条断言就是钉住这个上限。
+    """
+    tmp = _tmp_dir()
+    try:
+        store, cb, semi = _modules(tmp)
+        sc = _started(semi, store)
+        store.upsert_chat(sc.state.chat_id, "qq", name="小鹿", peer_name="小鹿")
+        now = datetime.now(timezone.utc)
+        store.insert_messages([semi.Msg(
+            chat_id=sc.state.chat_id, platform="qq", sender="小鹿", role="peer",
+            ts=now, text="刚说的")])
+
+        cap = _feed(sc, _FakeWatcher([]), _cap(cb, [
+            _item(cb, sender="小鹿", text=f"连发第 {i} 条", role="peer") for i in range(5)
+        ]))[0]
+        rows = store.list_messages(sc.state.chat_id, limit=20)
+        newest = max(semi._parse_iso(r["ts"]) for r in rows)
+        assert newest <= now, f"推定时间跑到将来了：{newest} > {now}"
+        assert all(r["ts_source"] == "inferred" for r in rows if r["text"].startswith("连发"))
+        assert cap.written == 5, cap.problems
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

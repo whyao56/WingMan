@@ -59,6 +59,64 @@ async def suggest(chat_id: str, payload: dict[str, Any] = Body(default={})) -> S
         raise HTTPException(status_code=502, detail=f"生成建议失败：{exc}") from exc
 
 
+@router.post("/persons/{person_id}/suggest", response_model=SuggestionBundle)
+async def suggest_for_person(
+    person_id: str, payload: dict[str, Any] = Body(default={})
+) -> SuggestionBundle:
+    """以**对象**为单位跑一次分析（需求 8：先选对象，再勾选一个或多个渠道）。
+
+    不传 `chat_ids` 时用这个对象名下的全部渠道；传了就只用在里面的那些。
+    第一个被勾选的是主渠道 —— 你贴的那句话会记到它名下，检索也以它为主，
+    但事实、摘要、近期消息来自全部勾选的渠道。
+    """
+    ctx = get_ctx()
+    person = ctx.store.get_person(person_id)
+    if person is None:
+        raise HTTPException(status_code=404, detail=f"对象不存在：{person_id}")
+
+    raw = payload.get("chat_ids")
+    ids: list[str] = []
+    if isinstance(raw, (list, tuple)):
+        ids = [str(c) for c in raw if c]
+    if not ids:
+        detail = ctx.store.person_detail(person_id)
+        ids = [c.chat_id for c in (detail.channels if detail else [])]
+    if not ids:
+        raise HTTPException(
+            status_code=400,
+            detail=f"「{person.name}」名下还没有绑定任何渠道，先去「采集」页导入或采集一段记录。",
+        )
+
+    for cid in ids:
+        if ctx.store.get_chat(cid) is None:
+            raise HTTPException(status_code=404, detail=f"会话不存在：{cid}")
+
+    message = str(payload.get("peer_message") or "").strip()
+    if not message:
+        for cid in ids:
+            last = ctx.store.last_peer_message(cid)
+            if last:
+                message = str(last.get("text") or "").strip()
+                break
+    if not message:
+        raise HTTPException(
+            status_code=400,
+            detail="没有提供 peer_message，且这些渠道里还没有对方的消息可分析。",
+        )
+
+    try:
+        return await pipeline.run_analysis(
+            ctx, ids, message,
+            persist=bool(payload.get("persist", True)),
+            top_k=max(5, min(80, int(payload.get("top_k") or 30))),
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.exception("生成建议失败")
+        raise HTTPException(status_code=502, detail=f"生成建议失败：{exc}") from exc
+
+
 @router.post("/chats/{chat_id}/analyze")
 async def analyze_only(chat_id: str, payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
     """只要对方状态分析，不要回复建议。用于快速看一条消息。"""

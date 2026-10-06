@@ -110,6 +110,74 @@ def test_sender_time_and_text_on_one_line_keeps_the_text() -> None:
     assert res.items[0].ts == "2026-09-28T21:03:15"
 
 
+# ================================================================ 相对时间（需求 3）
+#
+# 客户端复制出来的时间**大量是相对的**：「小鹿 21:03」「小鹿 昨天 21:03」
+# 「小鹿 下午 3:30」。这些就是消息自己显示的时刻 —— 也就是要记的「回复时刻」。
+# 只认绝对日期的话，它们全落进「剪贴板没带时间」，最后被顶替成「按下 Ctrl+C
+# 的那一刻」，而那是采集时刻。下面的用例把每种相对写法钉住。
+
+
+def _rel(text: str, now: str = "2026-10-06T23:45:00") -> object:
+    """用固定的「现在」解析，否则用例会随运行日期漂移。
+
+    「现在」选在当天 23:45 —— 比下面所有用例里的钟点都晚，
+    这样它们默认落在「今天」；专门验「回退一天」的那条会自己改这个值。
+    """
+    from datetime import datetime as _dt
+
+    return cb.parse_copied(text, me_names=list(ME), peer_names=list(PEER),
+                           now=_dt.fromisoformat(now))
+
+
+def test_bare_clock_after_the_name_is_the_message_time() -> None:
+    """「小鹿 21:03」—— 钟点是消息自己的时刻，日期补成今天。"""
+    res = _rel("小鹿 21:03\n在吗\n\n我 21:04\n在的")
+    assert res.shape == "structured", res.shape
+    assert [i.ts for i in res.items] == ["2026-10-06T21:03:00", "2026-10-06T21:04:00"]
+    assert [i.ts_source for i in res.items] == ["relative"] * 2
+    assert "21:03" not in res.items[0].text
+
+
+def test_relative_day_words_resolve_to_the_right_date() -> None:
+    """昨天 / 前天 / 周几 都要落到具体日期。"""
+    assert _rel("小鹿 昨天 21:03\n在吗").items[0].ts == "2026-10-05T21:03:00"
+    assert _rel("小鹿 前天 08:30\n在吗").items[0].ts == "2026-10-04T08:30:00"
+    # 2026-10-06 是周二，「周三」= 上一个周三（09-30）
+    assert _rel("小鹿 周三 20:15\n在吗").items[0].ts == "2026-09-30T20:15:00"
+
+
+def test_afternoon_words_are_turned_into_24h() -> None:
+    """「下午 3:30」是 15:30，不是 03:30 —— 差 12 小时的错最伤人。"""
+    assert _rel("小鹿 下午 3:30\n在吗").items[0].ts == "2026-10-06T15:30:00"
+    assert _rel("小鹿 上午 9:05\n在吗").items[0].ts == "2026-10-06T09:05:00"
+    assert _rel("小鹿 晚上 11:40\n在吗").items[0].ts == "2026-10-06T23:40:00"
+
+
+def test_a_clock_time_that_would_be_in_the_future_rolls_back_a_day() -> None:
+    """复制到「还没发生的钟点」时，它属于昨天，不是今天。
+
+    消息不可能来自未来。这条规则同时管住两件事：刚过午夜时复制昨天的
+    晚间消息（下面这条），以及「今天/昨天」的边界不会因为跑得久了而漂。
+    """
+    assert _rel("小鹿 23:50\n在吗", now="2026-10-06T00:05:00").items[0].ts \
+        == "2026-10-05T23:50:00"
+    # 同一个钟点，在它**已经发生**之后复制 → 就是今天
+    assert _rel("小鹿 23:50\n在吗", now="2026-10-07T01:00:00").items[0].ts \
+        == "2026-10-06T23:50:00"
+
+
+def test_text_containing_a_score_is_not_mistaken_for_a_time() -> None:
+    """正文里的「3:1」不是时间。
+
+    裸钟点是弱信号，所以只在「紧跟在称呼后面」的位置才认。
+    正文里出现 `3:1` / `1:0` 这类比分时，绝不能被当成消息时间偷走。
+    """
+    res = _parse("小鹿: 我 3:1 赢了这场比赛")
+    assert res.items[0].ts == "", f"把正文里的比分当成时间了：{res.items[0].ts}"
+    assert res.items[0].text == "我 3:1 赢了这场比赛", repr(res.items[0].text)
+
+
 def test_one_head_with_several_lines_folds_them_into_that_sender() -> None:
     """块头只出现一次 → 后面几行算同一条消息。
 

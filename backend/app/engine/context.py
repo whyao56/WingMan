@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -23,6 +24,15 @@ from ..memory.retriever import HybridRetriever, Retrieved
 from ..schemas import ChatInfo, Fact, Persona, Summary
 
 log = logging.getLogger("wingman.engine.context")
+
+
+def self_chat_name(ctx: Any, chat_id: str) -> str:
+    """给提示文案用的渠道名；查不到就退回 chat_id，不抛错。"""
+    try:
+        chat = ctx.store.get_chat(chat_id)
+    except Exception:      # pragma: no cover - 纯文案，失败不该影响分析
+        chat = None
+    return (chat.name if chat else "") or chat_id
 
 MAX_FACTS = 60
 MAX_SUMMARIES = 5
@@ -41,6 +51,8 @@ class ContextPack:
     recent: list[dict[str, Any]] = field(default_factory=list)
     style_samples: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    # 本次分析实际用了哪些渠道（第一个是主渠道）。呼应需求 8 的多选。
+    chat_ids: list[str] = field(default_factory=list)
 
     # ---- 渲染后的文本块 ----
     profile_text: str = ""
@@ -83,55 +95,110 @@ class ContextPack:
         self.context_used = [r.to_dict() for r in self.retrieved]
 
 
+def _as_ids(chat_ids: str | Sequence[str]) -> list[str]:
+    """把「一个渠道」与「一串渠道」统一成有序列表（第一个是主渠道）。"""
+    if isinstance(chat_ids, str):
+        ids = [chat_ids]
+    else:
+        ids = [str(c) for c in chat_ids]
+    return [c for c in ids if c]
+
+
 async def build_context(
     ctx: Any,
-    chat_id: str,
+    chat_ids: str | Sequence[str],
     peer_message: str,
     *,
     top_k: int = 30,
     recent_n: int = MAX_RECENT,
     use_retrieval: bool = True,
 ) -> ContextPack:
-    chat = ctx.store.get_chat(chat_id)
-    if chat is None:
-        raise KeyError(f"会话不存在：{chat_id}")
+    """组装一次分析能看到的上下文。
 
-    persona = ctx.store.get_persona(chat_id)
-    facts = ctx.store.list_facts(chat_id)
-    summaries = ctx.store.list_summaries(chat_id, limit=MAX_SUMMARIES)
-    recent = ctx.store.recent_messages(chat_id, recent_n)
+    `chat_ids` 可以是单个渠道，也可以是**同一个对象下被勾选的多个渠道**（需求 8）。
+    多选时以第一个为「主渠道」（人格、昵称、检索锚点都取自它），其余渠道的
+    事实、摘要与近期消息**合并进来** —— 因为对同一个人来说，微信上聊的与 QQ 上
+    聊的是同一段关系，只喂一个渠道等于让模型看半张牌。
+    """
+    ids = _as_ids(chat_ids)
+    if not ids:
+        raise KeyError("没有选定任何会话")
+    primary = ids[0]
+    chat = ctx.store.get_chat(primary)
+    if chat is None:
+        raise KeyError(f"会话不存在：{primary}")
+
+    persona = ctx.store.get_persona(primary)
+
+    # 事实：有对象就用对象视野（对象级 + 该对象名下全部渠道级），没有则退回渠道级。
+    # 再补上其余被勾选渠道的事实（正常情况下它们在同一个对象下，已被覆盖，这里只是兜底）。
+    facts: list[Fact] = []
+    pid = chat.person_id or ""
+    if pid:
+        facts = ctx.store.list_facts_for_person(pid)
+    seen_fact = {(f.subject, f.key, f.value) for f in facts}
+    for cid in ids:
+        for f in ctx.store.list_facts(cid):
+            key = (f.subject, f.key, f.value)
+            if key not in seen_fact:
+                seen_fact.add(key)
+                facts.append(f)
+
+    summaries: list[Summary] = []
+    for cid in ids:
+        summaries.extend(ctx.store.list_summaries(cid, limit=MAX_SUMMARIES))
+    summaries.sort(key=lambda s: s.period or "", reverse=True)
+    summaries = summaries[:MAX_SUMMARIES]
+
+    # 多渠道的近期消息按时间归并 —— 不做「按渠道分段」，因为模型需要看到
+    # 「她昨晚在 QQ 上说的」和「今天在微信上说的」之间的先后关系。
+    recent: list[dict[str, Any]] = []
+    for cid in ids:
+        recent.extend(ctx.store.recent_messages(cid, recent_n))
+    recent.sort(key=lambda r: str(r.get("ts") or ""))
+    recent = recent[-recent_n:]
 
     pack = ContextPack(
         chat=chat, peer_message=peer_message, persona=persona,
         facts=facts, summaries=summaries, recent=recent,
     )
+    pack.chat_ids = ids
 
+    if len(ids) > 1:
+        pack.warnings.append(
+            f"本次合并了 {len(ids)} 个渠道的上下文，以「{chat.name}」为主。")
     if chat.peer_name:
         pass
     else:
         pack.warnings.append("这条会话没有设置对方昵称，分析里的主语会显示为「对方」。")
 
-    # ---- L3 检索
+    # ---- L3 检索：按主渠道检索，逐渠道做 —— 每个渠道的向量索引是独立的
     if use_retrieval and peer_message.strip():
         retriever = HybridRetriever(ctx.store, ctx.embedder)
-        stats = retriever.stats(chat_id)
-        if stats["indexed"] == 0:
-            pack.warnings.append(
-                "这条会话还没建向量索引，本次分析只用了事实与最近对话。"
-                "建议在「记忆」页点一次「重建索引」。"
-            )
-        else:
-            try:
-                pack.retrieved = await retriever.search(
-                    chat_id, peer_message, top_k=top_k,
-                    exclude_id=(recent[-1]["id"] if recent else None),
+        per_chat_k = max(5, top_k // max(1, len(ids)))
+        for cid in ids:
+            stats = retriever.stats(cid)
+            if stats["indexed"] == 0:
+                pack.warnings.append(
+                    f"「{self_chat_name(ctx, cid)}」还没建向量索引，本次只用了事实与最近对话。"
+                    "可以在对象详情的「记忆」页重建索引。"
                 )
+                continue
+            try:
+                pack.retrieved.extend(await retriever.search(
+                    cid, peer_message, top_k=per_chat_k,
+                    exclude_id=(recent[-1]["id"] if recent else None),
+                ))
             except Exception as exc:
                 log.warning("检索失败：%s", exc)
                 pack.warnings.append(f"历史检索失败（{exc}），已降级为仅用最近对话。")
+        pack.retrieved.sort(key=lambda r: -float(getattr(r, "score", 0) or 0))
+        pack.retrieved = pack.retrieved[:top_k]
 
     # ---- 她的真实说话风格样本（喂给模型做 few-shot，比自己描述风格有效得多）
-    peer_rows = [r for r in ctx.store.all_messages(chat_id) if r.get("role") == "peer"]
+    peer_rows: list[dict[str, Any]] = []
+    for cid in ids:
+        peer_rows.extend(r for r in ctx.store.all_messages(cid) if r.get("role") == "peer")
     picks = [
         str(r.get("text") or "").strip()
         for r in peer_rows

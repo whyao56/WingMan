@@ -286,7 +286,8 @@ async def semi_start(payload: dict[str, Any] = Body(default={})) -> dict[str, An
                    "不指定的话，抓到的消息没有归属，只能挂在那里。")
     state = await asyncio.to_thread(
         get_semi().start, ctx.store, client=client, peer_name=peer_name,
-        person_id=person_id, missing_time=str(payload.get("missing_time") or "assumed"))
+        person_id=person_id,
+        missing_time=str(payload.get("missing_time") or "inferred"))
     return {"ok": True, "state": state.__dict__}
 
 

@@ -49,6 +49,7 @@ import re
 import sys
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 
 from .winapi import wintypes
 
@@ -189,6 +190,74 @@ _TS_PATTERNS = (
                r"\s+(?P<h>\d{1,2}):(?P<mi>\d{2})(?::(?P<s>\d{2}))?"),
 )
 
+# ---------------------------------------------------------------- 相对时间
+#
+# 客户端复制出来的时间**大量是相对的**：「小鹿 21:03」「小鹿 昨天 21:03」
+# 「小鹿 下午 3:30」。这些恰恰是消息本身显示的时刻 —— 也就是用户要的
+# 「回复时刻」。只认绝对日期的话，这些一律落进「剪贴板没带时间」，
+# 最后被顶替成「你按下 Ctrl+C 的那一刻」，那是**采集时刻**，不是消息时刻，
+# 两者可以差好几天（补录旧消息时差得更远）。
+#
+# 所以这里补一层相对时间解析，把「今天/昨天/前天/周几 + 时段 + 钟点」
+# 解析到具体日期，并**标记成 `relative`** —— 钟点是消息给的，日期是推出来的，
+# 界面要能区分这两件事。
+_REL_DAY = {"今天": 0, "今晚": 0, "昨天": -1, "昨晚": -1, "前天": -2, "前晚": -2}
+_REL_PM = {"下午", "傍晚", "晚上", "夜里", "深夜"}
+_REL_AM = {"凌晨", "早上", "早晨", "上午"}
+_WEEKDAY = {"一": 0, "二": 1, "三": 2, "四": 3, "五": 4, "六": 5, "日": 6, "天": 6}
+
+_REL_TS = re.compile(
+    r"(?:(?P<wk>周|星期|礼拜)(?P<wd>[一二三四五六日天])\s*)?"
+    r"(?:(?P<day>今天|今晚|昨天|昨晚|前天|前晚)\s*)?"
+    r"(?:(?P<part>凌晨|早上|早晨|上午|中午|下午|傍晚|晚上|夜里|深夜)\s*)?"
+    r"(?P<h>\d{1,2})[:：](?P<mi>\d{2})(?:[:：](?P<s>\d{2}))?"
+)
+
+
+def _parse_relative_ts(
+    text: str, *, now: datetime | None = None, allow_bare_clock: bool = False
+) -> tuple[str, int, int]:
+    """解析相对时间，返回 `(ISO, 起点, 终点)`；找不到返回 `("", -1, -1)`。
+
+    `allow_bare_clock` 控制**裸钟点**（只有一个 `21:03`，前面既没有「昨天」
+    也没有「下午」）要不要认。这是一种弱信号：`我们 3:1 赢了` 里的 `3:1`
+    不是时间。所以只在「钟点紧跟在称呼后面」这种位置才允许（由调用方判断）。
+    """
+    now = now or datetime.now()
+    for m in _REL_TS.finditer(text):
+        g = m.groupdict()
+        wk, day, part = g.get("wk"), g.get("day"), g.get("part")
+        if not (wk or day or part) and not allow_bare_clock:
+            continue
+        try:
+            h, mi = int(g["h"]), int(g["mi"])
+            s = int(g.get("s") or 0)
+        except (TypeError, ValueError):
+            continue
+        if h > 23 or mi > 59 or s > 59:
+            continue
+        if part in _REL_PM and h < 12:
+            h += 12
+        elif part in _REL_AM and h == 12:
+            h = 0
+        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        if wk:
+            # 「周三」指最近一个已经过去的周三；今天正是周三时取上周三
+            delta = (midnight.weekday() - _WEEKDAY.get(g["wd"] or "一", 0)) % 7 or 7
+            midnight -= timedelta(days=delta)
+        elif day:
+            midnight += timedelta(days=_REL_DAY.get(day, 0))
+        else:
+            cand = midnight.replace(hour=h, minute=mi, second=s)
+            # 没说哪一天：当成今天；但如果算出来还在未来（比如刚过午夜复制了
+            # 一条 23:50 的消息），那就是昨天 —— 消息不可能来自未来。
+            if cand > now + timedelta(minutes=5):
+                midnight -= timedelta(days=1)
+        stamp = midnight + timedelta(hours=h, minutes=mi, seconds=s)
+        return stamp.strftime("%Y-%m-%dT%H:%M:%S"), m.start(), m.end()
+    return "", -1, -1
+
+
 # 说话人与正文之间的分隔：`昵称: 内容` / `昵称：内容`
 _SENDER_SEP = re.compile(r"^\s*(?P<who>[^:：\n]{1,24})\s*[:：]\s*(?P<body>.*)$", re.S)
 
@@ -232,11 +301,20 @@ class ParseResult:
     needs_sender: bool = False    # 解析不出说话人，要用户指定
 
 
-def _parse_ts(text: str) -> tuple[str, str, int, int]:
+def _parse_ts(
+    text: str, *, allow_bare_clock: bool = False, now: datetime | None = None
+) -> tuple[str, str, int, int, str]:
     """在一行里找时间。
 
-    返回 `(ISO 时间, 剥掉时间后的剩余文本, 时间起点, 时间终点)`；
-    找不到时返回 `("", 原文, -1, -1)`。
+    返回 `(ISO 时间, 剥掉时间后的剩余文本, 时间起点, 时间终点, 来源)`；
+    找不到时返回 `("", 原文, -1, -1, "")`。
+
+    **来源（`ts_source`）区分了两件不该混为一谈的事**：
+
+    - `clipboard` —— 客户端原样给了年月日时分，这是消息的确切时刻；
+    - `relative` —— 客户端只给了「昨天 21:03」这类相对写法；钟点是消息给的，
+      日期由解析时推出来。它仍然是**消息自身的时刻**，但日期可能差一天，
+      界面要标出来让人能核对。
 
     起止下标是给调用方判断**时间戳处在什么位置**用的：
     - 块头要求时间紧跟在称呼后面（否则 `我 今天 2026-… 说过` 会被当成头行）；
@@ -248,7 +326,8 @@ def _parse_ts(text: str) -> tuple[str, str, int, int]:
             continue
         g = m.groupdict()
         try:
-            y = int(g.get("y") or time.localtime().tm_year)
+            ref = now or datetime.now()
+            y = int(g.get("y") or ref.year)
             mo, d = int(g["mo"]), int(g["d"])
             h, mi = int(g["h"]), int(g["mi"])
             s = int(g.get("s") or 0)
@@ -259,8 +338,15 @@ def _parse_ts(text: str) -> tuple[str, str, int, int]:
             continue
         iso = f"{y:04d}-{mo:02d}-{d:02d}T{h:02d}:{mi:02d}:{s:02d}"
         rest = (text[:m.start()] + " " + text[m.end():]).strip()
-        return iso, rest, m.start(), m.end()
-    return "", text, -1, -1
+        return iso, rest, m.start(), m.end(), "clipboard"
+
+    iso, start, end = _parse_relative_ts(
+        text, now=now, allow_bare_clock=allow_bare_clock)
+    if iso:
+        rest = (text[:start] + " " + text[end:]).strip()
+        return iso, rest, start, end, "relative"
+
+    return "", text, -1, -1, ""
 
 
 def _match_known(who: str, me_names: list[str], peer_names: list[str]) -> str:
@@ -287,15 +373,18 @@ def _known_pairs(me_names: list[str], peer_names: list[str]) -> list[tuple[str, 
     return pairs
 
 
-def _head_of(line: str, pairs: list[tuple[str, str]]) -> tuple[str, str, str, str] | None:
-    """判断一行是不是「块头」。返回 (称呼, role, 时间, 同行正文) 或 None。"""
+def _head_of(
+    line: str, pairs: list[tuple[str, str]], now: datetime | None = None
+) -> tuple[str, str, str, str, str] | None:
+    """判断一行是不是「块头」。返回 (称呼, role, 时间, 同行正文, 时间来源) 或 None。"""
     m = _SENDER_SEP.match(line)
     if m:
         who = m.group("who").strip()
         for name, role in pairs:
             if who.lower() == name.lower():
-                ts, body, _, _ = _parse_ts(m.group("body"))
-                return name, role, ts, body
+                ts, body, _, _, src = _parse_ts(m.group("body"),
+                                                allow_bare_clock=True, now=now)
+                return name, role, ts, body, src
 
     low = line.lower()
     for name, role in pairs:
@@ -306,13 +395,13 @@ def _head_of(line: str, pairs: list[tuple[str, str]]) -> tuple[str, str, str, st
         rest = rest.lstrip(_HEAD_SEPS)
         if not rest:
             # 只有称呼的孤行：正文在下面几行（少见但合法）
-            return name, role, "", ""
-        ts, body, at, _ = _parse_ts(rest)
+            return name, role, "", "", ""
+        ts, body, at, _, src = _parse_ts(rest, allow_bare_clock=True, now=now)
         # 关键判据：时间戳必须紧跟在称呼后面。
         # `我觉着吧：这事儿得再想想` → rest="觉着吧：…"，没有时间戳 → 不是块头；
         # `我 今天 2026-09-28 21:03:15 说过` → 时间戳前面还压着「今天」→ 也不是块头。
         if ts and not rest[:at].strip(_HEAD_SEPS).strip():
-            return name, role, ts, body
+            return name, role, ts, body, src
     return None
 
 
@@ -321,6 +410,7 @@ def parse_copied(
     *,
     me_names: list[str] | None = None,
     peer_names: list[str] | None = None,
+    now: datetime | None = None,
 ) -> ParseResult:
     """把剪贴板文本解析成消息列表。
 
@@ -339,9 +429,10 @@ def parse_copied(
     pairs = _known_pairs(me_names, peer_names)
 
     lines = raw.split("\n")
-    heads: list[tuple[int, str, str, str, str]] = []   # (行号, 称呼, role, ts, 同行正文)
+    # (行号, 称呼, role, ts, 同行正文, ts_source)
+    heads: list[tuple[int, str, str, str, str, str]] = []
     for i, line in enumerate(lines):
-        h = _head_of(line, pairs)
+        h = _head_of(line, pairs, now)
         if h:
             heads.append((i, *h))
 
@@ -352,17 +443,17 @@ def parse_copied(
         # 默默丢掉用户复制进来的文字，是这类工具里最不该犯的错。
         lead = "\n".join(lines[:heads[0][0]]).strip()
         if lead:
-            lts, lbody, _, _ = _parse_ts(lead)
+            lts, lbody, _, _, lsrc = _parse_ts(lead, now=now)
             items.append(Captured(text=lbody.strip() or lead, ts=lts,
-                                  ts_source="clipboard" if lts else "",
+                                  ts_source=lsrc,
                                   raw_line=lines[0]))
 
-        for idx, (ln, who, role, ts, body_first) in enumerate(heads):
+        for idx, (ln, who, role, ts, body_first, src) in enumerate(heads):
             end = heads[idx + 1][0] if idx + 1 < len(heads) else len(lines)
             block = [body_first] + lines[ln + 1:end]
             items.append(Captured(sender=who, text="\n".join(block).strip(),
                                   ts=ts, role=role,
-                                  ts_source="clipboard" if ts else "",
+                                  ts_source=src,
                                   raw_line=lines[ln]))
 
         items = [it for it in items if it.text.strip()]
@@ -377,15 +468,14 @@ def parse_copied(
                            note="剪贴板里只有说话人和时间，没有正文。")
 
     # 单条形态：整段当一条，时间从文本里找（找到就剥掉）
-    ts, stripped, at, end = _parse_ts(raw)
+    ts, stripped, at, end, src = _parse_ts(raw, now=now)
     if ts and raw[:at].strip() and raw[end:].strip():
         # 时间戳夹在一句话中间 —— 它是正文的一部分，不是这条消息的时间。
         # 把它抽走会把正文切出一道口子，还谎报这是消息时间。
-        ts, stripped = "", raw
+        ts, stripped, src = "", raw, ""
     body = stripped.strip() or raw.strip()
     return ParseResult(
-        items=[Captured(text=body, ts=ts,
-                        ts_source="clipboard" if ts else "")],
+        items=[Captured(text=body, ts=ts, ts_source=src)],
         shape="plain",
         note="剪贴板里没有说话人信息，请指定这条是谁说的。",
         needs_sender=True,

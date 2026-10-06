@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import json
 import logging
 import os
 import socket
@@ -22,6 +23,7 @@ import time
 import urllib.error
 import urllib.request
 import webbrowser
+from typing import Any
 
 from .config import APP_DIR, KEEP_ALIVE_S, LOG_DIR, RESOURCE_DIR, get_settings
 
@@ -71,6 +73,29 @@ def _wait_healthy(port: int, timeout: float = 40.0) -> bool:
     return False
 
 
+def _ask_running_instance_to_show(port: int, timeout: float = 3.0) -> bool:
+    """请**已经在跑的那个实例**把它自己的窗口显示出来。成功返回 True。
+
+    为什么不是「在这里再开一个窗口」：服务只在一个进程里。第二个进程开出来的
+    窗口只是一个空壳 —— 页面的请求都打到老进程的服务上，于是「关闭程序」
+    关掉的是新壳，老进程连服务带窗口继续活着，用户看到的是「点了没反应」。
+    「后台运行」藏起来的那个窗口本来就是老进程的，让它自己 show 回来才对。
+    """
+    url = f"http://127.0.0.1:{port}/api/desktop/show"
+    try:
+        # 和 `_probe_wingman` 一样局部关掉代理：http_proxy 会劫持 127.0.0.1
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        req = urllib.request.Request(
+            url, method="POST", data=b"{}",
+            headers={"Content-Type": "application/json"},
+        )
+        with opener.open(req, timeout=timeout) as resp:
+            return bool(json.loads(resp.read().decode("utf-8", "ignore")).get("shown"))
+    except Exception as exc:
+        log.info("让已有实例显示窗口失败（%s），改为新开一个窗口。", exc)
+        return False
+
+
 def _show_error(title: str, message: str) -> None:
     """原生弹窗。没有控制台时，这是唯一能让用户看见的失败方式。"""
     text = f"{message}\n\n日志文件：{LOG_DIR / 'wingman.log'}"
@@ -88,6 +113,129 @@ def _show_error(title: str, message: str) -> None:
 # ---------------------------------------------------------------- 界面
 
 
+# ---------------------------------------------------------------- 关窗协商
+#
+# 需求 9：点窗口右上角的 × 时，不要直接退 —— 弹一个小窗让用户选
+# 「关闭程序」还是「关掉窗口、后台继续跑」。
+#
+# 为什么必须问：关掉窗口 = 关掉服务，正在跑的采集/分析会**静默中断**，
+# 用户下次打开才发现少了一段。而「只是想把它挪到一边」的人也不少。
+#
+# 桥怎么搭：`closing` 事件在 Python 侧触发，但选择要在界面里做，
+# 所以这里把关闭**拦下来**（返回 False），再让页面把对话框弹出来；
+# 页面拿到用户的选择后回调 `/api/desktop/close`。
+# 每条路径都有兜底，不允许出现「点了 × 什么都没发生」。
+
+_CLOSE = {
+    "pending": False,      # 已经拦下了一次关闭，正在等用户选
+    "hide_ok": False,      # 这个窗口对象支不支持 hide（拿不到就当不支持）
+}
+_WINDOW: Any = None
+_STOP = threading.Event()
+
+
+def _ask_frontend_to_choose() -> bool:
+    """让页面弹出「关闭程序 / 后台运行」的小窗。成功返回 True。"""
+    if _WINDOW is None:
+        return False
+    try:
+        _WINDOW.evaluate_js("window.__wingmanAskClose && window.__wingmanAskClose()")
+        return True
+    except Exception as exc:      # pragma: no cover - 依赖 pywebview 运行时
+        log.warning("通知界面弹出关闭选项失败：%s", exc)
+        return False
+
+
+def _on_closing() -> bool:
+    """pywebview 的关窗钩子。返回 False = 取消这次关闭。
+
+    已在等用户选择时（`pending`）再点一次 × → 直接放行，别把人卡死在
+    一个弹不出来的窗口里 —— 那种「× 点不动」的观感比任何设计失误都糟。
+    """
+    if _CLOSE["pending"]:
+        log.info("已在等待用户选择，这次直接关闭。")
+        return True
+    if _ask_frontend_to_choose():
+        _CLOSE["pending"] = True
+        log.info("已拦下关闭请求，等用户选择「关闭程序 / 后台运行」。")
+        return False
+    log.info("界面没法弹窗（没开原生窗口），按「关闭程序」处理。")
+    return True
+
+
+def close_action(action: str) -> dict[str, Any]:
+    """界面里选完之后回调这里。`action`：quit | background | cancel。"""
+    _CLOSE["pending"] = False
+    action = (action or "").strip()
+
+    if action == "cancel":
+        return {"ok": True, "action": "cancel", "hint": "已取消，程序继续运行。"}
+
+    if action == "background":
+        if _WINDOW is not None:
+            try:
+                _WINDOW.hide()
+                log.info("窗口已隐藏，服务继续在后台运行。")
+                return {
+                    "ok": True, "action": "background",
+                    "hint": "窗口已隐藏，服务继续在后台跑。想把它调回来，再双击一次 WingMan 就行。",
+                }
+            except Exception as exc:
+                log.warning("隐藏窗口失败（%s），改为退出。", exc)
+        return {
+            "ok": True, "action": "quit",
+            "hint": "浏览器模式没有可隐藏的窗口 —— 关掉这个标签页即可，服务本来就在后台跑。",
+        }
+
+    # quit：先让 uvicorn 收工，再结束进程。
+    # 直接 `os._exit` 会跳过 uvicorn 的优雅退出（正在写的库可能被打断），
+    # 所以先给服务一个退出的信号，等一小会儿再兜底强退。
+    log.info("用户选择关闭程序，准备退出。")
+    _STOP.set()
+    threading.Thread(target=_force_exit_soon, name="wingman-exit", daemon=True).start()
+    return {"ok": True, "action": "quit", "hint": "正在关闭…"}
+
+
+def _force_exit_soon(delay: float = 1.2) -> None:      # pragma: no cover - 进程收尾
+    time.sleep(delay)
+    try:
+        if _WINDOW is not None:
+            _WINDOW.destroy()
+    except Exception:
+        pass
+    os._exit(0)
+
+
+def show_window() -> dict[str, Any]:
+    """把被「后台运行」藏起来的窗口调回来。
+
+    没有原生窗口（浏览器模式）时 `shown=False` —— 界面文案要让用户知道
+    去浏览器打开，而不是傻等一个不会出现的窗口。
+    """
+    if _WINDOW is None:
+        return {
+            "ok": True, "shown": False,
+            "hint": "当前没有原生窗口（浏览器模式）——服务本来就在后台跑，"
+                    "用浏览器打开 http://127.0.0.1:8787/ 即可。",
+        }
+    try:
+        _WINDOW.show()
+        log.info("窗口已重新显示。")
+        return {"ok": True, "shown": True, "hint": "窗口已调回来。"}
+    except Exception as exc:      # pragma: no cover - 依赖 pywebview 运行时
+        log.warning("显示窗口失败：%s", exc)
+        return {"ok": False, "shown": False, "error": str(exc)}
+
+
+def desktop_state() -> dict[str, Any]:
+    """界面用来自查「有没有原生窗口」——决定 × 按钮该怎么说话。"""
+    return {
+        "native_window": _WINDOW is not None,
+        "pending_close": _CLOSE["pending"],
+        "platform": sys.platform,
+    }
+
+
 def _open_browser(port: int) -> None:
     webbrowser.open(f"http://127.0.0.1:{port}/")
 
@@ -97,6 +245,7 @@ def _open_window(port: int) -> bool:
 
     pywebview 依赖系统 WebView2，不是所有机器都有；失败绝不能影响使用。
     """
+    global _WINDOW
     if os.environ.get("WINGMAN_USE_BROWSER") == "1":
         return False
     try:
@@ -107,7 +256,7 @@ def _open_window(port: int) -> bool:
 
     url = f"http://127.0.0.1:{port}/"
     try:
-        webview.create_window(
+        window = webview.create_window(
             "WingMan · 聊天僚机",
             url,
             width=1280,
@@ -115,11 +264,17 @@ def _open_window(port: int) -> bool:
             min_size=(940, 640),
             text_select=True,
         )
+        _WINDOW = window
+        try:
+            window.events.closing += _on_closing
+        except Exception as exc:      # pragma: no cover - 老版本 pywebview 没有 events
+            log.warning("注册关窗钩子失败（%s），× 将直接退出。", exc)
         # 非阻塞：窗口关掉后返回，主线程据此收尾
         webview.start()
         return True
     except Exception as exc:
         log.warning("原生窗口打开失败（%s），改用浏览器。", exc)
+        _WINDOW = None
         return False
 
 
@@ -194,7 +349,7 @@ def main(argv: list[str] | None = None) -> int:
         wanted = args.port or cfg.port
         host = args.host or cfg.host
 
-        # 单实例：已经在跑就只把界面调出来，别再起一个服务
+        # 单实例：已经在跑就**把原来那个窗口调出来**，别再起一个服务。
         if _probe_wingman(wanted):
             # 日志必须说实话：--no-window 下我们**不会**打开任何界面。
             # 之前这里无论什么模式都印「直接打开界面」，排查别人的问题时
@@ -204,10 +359,15 @@ def main(argv: list[str] | None = None) -> int:
                     "%s 端口上已有 WingMan 在运行，直接复用（--no-window，不打开界面）。",
                     wanted,
                 )
-            else:
-                log.info("检测到 %s 端口上已有 WingMan 在运行，直接打开界面。", wanted)
-                if not _open_window(wanted):
-                    _open_browser(wanted)
+                return 0
+            # 「后台运行」把窗口藏起来了 —— 再双击一次要的是「把它调回来」，
+            # 而不是再起一个壳。那个壳没有服务，关它不会停掉真正在跑的那个进程。
+            if _ask_running_instance_to_show(wanted):
+                log.info("已把后台运行的窗口调回来。")
+                return 0
+            log.info("检测到 %s 端口上已有 WingMan 在运行，直接打开界面。", wanted)
+            if not _open_window(wanted):
+                _open_browser(wanted)
             return 0
 
         port = _free_port(wanted)

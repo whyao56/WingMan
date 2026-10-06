@@ -18,9 +18,17 @@
 - 说话人对不上 → **挂起，等人说一句**。不猜。
   「把老王的话记成小鹿说的」这种错误是静默的，之后所有分析都建立在错的人身上。
 
-时间也走同一条逻辑：剪贴板里带时间就用它；没带就用抓取时刻顶替，
-但**记为 `assumed`**，界面上会标出来。真时间轴上混进假时间，
-比少几条消息坏得多。
+时间也走同一条逻辑，但**这里的「时间」指的是消息自己的时刻，不是你按下
+Ctrl+C 的那一刻**（需求 3）。两者的差距可以很大：随手一按差几秒，
+回头补录几天前的记录就差几天。所以取时间的顺序是：
+
+1. 剪贴板里带了时刻就用它（`clipboard` / `relative`，见 `clipboard._parse_ts`）；
+2. 没带，就**排在会话时间线的末尾**（上一条已知消息之后逐秒递增，
+   但不会越过「你复制的那一刻」）—— 记为 `inferred`；
+3. 也可以选「停下来问我」（`ask`），由你手填。
+
+界面把 `inferred` 明确标成「推定」。真时间轴上混进假时间，
+比少几条消息坏得多。`captured_at` 另存**采集时刻**，两者都留着，谁也没丢。
 
 ## 为什么消息本身不自动判重就够了
 
@@ -38,7 +46,7 @@ import threading
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -65,7 +73,10 @@ class PendingItem:
     ts: str = ""                 # ISO 时间；空表示剪贴板里没带
     role: str = ""               # me | peer | ""（要用户说）
     sender: str = ""
-    ts_source: str = ""          # clipboard | assumed | manual
+    # clipboard（客户端给了年月日）| relative（客户端给了相对时间，日期是推的）
+    # | inferred（按会话时间线排的，推定）| assumed（旧的抓取时刻，仅为兼容）
+    # | manual（用户手填）
+    ts_source: str = ""
     msg_type: str = "text"
     # 剪贴板里没带时间，而且这次采集的策略是「问我」而不是「用抓取时刻顶替」。
     # 单独一个标记而不是复用 role：时间不对和归属不对是两回事，界面上问的话也不一样。
@@ -132,19 +143,22 @@ class SemiCollector:
         self._lock = threading.RLock()
         self._me_names: list[str] = list(DEFAULT_ME_NAMES)
         self._peer_names: list[str] = []
-        # 剪贴板里没带时间时的策略：assumed（用抓取时刻，界面标出来）| ask（挂起等人填）
-        self._missing_time = "assumed"
+        # 剪贴板里没带时间时的策略：inferred（按会话时间线推定，默认）| ask（挂起等人填）
+        self._missing_time = "inferred"
         self._load()
 
     # ------------------------------------------------------------ 生命周期
 
     def start(self, store, *, client: str, peer_name: str = "",
-              person_id: str = "", missing_time: str = "assumed") -> SemiState:
+              person_id: str = "", missing_time: str = "inferred") -> SemiState:
         """开始监听。
 
         `peer_name` / `person_id` 决定「抓到的消息归到谁名下」。
         给了 person_id 就用那个人已有的会话（同一个渠道复用同一个会话 id），
         这样半自动采的内容和自动采的内容会落在同一段记录里，而不是分成两段。
+
+        `missing_time` 是「剪贴板没带时间」时的策略：
+        `inferred`（默认，按会话时间线推定）/ `ask`（停下来问）/ `assumed`（用抓取时刻，旧行为）。
         """
         with self._lock:
             self._store = store
@@ -157,7 +171,8 @@ class SemiCollector:
                 me_name=self._me_names[0] if self._me_names else "我",
             )
             self.state.chat_id = self._resolve_chat_id(store, client, person_id, peer_name)
-            self._missing_time = ("ask" if str(missing_time) == "ask" else "assumed")
+            self._missing_time = {"ask": "ask", "assumed": "assumed"}.get(
+                str(missing_time), "inferred")
             self._watcher = cb.ClipboardWatcher(interval=POLL_INTERVAL)
             # 记住「开始监听这一刻的剪贴板」：不然一按开始就会把上一次
             # 复制的东西当成新内容收进来。
@@ -218,7 +233,7 @@ class SemiCollector:
             self._save()
 
     def _ingest(self, capture: cb.Capture) -> Capture:
-        now = datetime.now().astimezone().isoformat(timespec="seconds")
+        captured = datetime.fromtimestamp(capture.at).astimezone()
         items = [
             PendingItem(
                 id=uuid.uuid4().hex[:12],
@@ -230,14 +245,20 @@ class SemiCollector:
             )
             for c in capture.items
         ]
-        for it in items:
-            if not it.ts:
-                if self._missing_time == "ask":
-                    it.ts_source = ""
-                    it.needs_time = True
-                else:
-                    it.ts = now
-                    it.ts_source = "assumed"
+        anchor = self._timeline_anchor()
+        for n, it in enumerate(items):
+            if it.ts:
+                continue
+            if self._missing_time == "ask":
+                it.ts_source = ""
+                it.needs_time = True
+            elif self._missing_time == "assumed":
+                # 兼容旧设置：直接用抓取时刻。不推荐，界面已默认换成 inferred。
+                it.ts = captured.isoformat(timespec="seconds")
+                it.ts_source = "assumed"
+            else:
+                it.ts = _infer_iso(anchor, n, captured)
+                it.ts_source = "inferred"
         cap = Capture(id=uuid.uuid4().hex[:12], at=capture.at, shape=capture.shape,
                       note=capture.note, items=items)
         # 归属和时间都有依据 → 直接写库（这是用户要的「点一下就到库里」）
@@ -249,6 +270,25 @@ class SemiCollector:
         return cap
 
     # ------------------------------------------------------------ 落库
+
+    def _timeline_anchor(self) -> datetime | None:
+        """这个会话里已有的**最后一条消息**的时间，用作「推定时刻」的起点。
+
+        取不到（没有存储层、会话还没建、库里没有消息）就返回 None ——
+        调用方会退回复制时刻。这里**不抛错**：一个用来对时间的辅助函数，
+        不该有能力把整条采集流程搞崩。
+        """
+        store, chat_id = self._store, self.state.chat_id
+        if store is None or not chat_id:
+            return None
+        try:
+            rows = store.list_messages(chat_id, limit=1)
+        except Exception as exc:      # pragma: no cover - 纯辅助，失败就退回
+            log.warning("取会话时间线锚点失败：%s", exc)
+            return None
+        if not rows:
+            return None
+        return _parse_iso(str(rows[0].get("ts") or ""))
 
     def _commit_capture(self, cap: Capture) -> Capture:
         store = self._store
@@ -267,10 +307,12 @@ class SemiCollector:
             if it.blocked:
                 continue          # 归属或时间还没依据的不写
             sender = "我" if it.role == "me" else (it.sender or peer)
-            # 时间不可信时额外查重：同一条消息复制两次会拿到两个不同的抓取时刻，
-            # 唯一键因此不同，会被当成两条。只在 assumed 时启用 ——
-            # 时间可信时「同一句话在同一秒说两次」几乎不可能，不需要误杀。
-            if it.ts_source == "assumed" and _seen_recently(history, sender, it.text):
+            # 时间不可信时额外查重：同一条消息复制两次会拿到两个不同的推导时刻，
+            # 唯一键因此不同，会被当成两条。只在时间不是消息自己给的时候启用 ——
+            # 时间来自消息本身（clipboard / relative）时，同一句话在同一秒说两次
+            # 几乎不可能，不需要误杀。
+            if it.ts_source in ("inferred", "assumed") and _seen_recently(
+                    history, sender, it.text):
                 cap.duplicates += 1
                 continue
             rows.append(Msg(
@@ -514,7 +556,7 @@ class SemiCollector:
             return
         self._me_names = list(raw.get("me_names") or DEFAULT_ME_NAMES)
         self._peer_names = list(raw.get("peer_names") or [])
-        self._missing_time = str(raw.get("missing_time") or "assumed")
+        self._missing_time = str(raw.get("missing_time") or "inferred")
         fields = set(PendingItem.__dataclass_fields__)
         for c in raw.get("captures") or []:
             items: list[PendingItem] = []
@@ -571,6 +613,21 @@ def _capture_iso(at: float) -> str:
         return datetime.fromtimestamp(at).astimezone().isoformat(timespec="seconds")
     except (OverflowError, OSError, ValueError):  # pragma: no cover - 极端坏值
         return ""
+
+
+def _infer_iso(anchor: datetime | None, n: int, captured: datetime) -> str:
+    """按会话时间线推断第 n 条消息的时刻。
+
+    锚点是这个会话里**已有的最后一条消息**。复制来的消息排在它后面 ——
+    你说的下一句，时间总在上一句之后。逐秒递增，但**不越过复制的那一刻**：
+    消息不可能来自未来（锚点缺失时直接退回复制时刻）。
+    """
+    if anchor is None:
+        return captured.isoformat(timespec="seconds")
+    guess = anchor + timedelta(seconds=n + 1)
+    if guess > captured:
+        guess = captured
+    return guess.isoformat(timespec="seconds")
 
 
 def _dedupe(names: list[str]) -> list[str]:

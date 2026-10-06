@@ -59,6 +59,130 @@ def test_caption_uses_its_own_class(html: str) -> None:
     assert ".sub{display:grid" not in css.replace(" ", "")
 
 
+def test_no_dead_view_links(html: str) -> None:
+    """每个字面量的 goView("x") 都要有对应的 ``#view-x`` 容器。
+
+    「记忆 / 导入 / 自检 / 通话」四页并进对象页、采集页与设置页之后，
+    任何一个漏改的跳转都会变成一个**点了没反应**的按钮 —— 不报错、不提示，
+    用户只会以为程序卡了。挪页面的时候最容易漏的就是这种角落里的跳转。
+    """
+    views = set(re.findall(r'id="view-([a-z]+)"', html))
+    # 变量形式的调用（goView(b.dataset.x)）静态查不了，这里只钉字面量
+    targets = set(re.findall(r'goView\("([a-z]+)"\)', html))
+    assert views, "一个页面容器都没解析到，说明这个测试的匹配规则已经失效了"
+    assert targets <= views, f"这些 goView 目标没有对应页面：{sorted(targets - views)}"
+
+
+def test_legacy_deep_links_are_redirected(html: str) -> None:
+    """旧的 ?view=memory / import / check / voice 深链接不能变成死链。
+
+    老书签、别人发来的链接、以及自动化截图脚本都会带着这些参数，
+    点了没反应等于「你这个软件坏了」。
+    """
+    for legacy in ("memory", "import", "check", "voice"):
+        assert re.search(rf'"?{legacy}"?\s*:\s*"[a-z]+"', html), \
+            f"旧深链接 ?view={legacy} 没有重定向映射"
+
+
+def test_js_only_references_dom_ids_that_exist(html: str) -> None:
+    """JS 里 ``$("#xxx")`` 提到的 id，最终必须有人创建它。
+
+    「引用了没建的容器」是这套单文件前端最典型的静默失效：`$(...)` 返回 null，
+    后面 `.innerHTML` / `.classList` 直接抛异常，整段初始化的后半部分不再执行 ——
+    用户看到的是「某个按钮点了没反应」，控制台里才有一行错。
+
+    创建点算两处：静态 HTML，以及脚本里用模板串拼出来的节点
+    （弹窗、动态提示里 `id="xxx"` 的那些）。
+    """
+    script = html[html.index("<script>"):]
+    # 静态 DOM + 脚本里拼出来的 DOM，都算「有人创建」
+    created = set(re.findall(r'\bid="([^"]+)"', html))
+    used = set(re.findall(r'\$\("#([A-Za-z0-9_-]+)"\)', script))
+    missing = sorted(used - created)
+    assert not missing, f"JS 引用了谁都没创建的 id：{missing}"
+
+
+# 「被调用但没定义」检查用的三张白名单表。
+#
+# 加进来之前先问自己：这个名字真的不需要在本文件里定义吗？
+# 语言关键字与浏览器内置对象是天然如此的；CSS_FUNCS 是另一回事 ——
+# 模板串里的内联样式（``style="width:min(680px,100%)"``）会带出 ``min()``
+# 这类 CSS 函数，它们长得像 JS 调用但根本不是，只能显式排除。
+_JS_KEYWORDS = {
+    "if", "for", "while", "switch", "catch", "return", "typeof", "function", "new",
+    "await", "do", "else", "throw", "delete", "void", "in", "of", "case", "yield",
+    "instanceof", "async", "var", "let", "const", "class", "super", "this", "with",
+    "try", "finally",
+}
+
+_BROWSER_GLOBALS = {
+    "alert", "confirm", "prompt", "console", "fetch", "setTimeout", "setInterval",
+    "clearTimeout", "clearInterval", "requestAnimationFrame", "queueMicrotask",
+    "btoa", "atob", "structuredClone",
+    "Number", "String", "Boolean", "Array", "Object", "JSON", "Math", "Date", "RegExp",
+    "Error", "TypeError", "Promise", "Set", "Map", "WeakMap", "WeakSet", "Symbol", "Intl",
+    "parseInt", "parseFloat", "isNaN", "isFinite",
+    "encodeURIComponent", "decodeURIComponent",
+    "Blob", "File", "FileReader", "FormData", "URL", "URLSearchParams",
+    "TextEncoder", "TextDecoder", "CustomEvent", "Event", "AbortController", "Function",
+    "Image", "Audio", "MutationObserver", "IntersectionObserver", "ResizeObserver",
+}
+
+_CSS_FUNCS = {
+    "var", "min", "max", "clamp", "calc", "rgb", "rgba", "hsl", "hsla", "url", "env",
+    "attr", "translate", "translateX", "translateY", "scale", "rotate", "repeat",
+    "cubic-bezier", "linear-gradient",
+}
+
+
+def _defined_function_names(js: str) -> set[str]:
+    """脚本里**被定义过**的标识符。
+
+    宁可宽一点（宁可多算一个定义，也不要漏），这样守卫只会漏报、不会误报 ——
+    一条会自己误报的守卫，最后一定会被人删掉。
+    """
+    names: set[str] = set()
+    names |= set(re.findall(r"function\s+([A-Za-z_$][\w$]*)", js))       # 声明式 + 具名函数表达式
+    names |= set(re.findall(r"(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=", js))
+    names |= set(re.findall(r"(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s+(?:of|in)\b", js))
+    # 函数/箭头函数的参数表（含解构出来的名字，如 { onConfirm }）
+    for m in re.finditer(r"(?:function\s*[A-Za-z_$]*\s*)?\(([^()]*)\)\s*(?:=>|\{)", js):
+        names |= set(re.findall(r"[A-Za-z_$][\w$]*", m.group(1)))
+    return names
+
+
+def _called_function_names(js: str) -> dict[str, int]:
+    """脚本里形如 ``name(`` 的调用。前面的字符不能是 ``.``（那是方法调用）或中文。"""
+    out: dict[str, int] = {}
+    for m in re.finditer(r"(^|[^\w$.\u4e00-\u9fa5])([A-Za-z_$][\w$]*)\s*\(", js):
+        name = m.group(2)
+        out[name] = out.get(name, 0) + 1
+    return out
+
+
+def test_no_calls_to_undefined_functions(html: str) -> None:
+    """脚本里调用的每个名字，最终都要有人定义它。
+
+    重构把 ``loadChats`` 并进 ``loadObjects`` 时漏改了 5 个调用点，而这条链子
+    藏得很深：``init()`` 里那个 ``await loadChats()`` 一抛 ReferenceError，
+    后面的读设置、自检、深链接就全都不执行了；指挥台那次更隐蔽 ——
+    它在 ``try`` 里，于是「分析成功」的结果会被 ``catch`` 覆盖成一句
+    ``loadChats is not defined``，看起来就是主功能坏了。
+
+    单文件、无构建步骤的前端没有编译器帮忙，这条守卫补上那一环。
+    """
+    script = html[html.index("<script>"):]
+    called = _called_function_names(script)
+    assert called, "一个调用都没解析到，说明这个测试的匹配规则已经失效了"
+    defined = _defined_function_names(script)
+    unknown = sorted(
+        n for n in called
+        if n not in defined and n not in _JS_KEYWORDS
+        and n not in _BROWSER_GLOBALS and n not in _CSS_FUNCS
+    )
+    assert not unknown, f"这些函数被调用了但没人定义：{unknown}"
+
+
 def test_presets_do_not_use_retired_deepseek_models(html: str) -> None:
     """预设里不能出现已下线的模型名。
 

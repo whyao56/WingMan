@@ -71,7 +71,7 @@ button{cursor:pointer}
 
 /* ---------- 侧栏 ---------- */
 .side{background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
-.brand{padding:20px 18px 16px;border-bottom:1px solid var(--border)}
+.brand{padding:20px 18px 16px;border-bottom:1px solid var(--border);position:relative}
 .brand h1{font-size:17.5px;font-weight:680;letter-spacing:.2px;color:var(--text)}
 .brand h1 span{color:var(--accent)}
 .brand p{font-size:12.5px;color:var(--dim);margin-top:3px}
@@ -156,6 +156,32 @@ select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,va
 .pill.info{color:var(--accent);border-color:var(--accent-line);background:var(--accent-weak)}
 
 .mono{font-family:var(--mono);font-size:12.5px}
+/* 正文里的一行小链接按钮：解释「这东西怎么来的」，比塞进卡片更省地方 */
+.linkbtn{background:none;border:0;padding:0;margin:0;cursor:pointer;font:inherit;
+  color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+
+/* 侧栏右上角的关闭：和系统窗口的 × 做同一件事（浏览器模式下它是唯一入口） */
+.closebtn{position:absolute;top:14px;right:12px;width:26px;height:26px;padding:0;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  background:transparent;border:1px solid transparent;border-radius:6px;color:var(--muted)}
+.closebtn:hover{border-color:var(--border2);background:var(--panel2);color:var(--text)}
+.closebtn svg{width:15px;height:15px}
+
+/* 侧栏里的自检提醒：只放「要你动手」的那几条 */
+.sidewarn{margin-bottom:9px;padding:9px 10px;border-radius:var(--r);
+  background:var(--warn-bg);border:1px solid var(--warn-line)}
+.sidewarn .sw-hd{font-size:12px;font-weight:560;color:var(--warn);margin-bottom:4px}
+.sidewarn .sw-it{font-size:12px;line-height:1.5;color:var(--muted);cursor:pointer;
+  padding:2px 0;display:block;width:100%;text-align:left;background:none;border:0}
+.sidewarn .sw-it:hover{color:var(--accent);text-decoration:underline}
+
+/* 导入的拖放区：看得见「可以往这儿扔」 */
+.drop{position:relative;padding:22px 16px;border:1.5px dashed var(--border2);border-radius:var(--r);
+  background:var(--panel2);text-align:center;transition:border-color .13s,background .13s}
+.drop.hot{border-color:var(--accent);background:var(--accent-weak)}
+.drop input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.drop .dz-main{font-size:13.5px;color:var(--muted)}
+.drop .dz-sub{font-size:12px;color:var(--dim);margin-top:5px}
 .muted{color:var(--muted)}
 .dim{color:var(--dim)}
 .small{font-size:13px;line-height:1.75}
@@ -183,6 +209,13 @@ select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,va
 .chip{font-size:12.5px;padding:4px 11px;border-radius:20px;background:var(--panel3);border:1px solid var(--border);color:var(--muted);line-height:1.5}
 .chip.obs{background:var(--accent-weak);border-color:var(--accent-line);color:var(--accent)}
 .chip.inf{background:var(--peer-bg);border-color:var(--peer-line);color:var(--peer)}
+/* 指挥台的「选对象 / 勾渠道」：可点的胶囊。勾中的用序号标出主渠道 */
+.chip.pick{cursor:pointer}
+.chip.pick:hover{border-color:var(--accent-line);color:var(--accent)}
+.chip.sel{background:var(--accent-weak);border-color:var(--accent);color:var(--accent);font-weight:560}
+.chip .ct{font-size:11px;color:var(--dim);margin-left:6px}
+.chip .ord{display:inline-block;min-width:15px;height:15px;line-height:15px;text-align:center;
+  border-radius:50%;background:var(--accent);color:#fff;font-size:10.5px;margin-right:5px}
 
 .obslist{list-style:none;font-size:13px;color:var(--muted);line-height:1.85}
 .obslist li{padding:4px 0 4px 18px;position:relative}
@@ -405,6 +438,56 @@ table.t tr:hover td{background:var(--panel2)}
 .mat th,.mat td{border-bottom:1px solid var(--border);padding:7px 9px;text-align:left;vertical-align:top;line-height:1.65}
 .mat th{color:var(--dim);font-weight:560;white-space:nowrap}
 .mat code{font-family:var(--mono);font-size:12px;background:var(--panel3);padding:1px 5px;border-radius:4px}
+
+/* ---- 对象中心（左栏两级 + 对象详情） ----
+   类名一律新起，不和上面任何顶层类重名 —— 同名类会静默覆盖，
+   这条由 test_frontend_assets.py::test_no_duplicate_top_level_class_rules 钉住。
+   左栏两级：`objitem` 是「对象」（人），`chitem` 是它下面的「渠道」（一段记录）。 */
+.objitem{
+  padding:8px 11px;border-radius:var(--r-sm);cursor:pointer;font-size:13.5px;
+  display:flex;justify-content:space-between;gap:8px;align-items:center;transition:.12s;
+}
+.objitem:hover{background:var(--panel3)}
+.objitem.on{background:var(--accent-weak);color:var(--accent);font-weight:600}
+.objitem:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.objitem .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.objitem .ct{font-size:12px;color:var(--dim);flex:none}
+.objitem.on .ct{color:var(--accent)}
+.chitem{
+  padding:6px 11px 6px 22px;border-radius:var(--r-sm);cursor:pointer;font-size:13px;
+  display:flex;justify-content:space-between;gap:8px;align-items:center;color:var(--muted);transition:.12s;
+}
+.chitem:hover{background:var(--panel3);color:var(--text)}
+.chitem.on{background:var(--accent-weak);color:var(--accent)}
+.chitem:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.chitem .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chitem .ct{font-size:12px;color:var(--dim);flex:none}
+.chitem.on .ct{color:var(--accent)}
+
+/* 对象详情的 5 个 Tab */
+.otabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.otab{
+  border:1px solid var(--border2);background:var(--panel);border-radius:20px;
+  padding:6px 15px;font-size:13px;color:var(--muted);transition:.12s;
+}
+.otab:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-weak)}
+.otab.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:560}
+
+/* 事实按 scope 分组：对象级 / 渠道级 */
+.fgroup{margin-bottom:14px}
+.fgroup>.fghd{font-size:12.5px;color:var(--muted);font-weight:560;margin-bottom:6px}
+
+/* 聊天记录：可编辑表格的行 */
+.mrows{max-height:560px;overflow-y:auto;background:var(--panel2);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px}
+.mrow{display:grid;grid-template-columns:24px 140px 96px 78px 1fr 92px;gap:7px;align-items:start;
+  padding:6px 0;border-bottom:1px solid var(--border)}
+.mrow:last-child{border-bottom:0}
+.mrow input[type=text],.mrow select,.mrow textarea{padding:5px 8px;font-size:12.5px}
+.mrow textarea{min-height:34px;resize:vertical}
+.mrow .mrow-acts{display:flex;gap:5px;flex-wrap:wrap}
+.mrow-hd{display:grid;grid-template-columns:24px 140px 96px 78px 1fr 92px;gap:7px;
+  padding:0 0 8px;font-size:12px;color:var(--dim);font-weight:560;border-bottom:1px solid var(--border2);margin-bottom:6px}
+.mrow.bad{background:var(--danger-bg)}
 </style>
 </head>
 <body>
@@ -413,21 +496,26 @@ table.t tr:hover td{background:var(--panel2)}
     <div class="brand">
       <h1>Wing<span>Man</span></h1>
       <p>聊天僚机 · 本地优先</p>
+      <button class="closebtn" id="win-close" title="关闭">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+             stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
     </div>
     <nav id="nav">
       <button data-v="copilot" class="on"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5a3.5 3.5 0 0 1-3.5 3.5H8l-4 3.5V6.5A3.5 3.5 0 0 1 7.5 3h9A3.5 3.5 0 0 1 20 6.5z"/></svg></i>指挥台</button>
-      <button data-v="memory"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3h11a1 1 0 0 1 1 1v17l-6.5-4-6.5 4V4a1 1 0 0 1 1-1z"/></svg></i>记忆</button>
-      <button data-v="import"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="m7.5 9.5 4.5 4.5 4.5-4.5"/><path d="M4 20h16"/></svg></i>导入</button>
+      <button data-v="objects"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg></i>对象</button>
       <button data-v="collect"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h10.5a2 2 0 0 1 2 2v11"/><path d="M13 3.5 16.5 5.5 13 7.5"/><path d="M20 18.5H9.5a2 2 0 0 1-2-2v-11"/><path d="M11 20.5 7.5 18.5 11 16.5"/></svg></i>采集<span id="nav-collect" class="navdot hidden"></span></button>
-      <button data-v="voice"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z"/><path d="M19 11a7 7 0 0 1-14 0"/><path d="M12 18v3"/></svg></i>通话<span class="soon">敬请期待</span></button>
-      <button data-v="check"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.3 2.4 2.4 4.6-5"/></svg></i>自检<span id="nav-badge" class="navdot hidden"></span></button>
-      <button data-v="settings"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5h16"/><path d="M4 12h16"/><path d="M4 17.5h16"/><circle cx="9" cy="6.5" r="2.1"/><circle cx="15" cy="12" r="2.1"/><circle cx="8" cy="17.5" r="2.1"/></svg></i>设置</button>
+      <button data-v="settings"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5h16"/><path d="M4 12h16"/><path d="M4 17.5h16"/><circle cx="9" cy="6.5" r="2.1"/><circle cx="15" cy="12" r="2.1"/><circle cx="8" cy="17.5" r="2.1"/></svg></i>设置<span id="nav-badge" class="navdot hidden"></span></button>
     </nav>
     <div class="sidebody">
-      <div class="sidelabel">会话 <span style="font-weight:500;letter-spacing:0;color:var(--dim)">· 右键可设置</span></div>
-      <div id="chatlist"><div class="empty-hint">还没有导入任何聊天记录</div></div>
+      <div class="sidelabel">对象 <span style="font-weight:500;letter-spacing:0;color:var(--dim)">· 点对象看它的渠道</span></div>
+      <div id="objlist"><div class="empty-hint">还没有任何对象。先去「采集」导一段或采一段。</div></div>
     </div>
     <div style="padding:10px 14px;border-top:1px solid var(--border)">
+      <!-- 外设 1：自检提醒放到侧边栏。
+           「设置 → 体检」里的结论是给仔细看的人准备的；这里只放**需要你动手**的
+           那几条，一句一条，点一下直接跳到能修的地方。全绿的时候不出现。 -->
+      <div id="side-warn" class="sidewarn hidden"></div>
       <div id="health" class="small dim">连接中…</div>
     </div>
   </aside>
@@ -454,12 +542,30 @@ table.t tr:hover td{background:var(--panel2)}
       <div id="cp-steps" class="steps3 hidden"></div>
 
       <div id="cp-nochat" class="card">
-        <h3>先选一个会话</h3>
-        <p class="small muted">左侧还没有会话。到「导入」页上传一份聊天记录（QQ / 微信导出的 txt 都支持），
+        <h3>先选一个对象</h3>
+        <p class="small muted">左侧还没有对象。到「采集」页上传一份聊天记录（QQ / 微信导出的 txt 都支持），
           或者直接用示例文件 <span class="mono">samples/qq_sample_小鹿.txt</span> 试跑一遍流程。</p>
       </div>
 
       <div id="cp-main" class="hidden">
+        <!-- 需求 8：先选对象，再勾选该对象下的渠道（单选/多选）。
+             多选时会合并这几个渠道的上下文 —— 同一个人在微信和 QQ 上说的，
+             谈的是同一段关系，只看一个渠道等于只看了半张牌。 -->
+        <div class="card" id="cp-pick">
+          <h3>① 分析谁
+            <span class="tag" id="cp-pick-tag">选一个对象</span>
+            <button class="linkbtn" id="cp-pick-help" style="margin-left:6px">多选渠道有什么用？</button>
+          </h3>
+          <div id="cp-persons" class="chips" style="margin-top:6px"></div>
+          <div id="cp-channels-wrap" class="hidden">
+            <div class="sidelabel" style="margin:12px 0 6px">
+              ② 勾选渠道 <span style="font-weight:500;letter-spacing:0;color:var(--dim)">· 第 1 个是主渠道</span>
+            </div>
+            <div id="cp-channels" class="chips"></div>
+            <div class="small dim" id="cp-pick-note" style="margin-top:8px"></div>
+          </div>
+        </div>
+
         <div class="card">
           <h3>对方最新消息 <span class="tag" id="cp-chatname"></span></h3>
           <textarea id="cp-msg" placeholder="把对方刚发的那句话粘在这里，例如：哈哈哈今天好累啊"></textarea>
@@ -477,116 +583,129 @@ table.t tr:hover td{background:var(--panel2)}
       </div>
     </section>
 
-    <!-- ============ 记忆 ============ -->
-    <section class="view" id="view-memory">
-      <h2>记忆</h2>
-      <p class="sub">事实、画像、向量索引 —— 这三样决定了它"记不记得住"。</p>
+    <!-- ============ 对象（以人为中心；原「记忆」页并入这里） ============ -->
+    <section class="view" id="view-objects">
+      <h2 id="obj-title">对象</h2>
+      <p class="sub" id="obj-sub">左栏选一个对象。Ta 的人物设定、已记住的事实、聊天记录、采集进度与历史输出，都在这一页。</p>
 
-      <div id="mem-nochat" class="card">
-        <h3>还没有会话</h3>
-        <p class="small muted">先到「导入」页添加聊天记录。</p>
+      <div id="obj-empty" class="card">
+        <h3>还没有任何对象</h3>
+        <p class="small muted">先去「采集」页导入或采集一段聊天记录 —— 导入时会自动把记录挂到对应的对象名下。</p>
       </div>
 
-      <div id="mem-main" class="hidden">
-        <div class="card">
-          <h3>会话信息 <span class="tag" id="mem-id"></span></h3>
-          <div id="mem-stats" class="row" style="margin-bottom:12px"></div>
-          <div class="row">
-            <button class="btn sm" id="mem-index">重建向量索引</button>
-            <button class="btn sm primary" id="mem-profile">抽取事实并生成画像</button>
-            <button class="btn sm ghost" id="mem-export">导出 JSON</button>
-            <button class="btn sm ghost danger" id="mem-del">删除会话</button>
-            <span id="mem-msg" class="small dim"></span>
-          </div>
+      <div id="obj-main" class="hidden">
+        <div class="otabs" id="obj-tabs">
+          <button class="otab on" data-otab="overview">概览</button>
+          <button class="otab" data-otab="memory">记忆</button>
+          <button class="otab" data-otab="chat">聊天记录</button>
+          <button class="otab" data-otab="collect">采集</button>
+          <button class="otab" data-otab="history">历史</button>
         </div>
 
-        <div class="grid2">
-          <div class="card">
-            <h3>人物设定 <span class="tag">你手动维护的部分</span></h3>
-            <label class="f"><span>你的目标</span>
-              <input type="text" id="p-goal" placeholder="例：想约她周末去看展" /></label>
-            <label class="f"><span>关系阶段</span>
-              <select id="p-stage">
-                <option value="">（未设定）</option>
-                <option>陌生期</option><option>熟悉期</option><option>暧昧期</option>
-                <option>推进期</option><option>稳定期</option>
-              </select></label>
-            <label class="f"><span>雷区（逗号分隔）</span>
-              <input type="text" id="p-taboos" placeholder="例：宝贝、提她前任、追问细节" /></label>
-            <label class="f"><span>我的说话风格</span>
-              <textarea id="p-mystyle" style="min-height:56px"></textarea></label>
-            <label class="f"><span>对方画像（模型生成，可手改）</span>
-              <textarea id="p-profile" style="min-height:110px"></textarea></label>
-            <button class="btn primary sm" id="p-save">保存设定</button>
-            <span id="p-msg" class="small dim"></span>
-          </div>
+        <div class="obpane" id="ob-overview"><div class="card"><div class="small dim">加载中…</div></div></div>
 
-          <div class="card">
-            <h3>已记住的事实 <span class="tag" id="f-count"></span></h3>
-            <div id="facts" class="small muted">还没有抽取过事实。点上面的「抽取事实并生成画像」。</div>
-            <div class="row" style="margin-top:12px">
-              <input type="text" id="f-key" placeholder="类别，如 生日" style="flex:1;min-width:90px" />
-              <input type="text" id="f-val" placeholder="内容，如 3月14日" style="flex:2;min-width:110px" />
-              <button class="btn sm" id="f-add">手动加一条</button>
+        <div class="obpane hidden" id="ob-memory">
+          <div class="grid2">
+            <div class="card">
+              <h3>人物设定 <span class="tag">对象级 · 你手动维护</span></h3>
+              <label class="f"><span>你的目标</span>
+                <input type="text" id="op-goal" placeholder="例：想约她周末去看展" /></label>
+              <label class="f"><span>关系阶段</span>
+                <select id="op-stage">
+                  <option value="">（未设定）</option>
+                  <option>陌生期</option><option>熟悉期</option><option>暧昧期</option>
+                  <option>推进期</option><option>稳定期</option>
+                </select></label>
+              <label class="f"><span>雷区（逗号分隔）</span>
+                <input type="text" id="op-taboos" placeholder="例：宝贝、提她前任、追问细节" /></label>
+              <label class="f"><span>我的说话风格</span>
+                <textarea id="op-mystyle" style="min-height:56px"></textarea></label>
+              <label class="f"><span>对方画像（模型生成，可手改）</span>
+                <textarea id="op-profile" style="min-height:100px"></textarea></label>
+              <button class="btn primary sm" id="op-save">保存设定</button>
+              <span id="op-msg" class="small dim"></span>
+            </div>
+
+            <div class="card">
+              <h3>已记住的事实 <span class="tag" id="of-count"></span></h3>
+              <p class="small muted" style="margin-bottom:10px">
+                分<b>对象级</b>与<b>渠道级</b>两组显示，<b>分别计数</b>，不做去重合并 ——
+                同一条在两个视野里各出现一次是正常的。
+              </p>
+              <div id="ofacts" class="small muted">加载中…</div>
+              <div class="row" style="margin-top:12px">
+                <select id="of-subject" style="max-width:120px">
+                  <option value="peer">对方</option>
+                  <option value="me">我</option>
+                  <option value="relationship">关系</option>
+                </select>
+                <input type="text" id="of-key" placeholder="类别，如 生日" style="flex:1;min-width:80px" />
+                <input type="text" id="of-val" placeholder="内容，如 3月14日" style="flex:2;min-width:100px" />
+                <button class="btn sm" id="of-add">加一条（对象级）</button>
+              </div>
+              <span id="of-msg" class="small dim"></span>
             </div>
           </div>
         </div>
 
-        <div class="card">
-          <h3>聊天记录</h3>
-          <div id="mem-msgs" class="msgs">加载中…</div>
+        <div class="obpane hidden" id="ob-chat">
+          <div class="card">
+            <h3>聊天记录 <span class="tag" id="ob-chat-tag"></span></h3>
+            <div class="row" style="margin-bottom:10px">
+              <label class="f" style="margin:0;flex:0 0 auto;min-width:210px">
+                <span>按渠道筛选</span>
+                <select id="ob-filter"></select>
+              </label>
+              <button class="btn sm" id="ob-refresh">刷新</button>
+              <button class="btn sm" id="ob-index">重建向量索引</button>
+              <button class="btn sm" id="ob-profile">抽取事实并生成画像</button>
+              <button class="btn sm ghost" id="ob-export">导出 JSON</button>
+              <span id="ob-msg" class="small dim"></span>
+            </div>
+            <div class="row" style="margin-bottom:8px;gap:9px">
+              <span id="ob-selinfo" class="small dim">已选 0 条</span>
+              <button class="btn sm ghost" id="ob-selall">全选</button>
+              <button class="btn sm ghost" id="ob-selnone">清空选择</button>
+              <button class="btn sm danger" id="ob-del">删除选中</button>
+              <button class="btn sm" id="ob-role">改角色</button>
+              <button class="btn sm" id="ob-ts">改时间</button>
+              <button class="btn sm" id="ob-sender">改发送者</button>
+              <button class="btn sm primary" id="ob-add">手动加一条</button>
+            </div>
+            <div id="ob-bulkerr"></div>
+            <div id="ob-msgs" class="mrows"><div class="empty-hint">加载中…</div></div>
+            <div class="row" style="margin-top:10px">
+              <button class="btn sm ghost" id="ob-more">再往前加载 100 条</button>
+              <span id="ob-more-msg" class="small dim"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="obpane hidden" id="ob-collect">
+          <div class="card">
+            <h3>采集进度 <span class="tag">这个对象的游标</span></h3>
+            <p class="small muted" style="margin-bottom:10px">
+              下次采集从这里继续。怀疑漏采才重置 —— 已经入库的消息不会被删。
+            </p>
+            <div class="row" style="margin-bottom:10px">
+              <button class="btn sm primary" id="oc-go">去采集页采这个对象</button>
+              <button class="btn sm" id="oc-refresh">刷新</button>
+              <span id="oc-msg" class="small dim"></span>
+            </div>
+            <div id="oc-list"><div class="empty-hint">这个对象还没有采集过。</div></div>
+          </div>
+        </div>
+
+        <div class="obpane hidden" id="ob-history">
+          <div class="card">
+            <h3>历史 <span class="tag">指挥台输出 + 动作痕迹</span></h3>
+            <p class="small muted" style="margin-bottom:12px">
+              指挥台的每次输出、导入、采集与批量编辑都会留下痕迹，方便回看。
+            </p>
+            <div id="oh-body"><div class="small dim">加载中…</div></div>
+          </div>
         </div>
       </div>
-    </section>
-
-    <!-- ============ 导入 ============ -->
-    <section class="view" id="view-import">
-      <h2>导入聊天记录</h2>
-      <p class="sub">支持 QQ / 微信导出的 txt，以及自定义的 JSON / CSV。上传后会自动判断格式，你也可以手动指定。</p>
-
-      <div class="card">
-        <h3>上传文件</h3>
-        <input type="file" id="imp-file" accept=".txt,.log,.bak,.csv,.tsv,.json,.jsonl,.html,.htm" />
-        <div class="row" style="margin-top:12px">
-          <label class="f" style="margin:0;flex:1;min-width:150px">
-            <span>适配器（留空自动判断）</span>
-            <select id="imp-adapter">
-              <option value="">自动</option>
-              <option value="qq">QQ 聊天记录</option>
-              <option value="wechat">微信聊天记录</option>
-              <option value="generic">通用 JSON / CSV</option>
-            </select>
-          </label>
-          <label class="f" style="margin:0;flex:1;min-width:150px">
-            <span>会话名称（留空自动取名）</span>
-            <input type="text" id="imp-name" placeholder="例：小鹿" />
-          </label>
-          <label class="f" style="margin:0;flex:1;min-width:150px">
-            <span>你的昵称（逗号分隔）</span>
-            <input type="text" id="imp-mename" placeholder="默认已含「我」，通常不用填" />
-          </label>
-        </div>
-        <div class="row" style="margin-top:12px">
-          <button class="btn" id="imp-preview">先预览</button>
-          <button class="btn primary" id="imp-go">确认导入</button>
-          <span id="imp-msg" class="small dim"></span>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>或者直接粘贴文本</h3>
-        <p class="small muted" style="margin-bottom:8px">
-          格式：每行 <span class="mono">2024-01-01 12:00:00 昵称</span>，下一行是内容，消息之间空一行。
-        </p>
-        <textarea id="paste-text" style="min-height:120px" placeholder="2024-01-01 21:00:00 小鹿&#10;在吗&#10;&#10;2024-01-01 21:02:00 我&#10;在的"></textarea>
-        <div class="row" style="margin-top:10px">
-          <input type="text" id="paste-name" placeholder="会话名称" style="max-width:200px" />
-          <button class="btn sm" id="paste-go">导入这段文本</button>
-          <span id="paste-msg" class="small dim"></span>
-        </div>
-      </div>
-
-      <div id="imp-result"></div>
     </section>
 
     <!-- ============ 采集 ============ -->
@@ -652,6 +771,13 @@ table.t tr:hover td{background:var(--panel2)}
           内容和时间会立刻被接住，并归到对的人名下。
           <b>认不出是谁说的，程序会停下来问你，不会替你猜。</b>
         </p>
+        <p class="small muted" style="margin-bottom:12px">
+          记录的是<b>消息自己的时刻</b>，不是你按下复制的那一刻。想在客户端里
+          一眼看到时间再复制（消息上方显示出「昨天 21:03」「21:03」这类即可），
+          程序会把这些相对时间解析成具体时刻；复制里确实没带时间时，才按会话
+          时间线排在上一句之后，并标成「推定」。
+          <button class="linkbtn" id="sc-time-help">时间是从哪来的？</button>
+        </p>
         <div class="row">
           <label class="f" style="margin:0;flex:0 0 auto;min-width:130px">
             <span>客户端</span>
@@ -668,7 +794,7 @@ table.t tr:hover td{background:var(--panel2)}
           <label class="f" style="margin:0;flex:0 0 auto;min-width:210px">
             <span>复制里没带时间时</span>
             <select id="sc-time">
-              <option value="assumed">用抓取时刻，标成「推定」</option>
+              <option value="inferred">按会话时间线排在上一句之后（推荐）</option>
               <option value="ask">停下来问我</option>
             </select>
           </label>
@@ -694,151 +820,62 @@ table.t tr:hover td{background:var(--panel2)}
         </div>
         <div id="cur-list"><div class="empty-hint">还没有采集过。</div></div>
       </div>
-    </section>
 
-    <!-- ============ 通话（规划中） ============ -->
-    <section class="view" id="view-voice">
-      <h2>通话 <span class="tag">规划中</span></h2>
-      <p class="sub">
-        把语音通话也变成记忆的一部分：系统回环听<span style="color:var(--peer)">对方</span>，
-        麦克风听<span style="color:var(--accent)">你自己</span>，两边各自转写、各自贴标签，
-        最后和微信 / QQ 的文字记录汇进同一条时间线。
-      </p>
-
-      <div class="soonbar" style="margin-bottom:16px">
-        <div class="si">◷</div>
-        <div>
-          <div class="st">这块还没做完，先不放了</div>
-          <div class="sd">
-            上一版试过一版云端转写，能用但不够好：转写延迟、双方串音、断句切得碎，
-            而且要把通话音频送出本机 —— 对一个「本地优先」的工具来说，这个代价不划算。
-            我们把它撤下来重做，思路留在下面。等做扎实了再放出来，不拿半成品占位置。
-          </div>
-        </div>
-      </div>
-
+      <!-- ⑤ 手动导入：从原「导入」页整块搬来。拖拽、多文件、导入后直达对象。
+           这是采集不通时的确定性通道 —— 文件是你自己给的，不依赖版本也不依赖密钥。 -->
       <div class="card">
-        <h3>已经想清楚的思路</h3>
-        <div class="plan">
-          <div class="prow">
-            <div class="pno">1</div>
-            <div>
-              <div class="pt">双通道采集，谁说的要分清</div>
-              <div class="pd">
-                一路抓系统回环（<code>WASAPI loopback</code>）当「对方」，一路抓默认麦克风当「我」。
-                两条流独立分帧、独立送识别，从源头上就不会把两个人的话混成一段 ——
-                事后靠声纹去切是下策，切错一次整段记录都不可信。
-              </div>
-            </div>
-          </div>
-          <div class="prow">
-            <div class="pno">2</div>
-            <div>
-              <div class="pt">本机转写，音频不出机器</div>
-              <div class="pd">
-                用 <code>faster-whisper</code> 在本地跑，模型权重存到数据目录，可离线。
-                代价是首次要下 80–500MB 的模型、CPU 转写比显卡慢，但换来的是
-                「通话录音一帧都不上传」。这正是这个工具存在的理由，不能反过来妥协。
-              </div>
-            </div>
-          </div>
-          <div class="prow">
-            <div class="pno">3</div>
-            <div>
-              <div class="pt">按「话轮」断句，而不是按静音断</div>
-              <div class="pd">
-                纯靠 VAD 静音阈值切，会把一句「我觉得……（停顿）……还是算了吧」切成两段，
-                语义就断了。计划是 VAD 先粗切，再用小模型判断句尾是否完整，
-                不完整就继续等下一帧 —— 宁可多等几百毫秒，也不切坏一句话。
-              </div>
-            </div>
-          </div>
-          <div class="prow">
-            <div class="pno">4</div>
-            <div>
-              <div class="pt">落库时和文字记录同构</div>
-              <div class="pd">
-                转写结果按 <code>(时间, 说话人, 文本)</code> 直接写成普通消息，
-                只是多带一个 <code>source=call</code> 标记。这样记忆、向量检索、人物分析
-                全都不用为通话写第二套逻辑 —— 对下游来说，它和金标聊天记录没区别。
-              </div>
-            </div>
-          </div>
-          <div class="prow">
-            <div class="pno">5</div>
-            <div>
-              <div class="pt">开录前把话说在前面</div>
-              <div class="pd">
-                录音涉及法律问题。开始采集前会要求明确确认，并且只用于你本人参与的通话、
-                只存本机；不提供「采集他人对话」的用法。这条不做成可关闭的选项。
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>将来大概是这个样子的 <span class="tag">界面预览</span></h3>
-        <p class="small muted" style="margin-top:4px;margin-bottom:12px">
-          下面是静态示意（不是真的在录），只是把「两路分开、左右分明」这件事先摆出来看看。
+        <h3>⑤ 手动导入 · 上传文件 <span class="tag">原「导入」页</span></h3>
+        <p class="small muted" style="margin-bottom:12px">
+          支持 QQ / 微信导出的 txt，以及自定义 JSON / CSV。<b>先「预览」看清再「确认导入」</b> —— 入库就撤不回来了。
+          说话人会自动归到对应的对象名下，导入完就能在「对象」里看到。
         </p>
-        <div class="subs">
-          <div class="cap">
-            <div class="ch">对方</div>
-            <div><div class="txt">你上次说的那个方案，我再看了下，感觉成本还是高了点。</div>
-            <div class="meta">14:02:11 · 段长 4.2s · #1</div></div>
-          </div>
-          <div class="cap me">
-            <div class="ch">我</div>
-            <div><div class="txt">嗯，那部分我拆成两期做，第一期只上核心链路。</div>
-            <div class="meta">14:02:19 · 段长 3.6s · #2</div></div>
-          </div>
-          <div class="cap">
-            <div class="ch">对方</div>
-            <div><div class="txt">这样还行。那你先把排期发我，我这边好同步。</div>
-            <div class="meta">14:02:26 · 段长 3.1s · #3</div></div>
-          </div>
+        <div class="drop" id="imp-drop">
+          <input type="file" id="imp-file" multiple
+                 accept=".txt,.log,.bak,.csv,.tsv,.json,.jsonl,.html,.htm" />
+          <div class="dz-main">把导出的聊天记录拖到这里，或<b>点一下选文件</b></div>
+          <div class="dz-sub">支持一次选多个文件，会依次导入。也可以直接把文件拖到整个窗口上。</div>
         </div>
-        <div class="row" style="margin-top:12px;gap:16px">
-          <div class="row" style="flex:1;gap:8px"><span class="small dim" style="width:52px">对方</span><div class="meter"><i style="width:38%"></i></div></div>
-          <div class="row" style="flex:1;gap:8px"><span class="small dim" style="width:52px">我</span><div class="meter"><i style="width:64%"></i></div></div>
-        </div>
-        <div class="note" style="margin-top:12px">
-          现在这里没有任何按钮 —— 后端入口也已一并移除，不会出现「点了没反应」的情况。
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>还是想要这个功能？</h3>
-        <p class="small muted" style="margin-top:4px;line-height:1.85">
-          眼下更要紧的是另一条链路：把微信 / QQ 的历史记录<b>不重复地、按时间范围地</b>爬进来，
-          再把「以人为中心」的记忆与整体分析做出来。那条链路做完之后，通话只是多一个数据来源而已。
-          先把主干跑通，支线再回来接。
-        </p>
-      </div>
-    </section>
-
-    <!-- ============ 自检 ============ -->
-    <section class="view" id="view-check">
-      <h2>自检</h2>
-      <p class="sub">这里用大白话告诉你：现在哪几块能用、哪几块还缺东西、缺的怎么补。配好一项这里就会变成绿色的「已完成」。</p>
-      <p class="sub dim">服务根本起不来、看不到这一页时，还有两个命令行入口：源码运行用
-        <b>wingman.cmd --doctor</b>，打包版用 <b>WingMan.exe --check</b>。
-        它们查的东西和这一页不完全相同（启动器那边还会看 Python 版本和依赖完整性），
-        但都会直接告诉你缺什么、下一步做什么。</p>
-
-      <div class="card">
-        <h3>总体结论 <span class="tag" id="ck-worst"></span></h3>
-        <div id="ck-summary" class="small muted">正在体检…</div>
+        <div id="imp-files" class="small dim" style="margin-top:8px"></div>
         <div class="row" style="margin-top:12px">
-          <button class="btn sm primary" id="ck-run">重新体检</button>
-          <button class="btn sm ghost" data-open="data">打开数据目录</button>
-          <button class="btn sm ghost" data-open="logs">打开日志目录</button>
+          <label class="f" style="margin:0;flex:1;min-width:150px">
+            <span>适配器（留空自动判断）</span>
+            <select id="imp-adapter">
+              <option value="">自动</option>
+              <option value="qq">QQ 聊天记录</option>
+              <option value="wechat">微信聊天记录</option>
+              <option value="generic">通用 JSON / CSV</option>
+            </select>
+          </label>
+          <label class="f" style="margin:0;flex:1;min-width:150px">
+            <span>会话名称（留空自动取名）</span>
+            <input type="text" id="imp-name" placeholder="例：小鹿" />
+          </label>
+          <label class="f" style="margin:0;flex:1;min-width:150px">
+            <span>你的昵称（逗号分隔）</span>
+            <input type="text" id="imp-mename" placeholder="默认已含「我」，通常不用填" />
+          </label>
         </div>
-        <div id="ck-runtime" class="pathbox hidden"></div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn" id="imp-preview">先预览</button>
+          <button class="btn primary" id="imp-go">确认导入</button>
+          <span id="imp-msg" class="small dim"></span>
+        </div>
       </div>
 
-      <div id="ck-list"></div>
+      <div class="card">
+        <h3>⑤ 手动导入 · 粘贴文本</h3>
+        <p class="small muted" style="margin-bottom:8px">
+          格式：每行 <span class="mono">2024-01-01 12:00:00 昵称</span>，下一行是内容，消息之间空一行。
+        </p>
+        <textarea id="paste-text" style="min-height:120px" placeholder="2024-01-01 21:00:00 小鹿&#10;在吗&#10;&#10;2024-01-01 21:02:00 我&#10;在的"></textarea>
+        <div class="row" style="margin-top:10px">
+          <input type="text" id="paste-name" placeholder="会话名称" style="max-width:200px" />
+          <button class="btn sm" id="paste-go">导入这段文本</button>
+          <span id="paste-msg" class="small dim"></span>
+        </div>
+      </div>
+
+      <div id="imp-result"></div>
     </section>
 
     <!-- ============ 设置 ============ -->
@@ -920,6 +957,168 @@ table.t tr:hover td{background:var(--panel2)}
         <button class="btn ghost" id="s-reset">清除运行时覆盖（回到 .env）</button>
         <span id="s-msg" class="small dim"></span>
       </div>
+
+      <!-- ============ 体检（原「自检」页并入这里；接口与渲染完全复用） ============ -->
+      <h2 id="set-selfcheck" style="margin-top:38px">体检</h2>
+      <p class="sub">这里用大白话告诉你：现在哪几块能用、哪几块还缺东西、缺的怎么补。配好一项这里就会变成绿色的「已完成」。</p>
+      <p class="sub dim">服务根本起不来、看不到这一页时，还有两个命令行入口：源码运行用
+        <b>wingman.cmd --doctor</b>，打包版用 <b>WingMan.exe --check</b>。
+        它们查的东西和这一页不完全相同（启动器那边还会看 Python 版本和依赖完整性），
+        但都会直接告诉你缺什么、下一步做什么。</p>
+
+      <div class="card">
+        <h3>总体结论 <span class="tag" id="ck-worst"></span></h3>
+        <div id="ck-summary" class="small muted">正在体检…</div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn sm primary" id="ck-run">重新体检</button>
+          <button class="btn sm ghost" data-open="data">打开数据目录</button>
+          <button class="btn sm ghost" data-open="logs">打开日志目录</button>
+        </div>
+        <div id="ck-runtime" class="pathbox hidden"></div>
+      </div>
+
+      <div id="ck-list"></div>
+
+      <!-- ============ 关于（需求 5/6：版本、检查更新、项目地址、许可证；
+           原「通话」页的思路收进这里的一个折叠块，不再独占一页） ============ -->
+      <h2 id="set-about" style="margin-top:38px">关于</h2>
+      <p class="sub">版本、更新与项目信息。没做完的功能也留在这里 —— 等做扎实了再放出来，不拿半成品占位置。</p>
+
+      <div class="card">
+        <h3>版本与项目</h3>
+        <div id="about-ver" class="small muted">版本信息加载中…</div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn sm primary" id="about-check">检查更新</button>
+          <a class="btn sm ghost" href="https://github.com/whyao56/WingMan" target="_blank" rel="noopener"
+             style="text-decoration:none">项目地址</a>
+          <a class="btn sm ghost" href="https://github.com/whyao56/WingMan/blob/main/CHANGELOG.md"
+             target="_blank" rel="noopener" style="text-decoration:none">更新日志</a>
+          <a class="btn sm ghost" href="https://github.com/whyao56/WingMan/blob/main/LICENSE"
+             target="_blank" rel="noopener" style="text-decoration:none">MIT 许可证</a>
+        </div>
+        <div id="about-update" class="small dim" style="margin-top:10px"></div>
+      </div>
+
+      <details class="card" id="about-voice">
+        <summary style="cursor:pointer;font-weight:560;font-size:14px">
+          通话功能：为什么现在没有，以后会怎么做
+        </summary>
+        <div class="soonbar" style="margin:14px 0 16px">
+          <div class="si">◷</div>
+          <div>
+            <div class="st">这块还没做完，先不放了</div>
+            <div class="sd">
+              上一版试过一版云端转写，能用但不够好：转写延迟、双方串音、断句切得碎，
+              而且要把通话音频送出本机 —— 对一个「本地优先」的工具来说，这个代价不划算。
+              我们把它撤下来重做，思路留在下面。等做扎实了再放出来，不拿半成品占位置。
+            </div>
+          </div>
+        </div>
+
+        <h3>通话 · 已经想清楚的思路</h3>
+        <p class="small muted" style="margin-top:4px;margin-bottom:12px">
+          目标是把语音通话也变成记忆的一部分：系统回环听<span style="color:var(--peer)">对方</span>，
+          麦克风听<span style="color:var(--accent)">你自己</span>，两边各自转写、各自贴标签，
+          最后和微信 / QQ 的文字记录汇进同一条时间线。
+        </p>
+        <div class="plan">
+          <div class="prow">
+            <div class="pno">1</div>
+            <div>
+              <div class="pt">双通道采集，谁说的要分清</div>
+              <div class="pd">
+                一路抓系统回环（<code>WASAPI loopback</code>）当「对方」，一路抓默认麦克风当「我」。
+                两条流独立分帧、独立送识别，从源头上就不会把两个人的话混成一段 ——
+                事后靠声纹去切是下策，切错一次整段记录都不可信。
+              </div>
+            </div>
+          </div>
+          <div class="prow">
+            <div class="pno">2</div>
+            <div>
+              <div class="pt">本机转写，音频不出机器</div>
+              <div class="pd">
+                用 <code>faster-whisper</code> 在本地跑，模型权重存到数据目录，可离线。
+                代价是首次要下 80–500MB 的模型、CPU 转写比显卡慢，但换来的是
+                「通话录音一帧都不上传」。这正是这个工具存在的理由，不能反过来妥协。
+              </div>
+            </div>
+          </div>
+          <div class="prow">
+            <div class="pno">3</div>
+            <div>
+              <div class="pt">按「话轮」断句，而不是按静音断</div>
+              <div class="pd">
+                纯靠 VAD 静音阈值切，会把一句「我觉得……（停顿）……还是算了吧」切成两段，
+                语义就断了。计划是 VAD 先粗切，再用小模型判断句尾是否完整，
+                不完整就继续等下一帧 —— 宁可多等几百毫秒，也不切坏一句话。
+              </div>
+            </div>
+          </div>
+          <div class="prow">
+            <div class="pno">4</div>
+            <div>
+              <div class="pt">落库时和文字记录同构</div>
+              <div class="pd">
+                转写结果按 <code>(时间, 说话人, 文本)</code> 直接写成普通消息，
+                只是多带一个 <code>source=call</code> 标记。这样记忆、向量检索、人物分析
+                全都不用为通话写第二套逻辑 —— 对下游来说，它和金标聊天记录没区别。
+              </div>
+            </div>
+          </div>
+          <div class="prow">
+            <div class="pno">5</div>
+            <div>
+              <div class="pt">开录前把话说在前面</div>
+              <div class="pd">
+                录音涉及法律问题。开始采集前会要求明确确认，并且只用于你本人参与的通话、
+                只存本机；不提供「采集他人对话」的用法。这条不做成可关闭的选项。
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>通话 · 将来大概是这个样子的 <span class="tag">界面预览</span></h3>
+        <p class="small muted" style="margin-top:4px;margin-bottom:12px">
+          下面是静态示意（不是真的在录），只是把「两路分开、左右分明」这件事先摆出来看看。
+        </p>
+        <div class="subs">
+          <div class="cap">
+            <div class="ch">对方</div>
+            <div><div class="txt">你上次说的那个方案，我再看了下，感觉成本还是高了点。</div>
+            <div class="meta">14:02:11 · 段长 4.2s · #1</div></div>
+          </div>
+          <div class="cap me">
+            <div class="ch">我</div>
+            <div><div class="txt">嗯，那部分我拆成两期做，第一期只上核心链路。</div>
+            <div class="meta">14:02:19 · 段长 3.6s · #2</div></div>
+          </div>
+          <div class="cap">
+            <div class="ch">对方</div>
+            <div><div class="txt">这样还行。那你先把排期发我，我这边好同步。</div>
+            <div class="meta">14:02:26 · 段长 3.1s · #3</div></div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px;gap:16px">
+          <div class="row" style="flex:1;gap:8px"><span class="small dim" style="width:52px">对方</span><div class="meter"><i style="width:38%"></i></div></div>
+          <div class="row" style="flex:1;gap:8px"><span class="small dim" style="width:52px">我</span><div class="meter"><i style="width:64%"></i></div></div>
+        </div>
+        <div class="note" style="margin-top:12px">
+          现在这里没有任何按钮 —— 后端入口也已一并移除，不会出现「点了没反应」的情况。
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>还是想要这个功能？</h3>
+        <p class="small muted" style="margin-top:4px;line-height:1.85">
+          眼下更要紧的是另一条链路：把微信 / QQ 的历史记录<b>不重复地、按时间范围地</b>爬进来，
+          再把「以人为中心」的记忆与整体分析做出来。那条链路做完之后，通话只是多一个数据来源而已。
+          先把主干跑通，支线再回来接。
+        </p>
+      </div>
+      </details>
     </section>
   </main>
 </div>
@@ -934,7 +1133,18 @@ const $$ = (s) => Array.from(document.querySelectorAll(s));
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const state = { chats: [], chatId: null, bundle: null, check: null };
+// 以对象为中心之后，state 的主线是「当前对象 → 它下面的渠道 → 当前会话」。
+// `chatId` 仍是「指挥台正在用的那一条记录」，由左栏点渠道时写入。
+const state = {
+  persons: [], personId: null, channels: [],
+  chats: [], chatId: null, bundle: null, check: null,
+  // 指挥台勾选的渠道（需求 8）。**有序**：第一个是主渠道 ——
+  // 你贴的那句话会记到它名下，检索也以它为主；其余渠道的上下文合并进来。
+  cpChatIds: [],
+  objTab: "overview",            // 对象详情当前 Tab
+  chatFilter: "",                // 「聊天记录」Tab 的渠道筛选（""=全部渠道）
+  messages: [], msgSel: new Set(), firstMsgId: null,
+};
 
 // ---------------------------------------------------------------- 请求
 //
@@ -1178,15 +1388,25 @@ document.addEventListener("scroll", closeCtxMenu, true);
 // 记忆页那几个按钮保留（那里也能改、也能删），两处走的是同一套实现。
 
 function chatPlatformLabel(platform) {
-  return ({ qq: "QQ", wechat: "微信", generic: "通用" })[platform] || (platform || "未知");
+  return ({ qq: "QQ", wechat: "微信", generic: "通用", call: "通话", offline: "当面" })[platform] || (platform || "未知");
 }
 
-/** 改会话名 / 改双方称呼 / 重新判定「哪边是我」。 */
+/** 渠道「设置…」：改会话名 / 平台 / 双方称呼 / 重新判定「哪边是我」。 */
+const CHAT_PLATFORMS = [["wechat", "微信"], ["qq", "QQ"], ["call", "通话"], ["offline", "当面"], ["generic", "其他"]];
+
 function openChatSettingsDialog(chat) {
+  const known = CHAT_PLATFORMS.some(([v]) => v === chat.platform);
+  const opts = CHAT_PLATFORMS.map(([v, t]) =>
+    `<option value="${v}"${v === chat.platform ? " selected" : ""}>${t}</option>`).join("");
   const h = openModal({
-    title: "会话设置",
+    title: "设置",
     sub: `ID：${chat.id} · ${chatPlatformLabel(chat.platform)} · ${chat.message_count} 条消息`,
     body: `
+      <div class="frow"><span>平台 / 渠道</span>
+        <select id="cs-platform">
+          ${opts}
+          ${known ? "" : `<option value="${esc(chat.platform)}" selected>${esc(chatPlatformLabel(chat.platform))}（当前）</option>`}
+        </select></div>
       <div class="frow"><span>会话名称</span>
         <input type="text" id="cs-name" value="${esc(chat.name)}" placeholder="列表里显示的名字" /></div>
       <div class="frow"><span>对方称呼</span>
@@ -1196,9 +1416,13 @@ function openChatSettingsDialog(chat) {
       <div class="frow"><span>我可能用的昵称</span>
         <input type="text" id="cs-me-names" value="${esc(chat.me_name)}" placeholder="多个用逗号分隔" /></div>
       <div class="fhint">
+        改平台只改这一条记录的归属标记：<b>ID 不会变</b>，采集进度也不受影响，
+        对象详情里的渠道分组会立即跟着变。
+      </div>
+      <div class="fhint">
         最后一项是<b>重新判定角色</b>用的：填上你在记录里用过的所有昵称（比如「我, 小明, 阿明」），
         系统会把匹配到的消息改判成「我」说的，其余归给对方。<b>只在不填时不动</b>；
-        一次纠正会覆盖整条会话 —— 导完先看一眼「记忆」页第一条消息的归属对不对。
+        一次纠正会覆盖整条会话 —— 导完先看一眼「聊天记录」里的归属对不对。
       </div>`,
   });
 
@@ -1217,6 +1441,7 @@ function openChatSettingsDialog(chat) {
           method: "PATCH",
           body: JSON.stringify({
             name,
+            platform: h.root.querySelector("#cs-platform").value,
             peer_name: h.root.querySelector("#cs-peer").value.trim(),
             me_name: h.root.querySelector("#cs-me").value.trim(),
             me_names: h.root.querySelector("#cs-me-names").value.trim(),
@@ -1224,9 +1449,9 @@ function openChatSettingsDialog(chat) {
         });
         closeModal();
         if (r.roles_changed) {
-          alert(`已保存。有 ${r.roles_changed} 条消息的角色被重新判定。\n记忆页的「对方/我」信息已刷新。`);
+          alert(`已保存。有 ${r.roles_changed} 条消息的角色被重新判定。\n对象详情里的「对方/我」信息已刷新。`);
         }
-        await loadChats();
+        await loadObjects();
         loadHealth();
       } catch (err) {
         busy(btn, false);
@@ -1273,14 +1498,14 @@ async function openChatDeleteDialog(chat) {
     onConfirm: async () => {
       await api(`/api/chats/${encodeURIComponent(chat.id)}`, { method: "DELETE" });
       if (state.chatId === chat.id) state.chatId = null;
-      await loadChats();
+      await loadObjects();
       loadHealth();
     },
   });
 }
 
-/** 既给记忆页的按钮用，也给右键菜单用 —— 一处实现，两处入口。 */
-async function exportChat(chatId = state.chatId, msgEl = "#mem-msg") {
+/** 渠道的导出入口：右键菜单与「聊天记录」Tab 的导出按钮共用一处实现。 */
+async function exportChat(chatId = state.chatId, msgEl = "#ob-msg") {
   if (!chatId) return;
   try {
     const data = await api(`/api/chats/${encodeURIComponent(chatId)}/export`);
@@ -1296,12 +1521,12 @@ async function exportChat(chatId = state.chatId, msgEl = "#mem-msg") {
 /** 只改名字的轻量入口 —— 右键菜单里最常点的就是它。 */
 function openRenameDialog(chat) {
   const h = openModal({
-    title: "重命名会话",
+    title: "重命名渠道",
     sub: `ID：${chat.id}`,
-    body: `<div class="frow"><span>会话名称</span>
+    body: `<div class="frow"><span>渠道名称</span>
              <input type="text" id="rn-name" value="${esc(chat.name)}" /></div>
            <div class="fhint">只改列表里显示的名字，不动消息、事实与画像。
-             想连「对方 / 我」的称呼一起改，用「会话设置…」。</div>`,
+             想改平台或连接「对方 / 我」的称呼，用「设置…」。</div>`,
   });
   const note = document.createElement("span");
   note.className = "mnote";
@@ -1315,7 +1540,7 @@ function openRenameDialog(chat) {
         method: "PATCH", body: JSON.stringify({ name }),
       });
       closeModal();
-      await loadChats();
+      await loadObjects();
     } catch (e) { busy(btn, false); note.textContent = e.message; }
   };
   h.root.querySelector("#rn-name").addEventListener("keydown", (e) => {
@@ -1328,13 +1553,13 @@ function openRenameDialog(chat) {
 /** 会话右键菜单。列表项和记忆页都复用它。 */
 function openChatMenu(x, y, chat) {
   openCtxMenu(x, y, [
-    { label: "打开", run: () => { selectChat(chat.id); goView("memory"); } },
+    { label: "打开", run: () => { openObjectChat(chat.id); } },
     { sep: true },
     { label: "重命名…", run: () => openRenameDialog(chat) },
-    { label: "会话设置…", run: () => openChatSettingsDialog(chat) },
+    { label: "设置…", run: () => openChatSettingsDialog(chat) },
     { label: "导出 JSON", run: () => exportChat(chat.id) },
     { sep: true },
-    { label: "删除会话…", danger: true, run: () => openChatDeleteDialog(chat) },
+    { label: "删除渠道…", danger: true, run: () => openChatDeleteDialog(chat) },
   ], { title: `${chat.name}（${chat.message_count} 条）` });
 }
 
@@ -1348,6 +1573,8 @@ function goView(name) {
   // 采集页进入时才拉数据、开轮询；离开就停 —— 一直轮询一个看不见的页面纯属浪费
   if (name === "collect") collectOnEnter();
   else semiPollStop();
+  // 对象页进入时拉最新对象与渠道：导入/采集改的是数据库，左栏得跟着变
+  if (name === "objects") objectsOnEnter();
 }
 
 // ================================================================ 健康检查
@@ -1362,69 +1589,254 @@ async function loadHealth() {
     $("#s-providers").innerHTML = h.providers.map(x =>
       `<span class="pill ${x.available ? "ok" : "warn"}">${esc(x.kind)} · ${esc(x.name)} · ${esc(x.note)}</span>`
     ).join(" ");
+    // 「关于」区块展示版本与规模；更新检查是用户主动点按钮才发起的（见 §检查更新）
+    const about = $("#about-ver");
+    if (about) {
+      about.innerHTML = `当前版本 <b>v${esc(h.version)}</b> · ${h.counts.messages} 条消息 · `
+        + `${(h.counts.chats ?? "—")} 个会话 · 数据只在本机`;
+    }
   } catch (e) {
     $("#health").innerHTML = `<span class="delta-up">后端未连接</span>`;
   }
 }
 
-// ================================================================ 会话列表
+// ================================================================ 对象列表（左栏两级）
+//
+// 「以人为中心」最直接的落点：左栏第一级是**对象（人）**，第二级是 Ta 的**渠道**
+// （一段记录 = 一个 chat）。原来的「会话列表」降级成对象下的渠道，右键菜单能力原样保留。
 
-async function loadChats() {
+async function loadChannels(personId) {
+  if (!personId) { state.channels = []; return; }
+  try {
+    const d = await api(`/api/persons/${encodeURIComponent(personId)}`);
+    state.channels = d.channels || [];
+  } catch { state.channels = []; }
+}
+
+/** 重新拉全量对象与渠道并重绘左栏。归属可能变化的动作（导入/采集/改名/删渠道）都调它。 */
+async function loadObjects() {
+  try { state.persons = await api("/api/persons"); } catch { state.persons = []; }
   try { state.chats = await api("/api/chats"); } catch { state.chats = []; }
-  const box = $("#chatlist");
-  if (!state.chats.length) {
-    box.innerHTML = `<div class="empty-hint">还没有导入任何聊天记录</div>`;
-  } else {
-    box.innerHTML = state.chats.map(c => `
-      <div class="chatitem ${c.id === state.chatId ? "on" : ""}" data-id="${esc(c.id)}" tabindex="0"
-           title="${esc(c.name)} · ${c.message_count} 条（右键可重命名 / 设置 / 删除）">
-        <span class="nm">${esc(c.name)}</span>
-        <span class="ct">${c.message_count}</span>
-      </div>`).join("");
-    box.querySelectorAll(".chatitem").forEach(el => {
-      el.addEventListener("click", () => selectChat(el.dataset.id));
-      // 右键菜单：这是会话设置的唯一入口，所以也要能用键盘唤出来（Shift+F10 / 菜单键）
-      el.addEventListener("contextmenu", (e) => {
-        const chat = state.chats.find(c => c.id === el.dataset.id);
-        if (!chat) return;
-        e.preventDefault();
-        openChatMenu(e.clientX, e.clientY, chat);
-      });
-      el.addEventListener("keydown", (e) => {
-        if (e.key !== "ContextMenu" && !(e.shiftKey && e.key === "F10")) return;
-        const chat = state.chats.find(c => c.id === el.dataset.id);
-        if (!chat) return;
-        e.preventDefault();
-        const r = el.getBoundingClientRect();
-        openChatMenu(r.left + 12, r.bottom - 4, chat);
-      });
-    });
+
+  if (!state.persons.some(p => p.id === state.personId)) {
+    state.personId = state.persons.length ? state.persons[0].id : null;
   }
+  await loadChannels(state.personId);
 
   if (state.chatId && !state.chats.some(c => c.id === state.chatId)) state.chatId = null;
   if (!state.chatId && state.chats.length) state.chatId = state.chats[0].id;
+
+  // 指挥台勾的渠道可能已经被删掉/换归属了 —— 清掉失效的，别让一次分析打到一个不存在的会话上
+  state.cpChatIds = state.cpChatIds.filter(id => state.chats.some(c => c.id === id));
+  if (!state.cpChatIds.length && state.chatId) state.cpChatIds = [state.chatId];
+
+  renderObjects();
   reflectChat();
   updateSteps();
 }
 
+function renderObjects() {
+  const box = $("#objlist");
+  if (!box) return;
+  if (!state.persons.length) {
+    box.innerHTML = `<div class="empty-hint">还没有任何对象。先去「采集」导一段或采一段。</div>`;
+    return;
+  }
+  box.innerHTML = state.persons.map(p => {
+    const sel = p.id === state.personId;
+    const head = `
+      <div class="objitem ${sel ? "on" : ""}" data-pid="${esc(p.id)}" tabindex="0"
+           title="${esc(p.name)} · ${p.channel_count} 个渠道 · ${p.message_count} 条消息">
+        <span class="nm">${esc(p.name)}</span>
+        <span class="ct">${p.channel_count} 渠道 · ${p.message_count}</span>
+      </div>`;
+    // 只展开当前选中的对象：对象多起来之后全展开会糊成一片
+    const chans = sel ? state.channels.map(c => `
+      <div class="chitem ${c.chat_id === state.chatId ? "on" : ""}" data-cid="${esc(c.chat_id)}" tabindex="0"
+           title="${esc(chanLabel(c))} · ${c.message_count} 条（右键可设置）">
+        <span class="nm">${esc(chanLabel(c))}</span>
+        <span class="ct">${c.message_count}</span>
+      </div>`).join("") : "";
+    return head + chans;
+  }).join("");
+
+  box.querySelectorAll(".objitem").forEach(el => {
+    el.addEventListener("click", () => selectPerson(el.dataset.pid));
+    el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectPerson(el.dataset.pid); }
+    });
+  });
+  box.querySelectorAll(".chitem").forEach(el => {
+    el.addEventListener("click", () => openObjectChat(el.dataset.cid));
+    // 右键菜单：渠道设置的唯一入口，键盘也要能唤出（Shift+F10 / 菜单键）
+    el.addEventListener("contextmenu", (e) => {
+      const chat = state.chats.find(c => c.id === el.dataset.cid);
+      if (!chat) return;
+      e.preventDefault();
+      openChatMenu(e.clientX, e.clientY, chat);
+    });
+    el.addEventListener("keydown", (e) => {
+      if (e.key !== "ContextMenu" && !(e.shiftKey && e.key === "F10")) return;
+      const chat = state.chats.find(c => c.id === el.dataset.cid);
+      if (!chat) return;
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      openChatMenu(r.left + 12, r.bottom - 4, chat);
+    });
+  });
+}
+
+/** 选中一个对象：切到「对象」页并展开它的渠道（objectsOnEnter 会重新拉数据渲染）。 */
+function selectPerson(id) {
+  if (state.personId !== id) { state.personId = id; state.objTab = "overview"; }
+  goView("objects");
+}
+
+/** 指挥台当前的主渠道 —— 勾选顺序里的第 1 个。 */
+function cpPrimary() {
+  return state.cpChatIds.find(id => state.chats.some(c => c.id === id)) || null;
+}
+
 function reflectChat() {
-  const has = !!state.chatId;
-  const c = state.chats.find(x => x.id === state.chatId);
+  const has = !!state.personId && state.chats.length > 0;
   $("#cp-nochat").classList.toggle("hidden", has);
   $("#cp-main").classList.toggle("hidden", !has);
-  $("#mem-nochat").classList.toggle("hidden", has);
-  $("#mem-main").classList.toggle("hidden", !has);
-  $("#cp-chatname").textContent = c ? `${c.name} · ${c.message_count} 条` : "";
-  $("#mem-id").textContent = c ? c.id : "";
-  if (has) { loadPersona(); loadFacts(); loadMessages(); }
+  if (!has) return;
+  renderCopilotPicker();
+  const ids = state.cpChatIds;
+  const c = state.chats.find(x => x.id === cpPrimary());
+  const tag = $("#cp-chatname");
+  if (tag) {
+    tag.textContent = c
+      ? (ids.length > 1 ? `${c.name} + 另外 ${ids.length - 1} 个渠道` : `${c.name} · ${c.message_count} 条`)
+      : "还没勾渠道";
+  }
+}
+
+/** 指挥台的「选对象 + 勾渠道」两栏（需求 8）。 */
+function renderCopilotPicker() {
+  const pb = $("#cp-persons");
+  if (!pb) return;
+
+  pb.innerHTML = state.persons.map(p => `
+    <button class="chip pick ${p.id === state.personId ? "sel" : ""}" data-cpp="${esc(p.id)}"
+      title="${esc(p.name)} · ${p.channel_count} 个渠道 · ${p.message_count} 条消息">
+      ${esc(p.name)}<span class="ct">${p.channel_count} 渠道</span>
+    </button>`).join("") || `<span class="small dim">还没有对象</span>`;
+  pb.querySelectorAll("[data-cpp]").forEach(el =>
+    el.addEventListener("click", () => pickCopilotPerson(el.dataset.cpp)));
+
+  const chans = state.channels || [];
+  const wrap = $("#cp-channels-wrap");
+  if (wrap) wrap.classList.toggle("hidden", !chans.length);
+  const box = $("#cp-channels");
+  if (box) {
+    box.innerHTML = chans.map(c => {
+      const i = state.cpChatIds.indexOf(c.chat_id);
+      return `
+      <button class="chip pick ${i >= 0 ? "sel" : ""}" data-cpc="${esc(c.chat_id)}"
+        title="${esc(chanLabel(c))} · ${c.message_count} 条">
+        ${i >= 0 ? `<b class="ord">${i + 1}</b>` : ""}${esc(chanLabel(c))}
+        <span class="ct">${c.message_count}</span>
+      </button>`;
+    }).join("");
+    box.querySelectorAll("[data-cpc]").forEach(el =>
+      el.addEventListener("click", () => toggleCopilotChat(el.dataset.cpc)));
+  }
+
+  const tag = $("#cp-pick-tag");
+  if (tag) {
+    const p = state.persons.find(x => x.id === state.personId);
+    tag.textContent = p ? `已勾 ${state.cpChatIds.length} 个渠道` : "选一个对象";
+  }
+  const note = $("#cp-pick-note");
+  if (note) {
+    const names = state.cpChatIds.map(id => {
+      const c = chans.find(x => x.chat_id === id);
+      return c ? chanLabel(c) : id;
+    });
+    if (!chans.length) note.textContent = "这个对象名下还没有渠道，先去「采集」导一段。";
+    else if (!names.length) note.textContent = "至少勾一个渠道，否则没有可分析的内容。";
+    else if (names.length === 1) note.textContent =
+      `只分析「${names[0]}」。再勾一个渠道就能把两边合起来看。`;
+    else note.textContent =
+      `合并 ${names.length} 个渠道分析，主渠道是「${names[0]}」——你贴的那句话会记到它名下。`;
+  }
+}
+
+/** 在指挥台换一个对象：载入它的渠道，并默认勾上消息最多的那个。 */
+async function pickCopilotPerson(id) {
+  if (state.personId !== id) {
+    state.personId = id;
+    await loadChannels(id);
+    const best = [...(state.channels || [])]
+      .sort((a, b) => (b.message_count || 0) - (a.message_count || 0))[0];
+    state.cpChatIds = best ? [best.chat_id] : [];
+    state.chatId = best ? best.chat_id : null;
+    state.bundle = null;
+    const r = $("#cp-result");
+    if (r) r.innerHTML = "";
+  }
+  renderObjects();
+  reflectChat();
+  updateSteps();
+}
+
+/** 勾选 / 取消一个渠道。第一个勾上的是主渠道。 */
+function toggleCopilotChat(cid) {
+  const i = state.cpChatIds.indexOf(cid);
+  if (i >= 0) state.cpChatIds.splice(i, 1);
+  else state.cpChatIds.push(cid);
+  state.chatId = cpPrimary();
+  state.bundle = null;
+  const r = $("#cp-result");
+  if (r) r.innerHTML = "";
+  renderObjects();
+  reflectChat();
+  updateSteps();
+}
+
+$("#cp-pick-help")?.addEventListener("click", () => {
+  const { foot } = openModal({
+    title: "为什么要能多选渠道",
+    body: `<p class="small muted">同一个人在微信和 QQ 上说的，是同一段关系。
+        只看一个渠道，等于只看了半张牌 —— 她在微信上话少、在 QQ 上话多，都会被误读成「她最近冷淡了」。</p>
+      <p class="small muted" style="margin-top:10px">勾多个渠道时：</p>
+      <div class="capture-list">
+        <div class="it"><div class="small"><span class="pill ok">合并</span></div>
+          <div class="tx">事实、摘要、近期消息来自全部勾选的渠道，并按时间归并。</div></div>
+        <div class="it"><div class="small"><span class="pill info">主渠道</span></div>
+          <div class="tx">顺序里的第 1 个。你贴进来的那句话会记到它名下，检索也以它为主。</div></div>
+        <div class="it"><div class="small"><span class="pill">留存</span></div>
+          <div class="tx">这次用了哪几个渠道会写进「历史」，回看时能复原当时看到的是什么。</div></div>
+      </div>
+      <p class="small muted" style="margin-top:10px">调整顺序：取消再重新勾，先勾的那个就是主渠道。</p>`,
+  });
+  foot.append(modalButton("知道了", "primary", closeModal));
+});
+
+/** 点选一个渠道：它成为指挥台的主渠道，同时打开对象详情的「聊天记录」Tab。 */
+async function openObjectChat(chatId) {
+  const c = state.chats.find(x => x.id === chatId);
+  if (c && c.person_id && c.person_id !== state.personId) state.personId = c.person_id;
+  await loadObjects();
+  selectChat(chatId);
+  state.objTab = "chat";
+  state.chatFilter = chatId;
+  goView("objects");
 }
 
 function selectChat(id) {
   state.chatId = id;
+  if (id && !state.cpChatIds.includes(id)) {
+    // 侧栏点了渠道 → 它就是主渠道；原来勾的留在后面，不悄悄丢掉多选
+    state.cpChatIds = [id, ...state.cpChatIds];
+  }
   state.bundle = null;
   $("#cp-result").innerHTML = "";
-  $$("#chatlist .chatitem").forEach(el => el.classList.toggle("on", el.dataset.id === id));
+  renderObjects();
   reflectChat();
+  updateSteps();
 }
 
 // ================================================================ 指挥台
@@ -1517,6 +1929,15 @@ function renderBundle(b) {
     ? `<div class="note">${b.warnings.map(esc).join("<br>")}</div>` : "";
   const trace = b.trace || {};
   const total = (b.options || []).length;
+  const ids = state.cpChatIds;
+  // 需求 11：这次分析已经落进「历史」了，把入口直接给出来 ——
+  // 否则用户得自己想到「对象 → 历史」去找，等于没有留存。
+  const saved = trace.run_id ? `
+    <div class="note ok" style="margin-top:12px">
+      这次分析已存入 <a href="#" id="cp-goto-history">对象 · 历史</a>
+      ${ids.length > 1 ? `（用了 ${ids.length} 个渠道）` : ""}
+      —— 记录 #${trace.run_id}。推演结果也会挂在这一条下面。
+    </div>` : "";
   $("#cp-result").innerHTML = warn + analysisHTML(b) + `
     <div class="card">
       <h3>建议回复 <span class="tag">${total} 选 1 · 按综合分排序</span></h3>
@@ -1525,7 +1946,14 @@ function renderBundle(b) {
         用来排序，不是绝对值。差 0.3 分不用太在意。
       </p>
       ${(b.options || []).map(optionHTML).join("") || `<p class="small muted">没有生成建议。</p>`}
+      ${saved}
     </div>`;
+
+  $("#cp-goto-history")?.addEventListener("click", (e) => {
+    e.preventDefault();
+    state.objTab = "history";
+    goView("objects");
+  });
 
   $("#cp-trace").textContent = trace.total_ms
     ? `耗时 ${trace.total_ms}ms（检索 ${trace.context_ms || 0} · 分析 ${trace.analyze_ms || 0} · 建议 ${trace.suggest_ms || 0}）· ${trace.llm} · 召回 ${trace.retrieved} 条`
@@ -1543,12 +1971,20 @@ function renderBundle(b) {
     const oid = box.dataset.oid;
     const opt = (state.bundle.options || []).find(o => o.id === oid);
     if (!opt) return;
+    const cid = cpPrimary();
     const target = box.querySelector(".simbox");
+    if (!cid) { target.innerHTML = `<div class="note err">没有选中的渠道。</div>`; return; }
     busy(btn, true, "推演中…");
     try {
-      const tree = await api(`/api/chats/${encodeURIComponent(state.chatId)}/simulate`, {
+      const tree = await api(`/api/chats/${encodeURIComponent(cid)}/simulate`, {
         method: "POST",
-        body: JSON.stringify({ option_id: oid, option_text: opt.text, peer_message: $("#cp-msg").value.trim() }),
+        // 带上这次分析的 run_id：推演结果挂到同一条历史记录下，
+        // 「历史」里点开一次分析就能连它的推演一起看到
+        body: JSON.stringify({
+          option_id: oid, option_text: opt.text,
+          peer_message: $("#cp-msg").value.trim(),
+          run_id: (state.bundle.trace || {}).run_id || 0,
+        }),
       });
       target.innerHTML = simHTML(tree);
     } catch (e) {
@@ -1590,145 +2026,662 @@ function simHTML(t) {
 $("#cp-go").addEventListener("click", async () => {
   const msg = $("#cp-msg").value.trim();
   if (!msg) { alert("先把对方刚发的话贴进来"); return; }
+  const ids = state.cpChatIds.slice();
+  if (!ids.length) { alert("先在上面勾一个渠道"); return; }
   busy("#cp-go", true, "分析中…");
-  $("#cp-result").innerHTML = `<div class="card"><span class="spin"></span> <span class="small muted">正在检索记忆、分析对方状态、生成建议…</span></div>`;
+  const hint = ids.length > 1 ? `正在合并 ${ids.length} 个渠道` : "正在检索记忆";
+  $("#cp-result").innerHTML =
+    `<div class="card"><span class="spin"></span> <span class="small muted">${esc(hint)}、分析对方状态、生成建议…</span></div>`;
   try {
-    state.bundle = await api(`/api/chats/${encodeURIComponent(state.chatId)}/suggest`, {
-      method: "POST",
-      body: JSON.stringify({ peer_message: msg, persist: $("#cp-persist").checked }),
-    });
+    // 单选走原来的会话接口；多选走「对象」接口 —— 后者才知道怎么把几个渠道合并
+    state.bundle = ids.length > 1
+      ? await api(`/api/persons/${encodeURIComponent(state.personId)}/suggest`, {
+          method: "POST",
+          body: JSON.stringify({ chat_ids: ids, peer_message: msg, persist: $("#cp-persist").checked }),
+        })
+      : await api(`/api/chats/${encodeURIComponent(ids[0])}/suggest`, {
+          method: "POST",
+          body: JSON.stringify({ peer_message: msg, persist: $("#cp-persist").checked }),
+        });
     renderBundle(state.bundle);
-    loadChats();
+    loadObjects();
   } catch (e) {
     $("#cp-result").innerHTML = `<div class="note err">${esc(e.message)}</div>`;
   } finally { busy("#cp-go", false); }
 });
 
 $("#cp-last").addEventListener("click", async () => {
-  if (!state.chatId) return;
+  const cid = cpPrimary();
+  if (!cid) return;
   try {
-    const r = await api(`/api/chats/${encodeURIComponent(state.chatId)}/messages?limit=40`);
+    const r = await api(`/api/chats/${encodeURIComponent(cid)}/messages?limit=40`);
     const peers = r.messages.filter(m => m.role === "peer");
     if (peers.length) $("#cp-msg").value = peers[peers.length - 1].text;
   } catch (e) { alert(e.message); }
 });
 
-// ================================================================ 记忆
+// ================================================================ 对象详情（5 个 Tab）
+//
+// 原「记忆」页并入这里：人物设定与「已记住的事实」上提到对象级；聊天记录变成可编辑表格；
+// 采集给这个对象单独一个视图；历史读的是 S0 落下的 engine_runs / activity_log。
+//
+// 事实的展示规则是**已定的**：合并视野、分组显示、分别计数 —— 不做去重合并
+// （同一条事实在对象级与渠道级各出现一次是正常的，后端 `list_facts_for_person` 就是这么返回的）。
 
-async function loadPersona() {
-  try {
-    const p = await api(`/api/chats/${encodeURIComponent(state.chatId)}/persona`);
-    $("#p-goal").value = p.goal || "";
-    $("#p-stage").value = p.stage || "";
-    $("#p-taboos").value = p.taboos || "";
-    $("#p-mystyle").value = p.my_style || "";
-    $("#p-profile").value = p.peer_profile || "";
-  } catch { /* 忽略 */ }
+const OB_TABS = ["overview", "memory", "chat", "collect", "history"];
+const FACT_WHO = { peer: "对方", me: "我", self: "我", relationship: "关系" };
+const ACT_KIND = {
+  import: "导入", collect_auto: "自动采集", collect_semi: "半自动采集",
+  edit: "批量编辑", profile: "画像",
+};
+
+async function objectsOnEnter() {
+  await loadObjects();
+  const has = !!state.personId;
+  $("#obj-empty").classList.toggle("hidden", has);
+  $("#obj-main").classList.toggle("hidden", !has);
+  if (!has) return;
+  renderObjHeader();
+  openObjTab(state.objTab || "overview");
 }
 
-async function loadFacts() {
-  try {
-    const facts = await api(`/api/chats/${encodeURIComponent(state.chatId)}/facts`);
-    $("#f-count").textContent = facts.length + " 条";
-    if (!facts.length) {
-      $("#facts").innerHTML = `<span class="muted">还没有抽取过事实。点上面的「抽取事实并生成画像」。</span>`;
-      return;
-    }
-    // 后端用 peer / me 做归属标记，界面上直接显示中文，别让用户猜 peer 是谁
-    const WHO = { peer: "对方", me: "我", self: "我" };
-    $("#facts").innerHTML = facts.map(f => `
-      <div class="row" style="justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)">
-        <span><span class="pill">${esc(WHO[f.subject] || f.subject)}</span> <b>${esc(f.key)}</b> ${esc(f.value)}</span>
-        <span class="row" style="gap:6px">
-          <span class="dim mono">${(f.confidence * 100).toFixed(0)}%</span>
-          <button class="btn sm ghost danger f-del" data-id="${f.id}">×</button>
-        </span>
-      </div>`).join("");
-    $$("#facts .f-del").forEach(b => b.addEventListener("click", async () => {
-      await api(`/api/chats/${encodeURIComponent(state.chatId)}/facts/${b.dataset.id}`, { method: "DELETE" });
-      loadFacts();
-    }));
-  } catch { /* 忽略 */ }
+function renderObjHeader() {
+  const p = state.persons.find(x => x.id === state.personId);
+  if (!p) return;
+  $("#obj-title").textContent = p.name;
+  $("#obj-sub").textContent =
+    `${p.channel_count} 个渠道 · ${p.message_count} 条消息（对方 ${p.peer_count} / 我 ${p.me_count}）`
+    + (p.relation ? ` · 关系：${p.relation}` : "")
+    + (p.stage_goal ? ` · 阶段目标：${p.stage_goal}` : "");
 }
 
-async function loadMessages() {
-  try {
-    const c = state.chats.find(x => x.id === state.chatId);
-    $("#mem-stats").innerHTML = c ? `
-      <span class="pill info">${c.message_count} 条消息</span>
-      <span class="pill">对方 ${c.peer_count}</span>
-      <span class="pill">我 ${c.me_count}</span>
-      <span class="pill ${c.indexed ? "ok" : "warn"}">已索引 ${c.indexed}</span>
-      <span class="pill">${esc((c.first_ts || "").slice(0, 10))} → ${esc((c.last_ts || "").slice(0, 10))}</span>
-      <span class="pill">对方：${esc(c.peer_name || "未识别")}</span>` : "";
-    const r = await api(`/api/chats/${encodeURIComponent(state.chatId)}/messages?limit=100`);
-    $("#mem-msgs").innerHTML = r.messages.map(m => `
-      <div class="msg ${m.role}">
-        <span class="t">${esc((m.ts || "").slice(5, 16))}</span>
-        <span class="w">${esc(m.role === "me" ? "我" : m.sender)}</span>
-        <span class="c">${esc(m.text)}</span>
-      </div>`).join("") || `<span class="muted small">没有消息</span>`;
-    $("#mem-msgs").scrollTop = $("#mem-msgs").scrollHeight;
-  } catch (e) { $("#mem-msgs").textContent = e.message; }
+function openObjTab(name) {
+  if (!OB_TABS.includes(name)) name = "overview";
+  state.objTab = name;
+  $$("#obj-tabs .otab").forEach(b => b.classList.toggle("on", b.dataset.otab === name));
+  OB_TABS.forEach(t => { const el = $("#ob-" + t); if (el) el.classList.toggle("hidden", t !== name); });
+  if (name === "overview") loadOverview();
+  else if (name === "memory") loadObjMemory();
+  else if (name === "chat") loadObjChat();
+  else if (name === "collect") loadObjCollect();
+  else if (name === "history") loadObjHistory();
 }
 
-$("#mem-index").addEventListener("click", async () => {
-  busy("#mem-index", true, "建索引…");
-  try {
-    const r = await api(`/api/chats/${encodeURIComponent(state.chatId)}/index`, { method: "POST" });
-    toast("#mem-msg", `新增 ${r.added} 条，共索引 ${r.indexed} 条（维度 ${r.dim}）`, "ok");
-    loadChats();
-  } catch (e) { toast("#mem-msg", e.message, "err"); }
-  finally { busy("#mem-index", false); }
+$("#obj-tabs").addEventListener("click", (e) => {
+  const b = e.target.closest(".otab");
+  if (b) openObjTab(b.dataset.otab);
 });
 
-$("#mem-profile").addEventListener("click", async () => {
-  busy("#mem-profile", true, "抽取中…");
+// ---------------------------------------------------------------- 概览
+
+async function loadOverview() {
+  const box = $("#ob-overview");
+  if (!state.personId) return;
+  box.innerHTML = `<div class="card"><div class="small dim">加载中…</div></div>`;
+  let d;
+  try { d = await api(`/api/persons/${encodeURIComponent(state.personId)}/overview`); }
+  catch (e) { box.innerHTML = `<div class="card"><div class="note err">${esc(e.message)}</div></div>`; return; }
+
+  const p = d.person, c = d.counts || {};
+  const todos = (d.todos || []).length
+    ? `<div class="note">还有几项可以补上：<ul class="act">${d.todos.map(t => `<li>${esc(t)}</li>`).join("")}</ul></div>`
+    : `<div class="note ok">这个对象看起来已经就绪。</div>`;
+  const chans = (d.channels || []).length ? `
+    <table class="t"><thead><tr><th>渠道</th><th>来源</th><th>条数</th><th>时间范围</th></tr></thead><tbody>
+    ${d.channels.map(ch => `<tr>
+      <td>${esc(chatPlatformLabel(ch.platform))}${ch.name ? " · " + esc(ch.name) : ""}</td>
+      <td class="dim">${esc(ch.source === "collect" ? "采集" : "导入")}</td>
+      <td>${ch.message_count}</td>
+      <td class="dim">${esc((ch.first_ts || "").slice(0, 10))} → ${esc((ch.last_ts || "").slice(0, 10))}</td>
+    </tr>`).join("")}</tbody></table>`
+    : `<div class="empty-hint">还没有绑定任何渠道。</div>`;
+  const recent = (d.recent_messages || []).slice(-6).reverse().map(m => `
+    <div class="msg ${esc(m.role)}">
+      <span class="t">${esc((m.ts || "").slice(5, 16))}</span>
+      <span class="w">${esc(m.role === "me" ? "我" : (m.sender || "对方"))}</span>
+      <span class="c">${esc(m.text)}</span>
+    </div>`).join("") || `<span class="muted small">没有消息</span>`;
+
+  box.innerHTML = `
+    <div class="card">
+      <h3>概览 <span class="tag">${esc(p.name)}</span></h3>
+      <div class="row" style="gap:7px;margin-bottom:12px">
+        <span class="pill info">${c.channels || 0} 个渠道</span>
+        <span class="pill">${c.messages || 0} 条消息</span>
+        <span class="pill">对方 ${c.peer || 0}</span>
+        <span class="pill">我 ${c.me || 0}</span>
+        <span class="pill">事实 ${c.facts || 0}</span>
+        <span class="pill">历史输出 ${c.runs || 0}</span>
+      </div>
+      ${(p.relation || p.desired_relation || p.stage_goal || p.notes) ? `
+        <div class="kv"><b>关系</b>${esc(p.relation || "—")}</div>
+        <div class="kv"><b>期望</b>${esc(p.desired_relation || "—")}</div>
+        <div class="kv"><b>阶段目标</b>${esc(p.stage_goal || "—")}</div>
+        ${p.notes ? `<div class="kv"><b>备注</b>${esc(p.notes)}</div>` : ""}` : ""}
+      ${todos}
+    </div>
+    <div class="card"><h3>渠道</h3>${chans}</div>
+    <div class="card"><h3>最近消息</h3><div class="msgs">${recent}</div></div>`;
+}
+
+// ---------------------------------------------------------------- 记忆（人物设定 + 事实分组）
+
+async function loadObjMemory() {
+  const pid = state.personId;
+  if (!pid) return;
   try {
-    const r = await api(`/api/chats/${encodeURIComponent(state.chatId)}/profile`, { method: "POST" });
-    toast("#mem-msg", `抽到 ${r.facts_extracted} 条新事实（共 ${r.facts_total} 条）`, "ok");
-    if (r.warnings?.length) toast("#mem-msg", r.warnings.join("; "), "err");
-    loadPersona(); loadFacts();
-  } catch (e) { toast("#mem-msg", e.message, "err"); }
-  finally { busy("#mem-profile", false); }
-});
+    const p = await api(`/api/persons/${encodeURIComponent(pid)}/persona`);
+    $("#op-goal").value = p.goal || "";
+    $("#op-stage").value = p.stage || "";
+    $("#op-taboos").value = p.taboos || "";
+    $("#op-mystyle").value = p.my_style || "";
+    $("#op-profile").value = p.peer_profile || "";
+  } catch { /* 对象刚建好、还没设定：留空即可 */ }
+  await loadObjFacts();
+}
 
-$("#mem-export").addEventListener("click", () => exportChat());
+async function loadObjFacts() {
+  const pid = state.personId;
+  const box = $("#ofacts");
+  if (!pid) return;
+  let facts;
+  try { facts = await api(`/api/persons/${encodeURIComponent(pid)}/facts`); }
+  catch (e) { box.innerHTML = `<div class="note err">${esc(e.message)}</div>`; return; }
 
-// 删除走统一的「声明 + 倒计时」弹窗（与左侧列表右键菜单同一个实现）
-$("#mem-del").addEventListener("click", () => {
-  const chat = state.chats.find(c => c.id === state.chatId);
-  if (!chat) { toast("#mem-msg", "先选一个会话", "err"); return; }
-  openChatDeleteDialog(chat);
-});
+  const personFacts = facts.filter(f => f.scope === "person");
+  const chatFacts = facts.filter(f => f.scope !== "person");
+  $("#of-count").textContent = `对象级 ${personFacts.length} · 渠道级 ${chatFacts.length}`;
 
-$("#p-save").addEventListener("click", async () => {
-  busy("#p-save", true, "保存中…");
+  const group = (title, note, rows) => `
+    <div class="fgroup">
+      <div class="fghd">${esc(title)}（${rows.length} 条）<span class="dim"> ${esc(note)}</span></div>
+      ${rows.length ? rows.map(factRow).join("") : `<div class="small dim">暂无。</div>`}
+    </div>`;
+
+  box.innerHTML = facts.length
+    ? group("对象级", "不绑具体渠道", personFacts) + group("渠道级", "来自某一段记录", chatFacts)
+    : `<span class="muted">还没有抽取过事实。可以在「聊天记录」Tab 里点「抽取事实并生成画像」，或在下面手动加一条。</span>`;
+  $$("#ofacts .f-del").forEach(b => b.addEventListener("click", () => confirmDeleteFact(b.dataset.id)));
+}
+
+function factRow(f) {
+  const who = FACT_WHO[f.subject] || f.subject;
+  return `
+    <div class="row" style="justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)">
+      <span><span class="pill">${esc(who)}</span> <b>${esc(f.key)}</b> ${esc(f.value)}
+        ${f.scope === "chat" && f.chat_id ? `<span class="dim mono" style="margin-left:6px">${esc(f.chat_id)}</span>` : ""}</span>
+      <span class="row" style="gap:6px">
+        <span class="dim mono">${((f.confidence || 0) * 100).toFixed(0)}%</span>
+        <button class="btn sm ghost danger f-del" data-id="${f.id}">×</button>
+      </span>
+    </div>`;
+}
+
+function confirmDeleteFact(factId) {
+  confirmWithCountdown({
+    title: "删除这条事实",
+    sub: "删掉之后它就不会再进分析上下文了",
+    confirmLabel: "删除这条事实",
+    seconds: 3,
+    doneNote: "声明已读完，可以确认。",
+    body: `<div class="declare"><div class="dt">删除不可撤销。</div>
+      这条事实会从「已记住」里消失。如果只是写错了，删掉再加一条更省事。</div>`,
+    onConfirm: async () => {
+      await api(`/api/persons/${encodeURIComponent(state.personId)}/facts/${factId}`, { method: "DELETE" });
+      await loadObjFacts();
+    },
+  });
+}
+
+$("#op-save").addEventListener("click", async () => {
+  if (!state.personId) return;
+  busy("#op-save", true, "保存中…");
   try {
-    await api(`/api/chats/${encodeURIComponent(state.chatId)}/persona`, {
+    await api(`/api/persons/${encodeURIComponent(state.personId)}/persona`, {
       method: "PUT",
       body: JSON.stringify({
-        goal: $("#p-goal").value, stage: $("#p-stage").value,
-        taboos: $("#p-taboos").value, my_style: $("#p-mystyle").value,
-        peer_profile: $("#p-profile").value,
+        goal: $("#op-goal").value, stage: $("#op-stage").value,
+        taboos: $("#op-taboos").value, my_style: $("#op-mystyle").value,
+        peer_profile: $("#op-profile").value,
       }),
     });
-    toast("#p-msg", "已保存", "ok");
-  } catch (e) { toast("#p-msg", e.message, "err"); }
-  finally { busy("#p-save", false); }
+    toast("#op-msg", "已保存", "ok");
+  } catch (e) { toast("#op-msg", e.message, "err"); }
+  finally { busy("#op-save", false); }
 });
 
-$("#f-add").addEventListener("click", async () => {
-  const key = $("#f-key").value.trim(), value = $("#f-val").value.trim();
-  if (!key || !value) { toast("#mem-msg", "类别和内容都要填", "err"); return; }
+$("#of-add").addEventListener("click", async () => {
+  if (!state.personId) return;
+  const key = $("#of-key").value.trim(), value = $("#of-val").value.trim();
+  if (!key || !value) { toast("#of-msg", "类别和内容都要填", "err"); return; }
   try {
-    await api(`/api/chats/${encodeURIComponent(state.chatId)}/facts`, {
-      method: "POST", body: JSON.stringify({ key, value }),
+    await api(`/api/persons/${encodeURIComponent(state.personId)}/facts`, {
+      method: "POST",
+      body: JSON.stringify({ key, value, subject: $("#of-subject").value }),
     });
-    $("#f-key").value = ""; $("#f-val").value = "";
-    loadFacts();
-  } catch (e) { toast("#mem-msg", e.message, "err"); }
+    $("#of-key").value = ""; $("#of-val").value = "";
+    toast("#of-msg", "已加一条对象级事实", "ok");
+    await loadObjFacts();
+  } catch (e) { toast("#of-msg", e.message, "err"); }
 });
+
+// ---------------------------------------------------------------- 聊天记录（可编辑 + 批量）
+
+const fmtTs = (t) => String(t || "").replace("T", " ").slice(0, 19);
+
+function chanLabel(c) {
+  return `${chatPlatformLabel(c.platform)}${c.name ? " · " + c.name : ""}`;
+}
+
+function setChatFilter(cid) {
+  state.chatFilter = cid || "";
+  const sel = $("#ob-filter");
+  if (sel) sel.value = state.chatFilter;
+  const c = state.channels.find(x => x.chat_id === state.chatFilter);
+  $("#ob-chat-tag").textContent = state.chatFilter
+    ? (c ? chanLabel(c) : state.chatFilter)
+    : `全部渠道 · ${state.channels.length} 段`;
+}
+
+async function loadObjChat() {
+  const sel = $("#ob-filter");
+  const want = state.chatFilter || "";
+  sel.innerHTML = `<option value="">全部渠道</option>` + state.channels.map(c =>
+    `<option value="${esc(c.chat_id)}"${c.chat_id === want ? " selected" : ""}>${esc(chanLabel(c))}（${c.message_count}）</option>`
+  ).join("");
+  setChatFilter(want);
+  state.msgSel = new Set();
+  await fetchObjMessages(false);
+}
+
+// 一次加载多少条：沿用「记忆」页的 100，并提供「再往前加载」——
+// 这样既不会一次性塞几千行 DOM，也不会让人以为只有 100 条。
+async function fetchObjMessages(more) {
+  const box = $("#ob-msgs");
+  const limit = 100;
+  const before = more && state.firstMsgId ? `&before_id=${state.firstMsgId}` : "";
+  const cid = state.chatFilter;
+  if (!more) box.innerHTML = `<div class="empty-hint">加载中…</div>`;
+  try {
+    let rows;
+    if (cid) {
+      const r = await api(`/api/chats/${encodeURIComponent(cid)}/messages?limit=${limit}${before}`);
+      rows = r.messages || [];
+    } else {
+      if (!state.personId) return;
+      const r = await api(`/api/persons/${encodeURIComponent(state.personId)}/messages?limit=${limit}${before}`);
+      rows = r.messages || [];
+    }
+    state.messages = more ? rows.concat(state.messages) : rows;
+  } catch (e) { box.innerHTML = `<div class="note err">${esc(e.message)}</div>`; return; }
+  state.firstMsgId = state.messages.length ? Math.min(...state.messages.map(m => m.id)) : null;
+  renderObjMessages();
+  if (more) box.scrollTop = 0;
+  toast("#ob-more-msg", state.messages.length ? `已显示 ${state.messages.length} 条` : "没有消息", "");
+}
+
+function renderObjMessages() {
+  const box = $("#ob-msgs");
+  if (!state.messages.length) {
+    box.innerHTML = `<div class="empty-hint">这里还没有消息。</div>`;
+    updateMsgSelInfo();
+    return;
+  }
+  box.innerHTML = `<div class="mrow-hd">
+      <span></span><span>时间</span><span>发送者</span><span>角色</span><span>内容</span><span>操作</span>
+    </div>` + state.messages.map(m => `
+    <div class="mrow" data-mid="${m.id}">
+      <input type="checkbox" class="mrow-sel" ${state.msgSel.has(m.id) ? "checked" : ""} />
+      <input type="text" class="mrow-ts" value="${esc(fmtTs(m.ts))}" />
+      <input type="text" class="mrow-sender" value="${esc(m.sender || "")}" />
+      <select class="mrow-role">
+        <option value="me"${m.role === "me" ? " selected" : ""}>我</option>
+        <option value="peer"${m.role === "peer" ? " selected" : ""}>对方</option>
+        <option value="system"${m.role === "system" ? " selected" : ""}>系统</option>
+      </select>
+      <textarea class="mrow-text">${esc(m.text)}</textarea>
+      <div class="mrow-acts">
+        <button class="btn sm" data-save="${m.id}">保存</button>
+        <button class="btn sm ghost danger" data-del="${m.id}">删除</button>
+      </div>
+    </div>`).join("");
+
+  box.querySelectorAll(".mrow-sel").forEach(cb => cb.addEventListener("change", () => {
+    const id = Number(cb.closest(".mrow").dataset.mid);
+    if (cb.checked) state.msgSel.add(id); else state.msgSel.delete(id);
+    updateMsgSelInfo();
+  }));
+  box.querySelectorAll("[data-save]").forEach(b =>
+    b.addEventListener("click", () => saveRow(Number(b.dataset.save), b)));
+  box.querySelectorAll("[data-del]").forEach(b =>
+    b.addEventListener("click", () => confirmDeleteMessages([Number(b.dataset.del)])));
+  updateMsgSelInfo();
+}
+
+function updateMsgSelInfo() {
+  const n = state.msgSel.size;
+  $("#ob-selinfo").textContent = `已选 ${n} 条`;
+  const all = state.messages.findIndex(m => !state.msgSel.has(m.id)) === -1 && state.messages.length > 0;
+  const cb = $("#ob-selall");
+  if (cb) cb.textContent = all ? "取消全选" : "全选";
+}
+
+async function saveRow(id, btn) {
+  const row = $(`#ob-msgs .mrow[data-mid="${id}"]`);
+  if (!row) return;
+  const sender = row.querySelector(".mrow-sender").value.trim();
+  if (!sender) { toast("#ob-msg", "发送者不能为空", "err"); return; }
+  const patch = {
+    ts: row.querySelector(".mrow-ts").value.trim().replace(" ", "T"),
+    sender,
+    role: row.querySelector(".mrow-role").value,
+    text: row.querySelector(".mrow-text").value,
+  };
+  busy(btn, true, "…");
+  try {
+    await api(`/api/messages/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+    row.classList.remove("bad");
+    toast("#ob-msg", "已保存这一条", "ok");
+  } catch (e) {
+    // 撞唯一键时后端返回 409「改完和另一条完全一样」——把这一行标红，
+    // 让人一眼看到是哪条出的问题，而不是只弹一句看不懂的话。
+    row.classList.add("bad");
+    toast("#ob-msg", "这条没保存：" + e.message, "err");
+  } finally { busy(btn, false); }
+}
+
+function confirmDeleteMessages(ids) {
+  if (!ids.length) { toast("#ob-msg", "先勾选要删的消息", "err"); return; }
+  confirmWithCountdown({
+    title: `删除 ${ids.length} 条消息`,
+    sub: "删除不可撤销",
+    confirmLabel: "我确认，删除",
+    seconds: 5,
+    doneNote: "声明已读完，现在可以确认删除。",
+    body: `<div class="declare"><div class="dt">这个操作不可撤销。</div>
+      选中的 <span class="dl">${ids.length}</span> 条消息会永久删除，<b>连同它们的向量索引</b>一起消失。
+      原始导出文件里还有，但重新导入<b>不会</b>恢复你在这里做过的修改。</div>`,
+    onConfirm: async () => {
+      const r = await api("/api/messages/bulk", {
+        method: "POST", body: JSON.stringify({ ids, action: "delete" }),
+      });
+      afterBulk(r, "删除");
+      await fetchObjMessages(false);
+    },
+  });
+}
+
+function afterBulk(r, label) {
+  const errs = r.errors || [];
+  const msg = `已${label} ${r.changed} 条，跳过 ${r.skipped} 条` + (errs.length ? `，失败 ${errs.length} 条` : "");
+  toast("#ob-msg", msg, errs.length ? "err" : "ok");
+  const box = $("#ob-bulkerr");
+  if (!box) return;
+  box.innerHTML = errs.length
+    ? `<div class="note err" style="margin:6px 0">这些没改成：<br>${
+        errs.slice(0, 20).map(e => `#${e.id}：${esc(e.detail || e.error)}`).join("<br>")}</div>`
+    : "";
+}
+
+function openBulkDialog(action) {
+  const ids = Array.from(state.msgSel);
+  if (!ids.length) { toast("#ob-msg", "先勾选要改的消息", "err"); return; }
+  const spec = {
+    set_role: { title: "批量改角色", label: "角色",
+      field: `<select id="bulk-val" style="width:100%"><option value="me">我</option><option value="peer">对方</option><option value="system">系统</option></select>` },
+    set_ts: { title: "批量改时间", label: "时间",
+      field: `<input type="text" id="bulk-val" placeholder="2026-10-05 21:03:15" />` },
+    set_sender: { title: "批量改发送者", label: "发送者",
+      field: `<input type="text" id="bulk-val" placeholder="例：小鹿" />` },
+  }[action];
+  const h = openModal({
+    title: spec.title,
+    sub: `将作用于选中的 ${ids.length} 条消息`,
+    body: `<div class="frow"><span>${esc(spec.label)}</span>${spec.field}</div>
+           <div class="fhint">改时间会把时间来源标成「手工填写」；改角色只动归属，不改发送者文本。</div>`,
+  });
+  const note = document.createElement("span");
+  note.className = "mnote";
+  h.foot.append(
+    note,
+    modalButton("取消", "ghost", () => closeModal()),
+    modalButton("应用到选中", "primary", async (e) => {
+      const btn = e.currentTarget;
+      let value = h.root.querySelector("#bulk-val").value.trim();
+      if (!value) { note.textContent = "先填要改成什么。"; return; }
+      if (action === "set_ts") value = value.replace(" ", "T");
+      busy(btn, true, "处理中…");
+      try {
+        const r = await api("/api/messages/bulk", {
+          method: "POST", body: JSON.stringify({ ids, action, value }),
+        });
+        closeModal();
+        afterBulk(r, { set_role: "改角色", set_ts: "改时间", set_sender: "改发送者" }[action]);
+        await fetchObjMessages(false);
+      } catch (err) { busy(btn, false); note.textContent = err.message; }
+    }),
+  );
+}
+
+function openAddMessageDialog() {
+  if (!state.channels.length) { toast("#ob-msg", "这个对象还没有渠道 —— 先去采集页导一段。", "err"); return; }
+  const cid = state.chatFilter || state.channels[0].chat_id;
+  const h = openModal({
+    title: "手动加一条消息",
+    sub: "补记一句没在记录里的对话",
+    body: `
+      <div class="frow"><span>渠道</span><select id="am-chat" style="width:100%">
+        ${state.channels.map(c => `<option value="${esc(c.chat_id)}"${c.chat_id === cid ? " selected" : ""}>${esc(chanLabel(c))}</option>`).join("")}
+      </select></div>
+      <div class="frow"><span>时间</span><input type="text" id="am-ts" placeholder="留空用当前时间；2026-10-05 21:03:15" /></div>
+      <div class="frow"><span>发送者</span><input type="text" id="am-sender" placeholder="例：小鹿" /></div>
+      <div class="frow"><span>角色</span><select id="am-role" style="width:100%">
+        <option value="peer">对方</option><option value="me">我</option><option value="system">系统</option></select></div>
+      <label class="f"><span>内容</span><textarea id="am-text" style="min-height:80px"></textarea></label>
+      <div class="fhint">时间留空就用当前时间，并标成「手工填写」。</div>`,
+  });
+  const note = document.createElement("span");
+  note.className = "mnote";
+  h.foot.append(
+    note,
+    modalButton("取消", "ghost", () => closeModal()),
+    modalButton("加进这条渠道", "primary", async (e) => {
+      const btn = e.currentTarget;
+      const chat = h.root.querySelector("#am-chat").value;
+      const sender = h.root.querySelector("#am-sender").value.trim();
+      const text = h.root.querySelector("#am-text").value.trim();
+      const tsRaw = h.root.querySelector("#am-ts").value.trim();
+      if (!sender || !text) { note.textContent = "发送者和内容都要填。"; return; }
+      busy(btn, true, "添加中…");
+      try {
+        await api(`/api/chats/${encodeURIComponent(chat)}/messages`, {
+          method: "POST",
+          body: JSON.stringify({
+            sender, text, role: h.root.querySelector("#am-role").value,
+            ts: tsRaw ? tsRaw.replace(" ", "T") : undefined, ts_source: "manual",
+          }),
+        });
+        closeModal();
+        toast("#ob-msg", "已加一条", "ok");
+        state.chatFilter = chat;
+        state.msgSel = new Set();
+        await loadObjects();
+        setChatFilter(chat);
+        await fetchObjMessages(false);
+      } catch (err) { busy(btn, false); note.textContent = err.message; }
+    }),
+  );
+}
+
+/** 索引 / 画像 / 导出都是「那条渠道」上的动作，所以要先选中一个具体渠道。 */
+function requireChannel() {
+  if (!state.chatFilter) {
+    toast("#ob-msg", "先在「按渠道筛选」里选一个具体渠道，再做这个。", "err");
+    return null;
+  }
+  return state.chatFilter;
+}
+
+$("#ob-filter").addEventListener("change", () => {
+  state.msgSel = new Set();
+  setChatFilter($("#ob-filter").value);
+  fetchObjMessages(false);
+});
+$("#ob-refresh").addEventListener("click", () => fetchObjMessages(false));
+$("#ob-more").addEventListener("click", () => fetchObjMessages(true));
+$("#ob-selall").addEventListener("click", () => {
+  if (state.msgSel.size === state.messages.length) state.msgSel = new Set();
+  else state.msgSel = new Set(state.messages.map(m => m.id));
+  renderObjMessages();
+});
+$("#ob-selnone").addEventListener("click", () => { state.msgSel = new Set(); renderObjMessages(); });
+$("#ob-del").addEventListener("click", () => confirmDeleteMessages(Array.from(state.msgSel)));
+$("#ob-role").addEventListener("click", () => openBulkDialog("set_role"));
+$("#ob-ts").addEventListener("click", () => openBulkDialog("set_ts"));
+$("#ob-sender").addEventListener("click", () => openBulkDialog("set_sender"));
+$("#ob-add").addEventListener("click", openAddMessageDialog);
+
+$("#ob-index").addEventListener("click", async () => {
+  const cid = requireChannel(); if (!cid) return;
+  busy("#ob-index", true, "建索引…");
+  try {
+    const r = await api(`/api/chats/${encodeURIComponent(cid)}/index`, { method: "POST" });
+    toast("#ob-msg", `新增 ${r.added} 条，共索引 ${r.indexed} 条（维度 ${r.dim}）`, "ok");
+    await loadObjects();
+  } catch (e) { toast("#ob-msg", e.message, "err"); }
+  finally { busy("#ob-index", false); }
+});
+
+$("#ob-profile").addEventListener("click", async () => {
+  const cid = requireChannel(); if (!cid) return;
+  busy("#ob-profile", true, "抽取中…");
+  try {
+    const r = await api(`/api/chats/${encodeURIComponent(cid)}/profile`, { method: "POST" });
+    toast("#ob-msg", `抽到 ${r.facts_extracted} 条新事实（共 ${r.facts_total} 条）`, "ok");
+    if (r.warnings?.length) toast("#ob-msg", r.warnings.join("; "), "err");
+    await loadObjects();
+  } catch (e) { toast("#ob-msg", e.message, "err"); }
+  finally { busy("#ob-profile", false); }
+});
+
+$("#ob-export").addEventListener("click", () => {
+  const cid = requireChannel();
+  if (cid) exportChat(cid);
+});
+
+// ---------------------------------------------------------------- 采集
+
+async function loadObjCollect() {
+  const box = $("#oc-list");
+  if (!state.personId) return;
+  box.innerHTML = `<div class="empty-hint">加载中…</div>`;
+  try {
+    const d = await api(`/api/collect/cursors?person_id=${encodeURIComponent(state.personId)}`);
+    const rows = d.cursors || [];
+    if (!rows.length) { box.innerHTML = `<div class="empty-hint">这个对象还没有采集过。</div>`; return; }
+    box.innerHTML = `<table class="mat">
+      <thead><tr><th>客户端</th><th>账号</th><th>对方</th><th>上次采到</th><th>状态</th></tr></thead>
+      <tbody>${rows.map(c => `<tr>
+        <td>${esc(CL[c.platform] || c.platform)}</td>
+        <td class="mono">${esc(c.account || "—")}</td>
+        <td>${esc(c.peer_key)}</td>
+        <td class="dim">${esc((c.last_ts || "").slice(0, 16) || "—")}</td>
+        <td>${esc(c.status)}${c.message ? ` <span class="dim">${esc(cut(c.message, 40))}</span>` : ""}</td>
+      </tr>`).join("")}</tbody></table>`;
+  } catch (e) { box.innerHTML = `<div class="note err">${esc(e.message)}</div>`; }
+}
+
+$("#oc-refresh").addEventListener("click", loadObjCollect);
+$("#oc-go").addEventListener("click", () => {
+  const p = state.persons.find(x => x.id === state.personId);
+  goView("collect");
+  if (!p) { toast("#sc-msg", "先在左栏选一个对象。", "err"); return; }
+  const el = $("#sc-person");
+  if (el) el.value = p.name;
+  toast("#sc-msg", `已把「采谁」填成「${p.name}」—— 识别到已有对象会直接归到它名下，不会新建重名的人。`, "ok");
+});
+
+// ---------------------------------------------------------------- 历史
+//
+// 需求 11：指挥台的每次输出都要能回看。留存的价值不在「存了」，
+// 而在**当时用的是哪几个渠道、看到的是什么、给出了什么** —— 复现不出来，
+// 记录就只是一堆孤立的句子。所以每条 run 都把渠道列出来。
+
+function runChannels(r) {
+  const ids = r.chat_ids || [];
+  if (!ids.length) return `<span class="dim">渠道未记录</span>`;
+  return ids.map((id, i) => {
+    const c = state.chats.find(x => x.id === id);
+    const label = c ? chanLabel(c) : id;
+    return `<span class="pill ${i === 0 ? "info" : ""}" title="${esc(id)}">${i === 0 ? "主 · " : ""}${esc(label)}</span>`;
+  }).join(" ");
+}
+
+function simRunsHTML(sims) {
+  if (!sims || !sims.length) return "";
+  return `<details style="margin-top:8px">
+    <summary class="small muted" style="cursor:pointer">展开当时的推演（${sims.length}）</summary>
+    <div style="margin-top:8px">${sims.map(s => `
+      <div class="it" style="margin-bottom:10px">
+        <div class="small dim">针对「${esc(cut(s.option_text || "", 60))}」</div>
+        ${(s.branches || []).map(br => `
+          <div class="small" style="margin-top:6px">
+            <span class="pill ${br.likelihood === "likely" ? "ok" : "info"}">${esc(br.label || "")}</span>
+            ${esc(br.outcome || "")}
+          </div>`).join("")}
+      </div>`).join("")}</div>
+  </details>`;
+}
+
+async function loadObjHistory() {
+  const box = $("#oh-body");
+  if (!state.personId) return;
+  box.innerHTML = `<div class="small dim">加载中…</div>`;
+  try {
+    const d = await api(`/api/persons/${encodeURIComponent(state.personId)}/history?limit=50`);
+    const runs = d.runs || [];
+    const acts = d.activity || [];
+    const runsHtml = runs.length ? runs.map(r => `
+      <div class="scap" data-run="${r.id}">
+        <div class="hd"><span class="pill info">运行 #${r.id}</span>
+          <span class="small dim">${esc(fmtTs(r.created_at))}</span>
+          <span class="small dim">${(r.options || []).length} 条建议</span>
+          <button class="btn sm ghost" data-delrun="${r.id}" style="margin-left:auto">删除这条</button></div>
+        <div class="small" style="margin:6px 0">${runChannels(r)}</div>
+        <div class="it"><div class="small dim">当时对方的消息</div>
+          <div class="tx">${esc(cut(r.peer_message || "", 200))}</div></div>
+        ${r.analysis?.emotion ? `<div class="small dim" style="margin-top:6px">
+          当时判断：情绪 ${esc(r.analysis.emotion)}（${r.analysis.emotion_intensity}/10）· 意图 ${esc(r.analysis.intent || "—")}</div>` : ""}
+        ${(r.options || []).length ? `<details style="margin-top:6px">
+          <summary class="small muted" style="cursor:pointer">展开当时的建议原文</summary>
+          <div style="margin-top:8px">${r.options.map(o =>
+            `<div class="opttext" style="margin-bottom:8px">${esc(o.text || "")}</div>`).join("")}</div>
+        </details>` : ""}
+        ${(r.sim_runs || []).length ? simRunsHTML(r.sim_runs) : ""}
+      </div>`).join("") : `<div class="empty-hint">还没有指挥台的输出。去指挥台分析一次，这里就会有记录。</div>`;
+    const actsHtml = acts.length ? acts.map(a => `
+      <div class="row" style="justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)">
+        <span><span class="pill">${esc(ACT_KIND[a.kind] || a.kind)}</span> ${esc(a.summary)}
+          ${a.detail ? `<span class="dim">· ${esc(a.detail)}</span>` : ""}</span>
+        <span class="dim mono">${esc(fmtTs(a.ts))}</span>
+      </div>`).join("") : `<div class="empty-hint">还没有动作痕迹。</div>`;
+    box.innerHTML =
+      `<div class="fghd">指挥台输出（${runs.length}）</div>${runsHtml}
+       <div class="fghd" style="margin-top:16px">动作痕迹（${acts.length}）</div>${actsHtml}`;
+    box.querySelectorAll("[data-delrun]").forEach(b => b.addEventListener("click", () => {
+      const id = b.dataset.delrun;
+      confirmWithCountdown({
+        title: `删除历史记录 #${id}？`,
+        sub: "只删这条留存的分析与它的推演，聊天记录不受影响。",
+        confirmLabel: "删除",
+        onConfirm: async () => {
+          await api(`/api/history/runs/${encodeURIComponent(id)}`, { method: "DELETE" });
+          await loadObjHistory();
+        },
+      });
+    }));
+  } catch (e) { box.innerHTML = `<div class="note err">${esc(e.message)}</div>`; }
+}
 
 // ================================================================ 导入
 
@@ -1751,53 +2704,172 @@ function previewHTML(p) {
   </div>`;
 }
 
-async function doPreview() {
-  const f = $("#imp-file").files[0];
-  if (!f) { toast("#imp-msg", "先选一个文件", "err"); return; }
+// ---------------------------------------------------------------- 导入
+//
+// 采集不通时，这条通道是**确定性**的：文件是你自己给的，不依赖客户端版本、
+// 不依赖密钥、不需要程序去读别人的内存。所以它值得做得顺手一点。
+
+/** 当前选中的文件（可能是多选 + 拖进来的混合）。 */
+let impFiles = [];
+
+function humanSize(n) { return n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`; }
+
+function renderImpFiles() {
+  const box = $("#imp-files");
+  if (!box) return;
+  if (!impFiles.length) { box.innerHTML = ""; return; }
+  const total = impFiles.reduce((s, f) => s + f.size, 0);
+  box.innerHTML = `已选 ${impFiles.length} 个文件（共 ${humanSize(total)}）：`
+    + impFiles.map(f => `<span class="pill" style="margin-left:4px">${esc(f.name)} · ${humanSize(f.size)}</span>`).join("")
+    + `<button class="linkbtn" id="imp-clear" style="margin-left:8px">清空</button>`;
+  $("#imp-clear")?.addEventListener("click", () => {
+    impFiles = [];
+    $("#imp-file").value = "";
+    renderImpFiles();
+  });
+}
+
+function setImpFiles(fileList) {
+  // 按名字去重：拖两次同一个文件是最容易发生的误操作
+  const seen = new Set(impFiles.map(f => f.name + "|" + f.size));
+  for (const f of Array.from(fileList || [])) {
+    const key = f.name + "|" + f.size;
+    if (!seen.has(key)) { seen.add(key); impFiles.push(f); }
+  }
+  renderImpFiles();
+}
+
+$("#imp-file").addEventListener("change", (e) => setImpFiles(e.target.files));
+
+// 拖放：区域本身 + 整个窗口。窗口级别的拖放是为了「随手扔进来」——
+// 但只在采集页生效，免得在别处误触。
+function bindDrop(el, hotClass) {
+  if (!el) return;
+  ["dragenter", "dragover"].forEach(ev => el.addEventListener(ev, (e) => {
+    e.preventDefault(); el.classList.add(hotClass);
+  }));
+  ["dragleave", "drop"].forEach(ev => el.addEventListener(ev, (e) => {
+    if (ev === "dragleave" && el.contains(e.relatedTarget)) return;
+    el.classList.remove(hotClass);
+  }));
+  el.addEventListener("drop", (e) => {
+    e.preventDefault();
+    const fs = e.dataTransfer?.files;
+    if (fs && fs.length) {
+      setImpFiles(fs);
+      toast("#imp-msg", `接住 ${fs.length} 个文件，点「先预览」看看解析结果`, "ok");
+    }
+  });
+}
+bindDrop($("#imp-drop"), "hot");
+
+let _winDropBound = false;
+function bindWindowDrop() {
+  if (_winDropBound) return;
+  _winDropBound = true;
+  window.addEventListener("dragover", (e) => e.preventDefault());
+  window.addEventListener("drop", (e) => {
+    if (!$("#view-collect")?.classList.contains("on")) return;
+    if (!e.dataTransfer?.files?.length) return;
+    e.preventDefault();
+    setImpFiles(e.dataTransfer.files);
+    toast("#imp-msg", "接住了拖进来的文件", "ok");
+  });
+}
+bindWindowDrop();
+
+function _impForm(file, { withName = false } = {}) {
   const fd = new FormData();
-  fd.append("file", f);
+  fd.append("file", file);
   if ($("#imp-adapter").value) fd.append("adapter", $("#imp-adapter").value);
+  if (withName && $("#imp-name").value.trim()) fd.append("chat_name", $("#imp-name").value.trim());
   const me = $("#imp-mename").value.trim();
-  if (me) fd.append("options", JSON.stringify({ me_names: me.split(/[,，]/).map(s => s.trim()).filter(Boolean) }));
+  if (me) fd.append("options", JSON.stringify({
+    me_names: me.split(/[,，]/).map(s => s.trim()).filter(Boolean),
+  }));
+  return fd;
+}
+
+async function doPreview() {
+  if (!impFiles.length) { toast("#imp-msg", "先选一个文件（也可以直接拖进来）", "err"); return; }
+  const f = impFiles[0];
   busy("#imp-preview", true, "解析中…");
   try {
-    const p = await api("/api/import/preview", { method: "POST", body: fd });
-    $("#imp-result").innerHTML = previewHTML(p);
+    const p = await api("/api/import/preview", { method: "POST", body: _impForm(f) });
+    $("#imp-result").innerHTML = previewHTML(p)
+      + (impFiles.length > 1
+        ? `<div class="note">预览的是第 1 个文件 <b>${esc(f.name)}</b>。其余 ${impFiles.length - 1} 个会用同一套适配器依次导入。</div>`
+        : "");
     toast("#imp-msg", "预览完成，确认无误后点「确认导入」", "ok");
   } catch (e) { toast("#imp-msg", e.message, "err"); }
   finally { busy("#imp-preview", false); }
 }
 
 async function doImport() {
-  const f = $("#imp-file").files[0];
-  if (!f) { toast("#imp-msg", "先选一个文件", "err"); return; }
-  const fd = new FormData();
-  fd.append("file", f);
-  if ($("#imp-adapter").value) fd.append("adapter", $("#imp-adapter").value);
-  if ($("#imp-name").value.trim()) fd.append("chat_name", $("#imp-name").value.trim());
-  const me = $("#imp-mename").value.trim();
-  if (me) fd.append("options", JSON.stringify({ me_names: me.split(/[,，]/).map(s => s.trim()).filter(Boolean) }));
-  busy("#imp-go", true, "导入中…");
-  try {
-    const r = await api("/api/import", { method: "POST", body: fd });
-    $("#imp-result").innerHTML = `
-      <div class="card">
-        <h3>导入完成</h3>
-        <div class="row">
-          <span class="pill ok">新增 ${r.inserted} 条</span>
-          <span class="pill">跳过重复 ${r.skipped} 条</span>
-          <span class="pill info">适配器 ${esc(r.adapter)}</span>
-          <span class="pill">会话 ${esc(r.chat_id)}</span>
-        </div>
-        ${r.warnings?.length ? `<div class="note">${r.warnings.map(esc).join("<br>")}</div>` : ""}
-      </div>`;
-    toast("#imp-msg", "导入成功", "ok");
-    state.chatId = r.chat_id;
-    await loadChats();
-    loadHealth();
-    goView("memory");
-  } catch (e) { toast("#imp-msg", e.message, "err"); }
-  finally { busy("#imp-go", false); }
+  if (!impFiles.length) { toast("#imp-msg", "先选一个文件（也可以直接拖进来）", "err"); return; }
+  busy("#imp-go", true, impFiles.length > 1 ? `导入 1/${impFiles.length}…` : "导入中…");
+
+  const done = [];
+  const failed = [];
+  let firstChatId = "";
+  for (const [i, f] of impFiles.entries()) {
+    if (impFiles.length > 1) busy($("#imp-go"), true, `导入 ${i + 1}/${impFiles.length}…`);
+    try {
+      const r = await api("/api/import", { method: "POST", body: _impForm(f, { withName: impFiles.length === 1 }) });
+      done.push({ name: f.name, ...r });
+      if (!firstChatId) firstChatId = r.chat_id;
+    } catch (e) {
+      // 一个失败不拖垮后面的 —— 批量导入最怕「第 3 个炸了，剩下 7 个没跑」
+      failed.push({ name: f.name, error: e.message });
+    }
+  }
+
+  const ins = done.reduce((s, d) => s + d.inserted, 0);
+  const skp = done.reduce((s, d) => s + d.skipped, 0);
+  const warns = done.flatMap(d => (d.warnings || []).map(w => `${d.name}：${w}`));
+
+  $("#imp-result").innerHTML = `
+    <div class="card">
+      <h3>导入完成</h3>
+      <div class="row">
+        <span class="pill ok">新增 ${ins} 条</span>
+        <span class="pill">跳过重复 ${skp} 条</span>
+        <span class="pill info">${done.length} 个文件成功</span>
+        ${failed.length ? `<span class="pill warn">${failed.length} 个失败</span>` : ""}
+      </div>
+      ${done.length ? `<table class="t" style="margin-top:10px">
+        <thead><tr><th>文件</th><th>适配器</th><th>新增</th><th>归属</th></tr></thead>
+        <tbody>${done.map(d => `<tr>
+          <td>${esc(d.name)}</td><td class="dim">${esc(d.adapter)}</td><td>${d.inserted}</td>
+          <td class="dim mono">${esc(d.chat_id)}</td></tr>`).join("")}</tbody></table>` : ""}
+      ${failed.length ? `<div class="note">${failed.map(f => `${esc(f.name)}：${esc(f.error)}`).join("<br>")}</div>` : ""}
+      ${warns.length ? `<div class="note">${warns.map(esc).join("<br>")}</div>` : ""}
+    </div>`;
+
+  if (!done.length) {
+    toast("#imp-msg", "一个都没导进去，看下面的原因", "err");
+    busy($("#imp-go"), false);
+    return;
+  }
+
+  toast("#imp-msg", `导入成功，共新增 ${ins} 条`, "ok");
+  impFiles = [];
+  $("#imp-file").value = "";
+  renderImpFiles();
+  await loadObjects();
+  loadHealth();
+  busy($("#imp-go"), false);
+
+  // 导入 → 对象：直接把用户送到刚导进来的那条记录上。
+  // 停在原地不动的话，用户还得自己去左栏里找它落在谁名下。
+  const chat = state.chats.find(c => c.id === firstChatId);
+  if (chat) {
+    if (chat.person_id) state.personId = chat.person_id;
+    selectChat(chat.id);
+    state.objTab = "chat";
+    state.chatFilter = chat.id;
+    goView("objects");
+  }
 }
 
 $("#imp-preview").addEventListener("click", doPreview);
@@ -1814,7 +2886,7 @@ $("#paste-go").addEventListener("click", async () => {
     });
     toast("#paste-msg", `成功导入 ${r.inserted} 条`, "ok");
     state.chatId = r.chat_id;
-    await loadChats();
+    await loadObjects();
     loadHealth();
   } catch (e) { toast("#paste-msg", e.message, "err"); }
   finally { busy("#paste-go", false); }
@@ -1942,14 +3014,50 @@ $("#s-list-models").addEventListener("click", async () => {
 // ================================================================ 自检
 
 // 每一项可以一键跳到「能把它修好」的那个页面 —— 新手最缺的是「下一步点哪」。
+// 注意「导入」已经并进「采集」，这里指向 collect；留 import 会变成一个点不动的跳转。
 const CHECK_ACTION = {
   llm:      { label: "去填模型",   view: "settings" },
   embedder: { label: "去填模型",   view: "settings" },
-  database: { label: "去导入记录", view: "import" },
+  database: { label: "去导入记录", view: "collect" },
 };
 
 const STATUS_ICON = { ok: "✓", warn: "!", fail: "✕" };
 const STATUS_TEXT = { ok: "已完成", warn: "建议补上", fail: "必须处理" };
+
+/**
+ * 外设 1：把自检里**需要你动手**的那几条放到侧边栏。
+ *
+ * 和「设置 → 体检」的分工：那里是全量清单（包括那些本来就正常、只是让你放心的项），
+ * 这里是**待办**。全绿时整块消失，不占地方。
+ * 只挑 warn / fail 且带动作的项 —— 没问题的事不该在这里刷存在感。
+ */
+function renderSideWarn(r) {
+  const box = $("#side-warn");
+  if (!box) return;
+  const todos = (r.items || []).filter(it => it.status !== "ok");
+  if (!todos.length) {
+    box.classList.add("hidden");
+    box.innerHTML = "";
+    return;
+  }
+  const fail = todos.filter(it => it.status === "fail").length;
+  box.innerHTML = `
+    <div class="sw-hd">${fail ? `${fail} 项必须处理` : `${todos.length} 项建议补上`}</div>
+    ${todos.slice(0, 4).map(it => {
+      const act = CHECK_ACTION[it.key];
+      return `<button class="sw-it" ${act ? `data-sw="${esc(act.view)}"` : `data-sw="settings"`}
+        title="${esc(it.detail)}">${it.status === "fail" ? "✕" : "!"} ${esc(it.label)}</button>`;
+    }).join("")}
+    ${todos.length > 4 ? `<div class="small dim" style="margin-top:4px">还有 ${todos.length - 4} 项…</div>` : ""}`;
+  box.classList.remove("hidden");
+  box.querySelectorAll("[data-sw]").forEach(b => b.addEventListener("click", () => {
+    goView(b.dataset.sw);
+    // 跳到设置就顺手滚到「体检」，用户不用自己找
+    if (b.dataset.sw === "settings") {
+      setTimeout(() => $("#set-selfcheck")?.scrollIntoView({ behavior: "smooth" }), 60);
+    }
+  }));
+}
 
 async function loadSelfCheck() {
   const box = $("#ck-list");
@@ -2008,6 +3116,7 @@ async function loadSelfCheck() {
   $$("#ck-list [data-goto]").forEach(b =>
     b.addEventListener("click", () => goView(b.dataset.goto)));
 
+  renderSideWarn(r);
   updateWizard(r);
   updateSteps();
 }
@@ -2064,7 +3173,7 @@ function updateSteps() {
     step(2, hasChat, "导入一份聊天记录",
       hasChat ? `已经有 ${state.chats.length} 个会话了。`
               : "QQ / 微信导出的 txt 都支持，也可以直接把聊天内容粘进去。",
-      "去导入", "import") +
+      "去导入", "collect") +
     step(3, false, "开始分析",
       "把对方刚发的那句话贴进下面的输入框，点「分析并给建议」。",
       "开始", "");
@@ -2077,7 +3186,11 @@ function updateSteps() {
   box.classList.remove("hidden");
 }
 
-$("#wz-go").addEventListener("click", () => goView("check"));
+// 「开始配置」跳到设置 —— 体检已经并进设置页，不再有独立的 check 页。
+$("#wz-go").addEventListener("click", () => {
+  goView("settings");
+  setTimeout(() => $("#set-selfcheck")?.scrollIntoView({ behavior: "smooth" }), 60);
+});
 $("#wz-close").addEventListener("click", () => {
   localStorage.setItem("wingman.wizard.dismissed", "1");
   $("#wizard").classList.add("hidden");
@@ -2405,7 +3518,7 @@ async function collectRun() {
     });
     paintReport(rep);
     toast("#ac-msg", `写入 ${rep.inserted} 条`, rep.inserted ? "ok" : "err");
-    if (rep.inserted) { await loadChats(); loadCursors(); }
+    if (rep.inserted) { await loadObjects(); loadCursors(); }
   } catch (e) {
     toast("#ac-msg", e.message, "err");
   } finally {
@@ -2490,6 +3603,53 @@ async function semiStart() {
     busy(b, false);
   }
 }
+
+// 时间是从哪来的 —— 用户最常问的一句，集中在弹窗里答一次，
+// 省得在采集卡片里堆一大段没人看的说明。
+function openTimeHelp() {
+  const rows = [
+    ["剪贴板", "ok", "客户端原样给了年月日时分（如 `小鹿 2026-09-28 21:03:15`）。这是消息的确切时刻。"],
+    ["相对时间", "ok", "客户端只给了相对写法（`21:03` / `昨天 21:03` / `下午 3:30` / `周三 20:15`）。钟点是消息给的，日期由程序推出来，可能差一天。"],
+    ["推定", "warn", "复制里完全没带时间。按会话时间线排在上一句之后 —— 顺序对，具体时刻是推的。它永远不会晚于你复制的那一刻。"],
+    ["抓取时刻", "warn", "你明确选了「就用抓取时刻」才会用它。这是**采集**的时刻，不是消息的时刻，两者可能差很远。"],
+    ["手工填的", "info", "挂起后由你填的时间。"],
+  ];
+  const { foot } = openModal({
+    title: "消息的时间是从哪来的",
+    sub: "记录的是「她什么时候说的」，不是「你什么时候复制的」",
+    wide: true,
+    body: `<p class="small muted" style="margin-bottom:14px">
+        每条消息都会带上来源标记。带有「推定 / 抓取时刻」的，说明时刻是补出来的，
+        拿去做「他平时几点找我说话」这类统计时要心里有数。
+      </p>
+      <div class="capture-list">${rows.map(([name, kind, desc]) => `
+        <div class="it"><div class="small"><span class="pill ${kind}">${esc(name)}</span></div>
+          <div class="tx">${esc(desc)}</div></div>`).join("")}</div>
+      <p class="small muted" style="margin-top:14px">
+        想让时间最准：在客户端里选中消息时，先让消息上方显示出时间再复制。
+        QQ 和微信的复制都会把「昵称 + 时间」一起带出来。
+      </p>`,
+  });
+  foot.append(modalButton("知道了", "primary", closeModal));
+}
+
+/** 时间来源的徽标。空来源不显示 —— 老数据没有这一列，标成「未知」只是噪音。 */
+const TS_SRC = {
+  clipboard: ["时间来自剪贴板", "ok"],
+  relative: ["相对时间", "ok"],
+  inferred: ["时间推定", "warn"],
+  assumed: ["用抓取时刻", "warn"],
+  manual: ["手工填的", "info"],
+  exact: ["", ""],
+  "": ["", ""],
+};
+
+function tsBadge(src) {
+  const [label, kind] = TS_SRC[src] || ["", ""];
+  return label ? `<span class="pill ${kind}" title="点「时间是从哪来的？」看说明">${esc(label)}</span>` : "";
+}
+
+$("#sc-time-help").addEventListener("click", openTimeHelp);
 
 async function semiStop() {
   try {
@@ -2580,14 +3740,11 @@ function capHtml(c) {
       ? `<div class="row" style="gap:6px;margin-bottom:6px">
            <input type="text" data-time="${esc(c.id)}|${esc(it.id)}" style="max-width:190px"
              placeholder="2026-09-28 21:03:15" value="${esc(ts.replace("T", " ").slice(0, 19))}" />
-           ${it.ts_source === "assumed" ? '<span class="pill warn">时间推定</span>' : ""}
-           ${it.ts_source === "clipboard" ? '<span class="pill ok">时间来自剪贴板</span>' : ""}
+           ${tsBadge(it.ts_source)}
            ${it.needs_time ? `<button class="btn sm ghost" data-usecap="${esc(c.id)}|${esc(it.id)}">用抓取时刻</button>` : ""}
            ${it.needs_time ? `<span class="small" style="color:var(--warn)">这条没带时间，要你定</span>` : ""}
          </div>`
-      : `<div class="small dim">${esc(ts.replace("T", " ").slice(0, 19) || "（无时间）")}${
-          it.ts_source === "assumed" ? ' <span class="pill warn">时间推定</span>' : ""}${
-          it.ts_source === "manual" ? ' <span class="pill info">手工填的</span>' : ""}</div>`;
+      : `<div class="small dim">${esc(ts.replace("T", " ").slice(0, 19) || "（无时间）")} ${tsBadge(it.ts_source)}</div>`;
     return `<div class="it">${seg}
       <div>${time}<div class="tx">${esc(it.text)}</div>
       ${!pending && who ? `<div class="small dim">${esc(who)}</div>` : ""}</div></div>`;
@@ -2636,7 +3793,7 @@ async function semiCommit(capId) {
       delete cs.decisions[capId]; delete cs.rest[capId];
       cs.semiSig = "";
       await semiTick();
-      await loadChats();
+      await loadObjects();
     } else {
       // 没写进去：把原因原样告诉用户，别让他猜为什么点了没反应
       toast("#sc-msg", (cap.problems || []).join("；") || "还有条目没说清，没有写入。", "err");
@@ -2769,18 +3926,116 @@ function collectOnEnter() {
 
 bindCollectEvents();
 
+// ================================================================ 检查更新（需求 5）
+//
+// 只有点了按钮才联网 —— 一个聊天记录工具没有理由开机就往外发请求。
+// 查不到就如实说「不知道」，不把「查不到」讲成「已是最新」。
+
+$("#about-check")?.addEventListener("click", async () => {
+  const box = $("#about-update");
+  const b = $("#about-check");
+  busy(b, true, "查询中…");
+  box.innerHTML = `<span class="dim">正在问 GitHub…</span>`;
+  try {
+    const r = await api("/api/update/check");
+    if (!r.ok) {
+      box.innerHTML = `<span class="delta-up">没查到：${esc(r.error || "未知原因")}</span><br>
+        <span class="dim">${esc(r.hint || "")}</span>`;
+    } else if (r.has_update) {
+      box.innerHTML = `<b>有新版本 v${esc(r.latest)}</b>（当前 v${esc(r.current)}）
+        —— <a href="${esc(r.page)}" target="_blank" rel="noopener">去看这版的说明</a>`;
+    } else {
+      box.innerHTML = `已是最新（v${esc(r.current)}）。`;
+    }
+  } catch (e) {
+    box.innerHTML = `<span class="delta-up">${esc(e.message)}</span>`;
+  } finally { busy(b, false); }
+});
+
+// ================================================================ 关闭（需求 9）
+// 点 × 不直接退，先问一句。两条路径共用这一个对话框：
+//   · 打包版：系统窗口的 × 被后端拦下 → 后端反过来叫页面弹这个窗；
+//   · 浏览器模式：没有系统窗口可点，所以侧栏右上角那个 × 就是入口。
+//
+// 为什么值得问：关掉窗口 = 关掉服务，正在跑的采集/画像会**静默中断**，
+// 用户下次打开才发现少了一段。而「只是想把它挪到一边」的人也不少。
+
+async function openCloseDialog() {
+  if (document.getElementById("close-mask")) return;      // 已经在问，不叠第二层
+  let native = false;
+  try { native = !!(await api("/api/desktop/state")).native_window; } catch { /* 问不到就当没有 */ }
+
+  const { root, foot } = openModal({
+    title: "要关掉 WingMan 吗",
+    sub: native ? "" : "浏览器模式：关掉标签页服务也会继续跑",
+    body: `
+      <div class="capture-list">
+        <div class="it"><div class="small"><span class="pill info">关闭弹窗（后台运行）</span></div>
+          <div class="tx">${native
+            ? "窗口收起来，服务继续在后台跑 —— 正在进行的采集不会断。想把它调回来，再双击一次 WingMan 就行。"
+            : "服务本来就是一个独立进程，关掉这个标签页它照样在跑。下次直接访问本机地址即可。"}</div></div>
+        <div class="it"><div class="small"><span class="pill warn">关闭程序</span></div>
+          <div class="tx">整个程序退出，服务一起停。正在进行的采集会中断。</div></div>
+      </div>`,
+  });
+  root.id = "close-mask";
+
+  const pick = async (action, btn) => {
+    busy(btn, true, "处理中…");
+    try {
+      const r = await api("/api/desktop/close", {
+        method: "POST", body: JSON.stringify({ action }),
+      });
+      if (action === "cancel") { closeModal(); return; }
+      closeModal();
+      if (r.action === "quit") {
+        document.body.innerHTML =
+          `<div style="display:grid;place-items:center;height:100vh;font:14px/1.8 system-ui;color:#596374">
+             <div style="text-align:center">WingMan 已关闭。<br>
+               <span style="font-size:12.5px">这个页面可以关掉了。</span></div></div>`;
+        return;
+      }
+      // 后台运行：别装作窗口还在 —— 把状态说清楚
+      if (!native) {
+        alert(r.hint || "服务继续在后台运行，关掉这个标签页即可。");
+      }
+    } catch (e) {
+      toast("#s-msg", e.message, "err");
+      busy(btn, false);
+    }
+  };
+
+  const cancelBtn = modalButton("取消", "ghost", () => pick("cancel", cancelBtn));
+  const bgBtn = modalButton("关闭弹窗（后台运行）", "", () => pick("background", bgBtn));
+  const quitBtn = modalButton("关闭程序", "primary", () => pick("quit", quitBtn));
+  foot.append(cancelBtn, bgBtn, quitBtn);
+}
+
+// 后端拦下系统 × 之后会调这个。挂到 window 上，供 evaluate_js 直接调用。
+window.__wingmanAskClose = () => { openCloseDialog(); return true; };
+$("#win-close")?.addEventListener("click", openCloseDialog);
+
 // ================================================================ 启动
 
 (async function init() {
   await loadHealth();
-  await loadChats();
+  await loadObjects();
   await loadSettings();
   loadSelfCheck();
   setInterval(loadHealth, 30000);
 
-  // ?view=settings 这样的深链接，可以直接跳到某一页（也方便自动化截图）
+  // ?view=settings 这样的深链接，可以直接跳到某一页（也方便自动化截图）。
+  // 旧的四个页签已经并进别处，这里做重定向 —— 老书签不能变成死链。
+  const LEGACY_VIEW = {
+    import: "collect", check: "settings", voice: "settings", memory: "objects",
+  };
   const want = new URLSearchParams(location.search).get("view");
-  if (want && document.getElementById("view-" + want)) goView(want);
+  const target = LEGACY_VIEW[want] || want;
+  if (target && document.getElementById("view-" + target)) {
+    goView(target);
+    if (want === "voice") $("#set-about")?.scrollIntoView();
+    if (want === "check") $("#set-selfcheck")?.scrollIntoView();
+  }
 })();
 </script>
 </body>
