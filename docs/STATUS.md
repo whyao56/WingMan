@@ -1,7 +1,7 @@
 # WingMan 项目现状（交接文档）
 
 > **用途**：给「全新上下文」的窗口看的一份现状底稿。目标是**读完不用再通读代码**就能动手改。
-> **快照**：2026-10-05 23:20（GMT+8），对应提交 `1e73d01`，版本 `0.3.1`，CI 全绿。
+> **快照**：2026-10-06 18:00（GMT+8），版本 `0.4.0`，全量 **208 passed + 1 skipped**。
 > **注意**：文件行号会随改动漂移。改动前先用函数名定位，再用行号确认。
 > 本文档答的是「现在是什么样」；「要改成什么样」见 [PLAN-对象中心迭代.md](PLAN-对象中心迭代.md)。
 
@@ -10,11 +10,14 @@
 ## 0. 一句话
 
 WingMan 是一个**跑在本机的聊天记录分析工具**：把微信/QQ 的聊天记录导进来或采进来，
-交给大模型做「记忆 + 人物画像 + 回复建议」，通话场景下实时给该怎么说。
+交给大模型做「记忆 + 人物画像 + 回复建议」。
+**0.4.0 起以「对象」为中心** —— 一个人可以在多处（微信 / QQ / 换过昵称的老号）有记录，
+它们算同一个对象的几个**渠道**，看的是合起来的视野。
 数据全部落在本机 SQLite，程序不主动外传任何东西（模型调用按用户自己配的 endpoint 走）。
 
-- 形态：Python FastAPI 后端 + **单文件 HTML 前端**（`frontend/index.html`，2787 行，内联 JS，无构建步骤）
-- 分发：PyInstaller 打包成免安装 zip（`WingMan.exe` + `_internal/`），当前 **v0.3.1**，33.7 MiB
+- 形态：Python FastAPI 后端 + **单文件 HTML 前端**（`frontend/index.html`，4042 行，内联 JS，无构建步骤）
+- 分发：PyInstaller 打包成免安装 zip（`WingMan.exe` + `_internal/`），当前 **v0.4.0**，约 34 MiB
+- 界面：**4 个一级页签** —— 指挥台 / 对象 / 采集 / 设置（0.4.0 从 7 项收敛而来，见 §4）
 - 合规：`docs/COMPLIANCE.md`；采集能力只读用户自己机器上的库，且**不绕过任何权限**（见 §9）
 
 ---
@@ -53,10 +56,10 @@ wingman/
 │  │  ├─ adapters/          导入适配器（qq.py / wechat.py / generic.py / registry.py）
 │  │  ├─ memory/            embedder(HashEmbedder 兜底/Cloud) + retriever(混合检索) + profiler
 │  │  └─ engine/            analyzer / planner / suggestor / simulator / context / prompts
-│  ├─ tests/                18 个测试文件，全量 178 passed + 1 skipped（S0 后；基线为 159+1）
+│  ├─ tests/                19 个测试文件，全量 208 passed + 1 skipped（0.4.0）
 │  ├─ data/                 运行时 SQLite（.gitignore；含 collect_cache/）
 │  └─ logs/wingman.log
-├─ frontend/index.html      2787 単文件前端
+├─ frontend/index.html      4042 单文件前端
 ├─ scripts/                 build_exe.py / make_release.py / preflight.py / e2e_check.py …
 ├─ docs/                    本目录（ARCHITECTURE / MODELS / ENGINE_DESIGN / TROUBLESHOOTING / STATUS / PLAN…）
 ├─ build/wingman.spec       PyInstaller 配置（**要提交**）
@@ -153,82 +156,106 @@ DDL：`FACTS_DDL` `48-60`、`SCHEMA` `62-180`；建表 `init()` `284-293`。
 `GET /persons/{id}/history?kind=`（历史输出 + 动作痕迹）
 
 ### 指挥台 `routes_engine.py`
-`POST /chats/{id}/suggest`（返回 `trace.run_id`）· `POST /chats/{id}/analyze` ·
+`POST /chats/{id}/suggest`（单渠道，返回 `trace.run_id`）· `POST /chats/{id}/analyze` ·
 `POST /chats/{id}/simulate`（可带 `run_id` 把推演挂到某次运行上）·
-**S0 新增** `GET /history/runs/{run_id}` · `DELETE /history/runs/{run_id}`
+**0.4.0 新增** `POST /persons/{id}/suggest`（**多渠道**：body 可带 `chat_ids`（有序，第 1 个是
+主渠道）；不传就用该对象全部渠道。空渠道 400、未知对象/渠道 404、无消息 400）·
+`GET /history/runs/{run_id}` · `DELETE /history/runs/{run_id}`
 
 ### 设置/自检 `routes_admin.py` + `routes_health.py`
 `GET /health`23 · `GET /selfcheck`38 · `POST /runtime/open`48 · `GET /settings`73 · `PUT /settings`93 ·
 `POST /settings/reset`106 · `POST /settings/test`113 · `GET /settings/models`129 ·
-`GET /health/details`201（前端未调用）
+**0.4.0 新增**：`GET /desktop/state`145（有没有原生窗口）·
+`POST /desktop/close`157（action ∈ quit/background/cancel，其余 422）·
+`POST /desktop/show`174（把「后台运行」藏的窗口调回来）·
+`GET /update/check`189（查 GitHub Releases；**查不到时 `ok:false` 且不给 `has_update`**）·
+`GET /health/details`（前端未调用）
 
 ---
 
-## 4. 前端结构（`frontend/index.html`）
+## 4. 前端结构（`frontend/index.html`，4042 行）
 
-### 导航（重要：**用 `data-v`，不是 `data-page`**）
-`#nav button[data-v]` `417-425`；切换 `goView(name)` `1345-1351`：高亮 toggle class `on`，
-容器 id = `view-` + name；进采集页调 `collectOnEnter()`，离开调 `semiPollStop()`。
-深链接 `?view=settings` `2782-2783`。
+> **0.4.0 起是一套「对象中心」的界面。** 拿到 0.3.x 的行号来对会全错，
+> 请先用函数名定位，再用行号确认。
+
+### 导航（**4 项**；重要：**用 `data-v`，不是 `data-page`**）
+`#nav button[data-v]` `504-509`；切换 `goView(name)` `1570-1578`：高亮 toggle class `on`，
+容器 id = `view-` + name，并有两个「进入钩子」—— 进采集页调 `collectOnEnter()`（`3920`）、
+进对象页调 `objectsOnEnter()`（`2078`）；离开采集页调 `semiPollStop()` 停轮询。
+深链接在 `init()` 尾部 `4027-4038`，`LEGACY_VIEW` `4029-4031` 做旧链接重定向。
 
 | 导航项 | data-v | 容器 | 主渲染函数 |
 |---|---|---|---|
-| 指挥台 | `copilot` | `#view-copilot` 449 | `renderBundle`1515 `analysisHTML`1432 `optionHTML`1488 `simHTML`1560 |
-| 记忆 | `memory` | `#view-memory` 481 | `loadPersona`1618 `loadFacts`1629 `loadMessages`1654 |
-| 导入 | `import` | `#view-import` 543 | `doPreview`1754 `doImport`1771 `previewHTML`1735 |
-| 采集 | `collect` | `#view-collect` 600 | `loadClients`2243 `paintClients`2260 `paintMatrix`2296 `paintReport`2321 `paintSemi`2533 `loadCursors`2739 |
-| 通话 | `voice` | `#view-voice` 700 | **无（纯静态占位，无按钮）** |
-| 自检 | `check` | `#view-check` 822 | `loadSelfCheck`1954 `updateWizard`2016 `updateSteps`2039 |
-| 设置 | `settings` | `#view-settings` 845 | `loadSettings`1831 |
+| 指挥台 | `copilot` | `#view-copilot` 537 | `renderBundle`1927 `analysisHTML`1844 `optionHTML`1900 `simHTML`1996 |
+| 对象 | `objects` | `#view-objects` 587 | `renderObjects`1638 `openObjTab`2098 `loadOverview`2117 `loadObjMemory`2169 `loadObjChat`2286 `loadObjCollect`2574 `loadObjHistory`2636 |
+| 采集 | `collect` | `#view-collect` 719 | `loadClients`3356 `paintClients`3373 `paintMatrix`3409 `paintReport`3434 `paintSemi`3693 `loadCursors`3896 |
+| 设置 | `settings` | `#view-settings` 882 | `loadSettings`2903 `loadSelfCheck`3062 `renderSideWarn`3034 |
 
-常驻：品牌 `412-416`、会话列表 `#chatlist` `426-429`（标题「会话 · 右键可设置」427）、
-`#health` `430-432`、新手横幅 `#wizard` `437-446`、指挥台「上手三步」`#cp-steps` 454。
+`#view-settings` **一页装了三件事**：模型配置 → `#set-selfcheck`「体检」962（原「自检」页）→
+`#set-about`「关于」984（含 `#about-check` 检查更新、`#about-voice` 通话折叠区 1002）。
 
-### 指挥台（**单会话、无多选**）
-`state` 只有 `{chats, chatId, bundle, check}`（`937`）。选会话 `selectChat`1422 →
-`reflectChat`1410 切显隐 → 贴对方消息 `#cp-msg`465 → `#cp-go`467 →
-`POST /api/chats/{id}/suggest`（`1590-1605`）→ `renderBundle` 渲染进 `#cp-result`476。
-每张建议卡可「复制」1534 /「推演走向」`act-sim`1541（`POST simulate`）。
-**全文件唯一的 checkbox 是 `#cp-persist`470（是否存入记忆）**，与选择无关。
+常驻：品牌 `#brand` 498（内含 `#win-close` × 关闭按钮 **499**）、对象两级列表 `#objlist` `512`、
+**`#side-warn` 侧栏自检提醒 `518`**、`#health` `519`、新手横幅 `#wizard` `525`、
+指挥台「上手三步」`#cp-steps` `542`。
 
-### 记忆页
-会话信息 `#mem-id`492 / `#mem-stats`493；人物设定卡 `504-522`（`#p-goal`/`#p-stage`/`#p-taboos`/`#p-mystyle`/`#p-profile`/`#p-save`）；
-事实卡 `524-532`（`#f-count`/`#facts`/`#f-key`/`#f-val`/`#f-add`，逐条删除 `.f-del` `1644-1650`）；
-聊天记录 `#mem-msgs`537（**只读**，`GET messages?limit=100`）。
-另有 `#mem-index`1675 / `#mem-profile`1685 / `#mem-export`1696 / `#mem-del`1699。
+### 指挥台（**先选对象 → 再勾渠道，可多选**）
+`state.cpChatIds`（有序数组，**第 1 个是主渠道**）`1138-1165`。
+选对象 `pickCopilotPerson`1768 → 绘胶囊 `renderCopilotPicker`1717 → 勾渠道 `toggleCopilotChat`1786
+→ 贴对方消息 `#cp-msg`571 → `#cp-go`573：
 
-### 导入页
-`#imp-file`549 accept=`.txt,.log,.bak,.csv,.tsv,.json,.jsonl,.html,.htm`；
-字段 `#imp-adapter`553（auto/qq/wechat/generic）、`#imp-name`562、`#imp-mename`566；
-按钮 `#imp-preview`570 → `#imp-go`571；粘贴区 `#paste-text`581 + `#paste-name`583 → `#paste-go`584。
-**已有预览/确认两步**，导入成功跳记忆页（`1798`）。
+- **勾了 1 个** → `POST /api/chats/{id}/suggest`（老路径，不变）
+- **勾了 ≥2 个** → `POST /api/persons/{id}/suggest`，body 带 `chat_ids`（**只有对象接口
+  才知道怎么把几个渠道合并**，见 §6）
 
-### 采集页（四张卡）
-1. 「先看你的客户端」`608-616`：`#cl-check`611 / `#cl-matrix`612 / `#cl-list`615 / `#cl-tag`609
-2. 「自动采集」`618-646`：`#ac-client`627 `#ac-key`635 `#ac-check`639 `#ac-scan`640 `#ac-preview`641 `#ac-run`642 `#ac-msg`643 `#ac-report`645。
-   **给用户的操作指引只有 `620-623` 两行**（「密钥只存在于运行中的客户端进程内存里…先『预览』一次最稳」）—— 用户反馈「说不清楚怎么找到密钥」指的就是这里。
-3. 「半自动采集」`648-684`：`#sc-client`658 `#sc-person`665(+`#sc-persons` datalist) `#sc-time`670（`assumed`/`ask`）`#sc-start`677 `#sc-stop`678 `#sc-clear`679 `#sc-hint`682 `#sc-list`683。
-   `semiStart()` `2462-2492` → `POST /api/collect/semi/start`，payload `{client, peer_name, person_id, missing_time}`。
-4. 「采集进度」`686-696`：`#cur-load`692 `#cur-list`695，重置按钮动态生成 `data-cur` `2755`。
+结果进 `#cp-result` `582`。每张建议卡可「复制」/「推演走向」（`act-sim`，带
+`run_id` 挂到这次分析上）。左侧没对象时显示 `#cp-nochat` `544`。
 
-「抓取时刻」出现在 `671`（下拉选项）、`2585`/`2586`（待确认条目按钮与提示）、`2695`/`2696`（点击后文案与 toast）。
+### 对象页（5 Tab，原「记忆」页并入这里）
+`#obj-tabs` `597`，Tab 名单 `OB_TABS` `2071` = `overview/memory/chat/collect/history`。
+切换用 `openObjTab`2098；`#obj-empty`（无对象）/ `#obj-main`（有对象）二选一显示。
 
-### 右键菜单 / 弹窗 / 窗口
-- `contextmenu` **唯一绑定** `1387`（挂在每个 `.chatitem`）；键盘等价 `1393-1400`。
-- 菜单项 `openChatMenu` `1329-1339`：打开1331 / 重命名1333 / **「会话设置…」1334** / 导出1335 / 删除1337。打开函数 `openChatSettingsDialog` `1185-1237`。
-- 弹窗 `openModal` `1035-1057`：`.mhead` 只有标题+副标题，**没有右上角关闭按钮**；关闭靠遮罩1050 / Esc1067 / 取消按钮。
-- **没有**「关闭程序 / 后台运行 / 托盘」任何痕迹；前端**没有** `window.close`。
-- 窗口是 `desktop.py:110-119` 的 pywebview `create_window` + `start()`；**关窗即退出**（`desktop.py:249`）。
+| Tab | 容器 | 内容 |
+|---|---|---|
+| 概览 | `#ob-overview` 605 | 渠道数、消息数（对方/我）、关系与阶段；近期活动流水 |
+| 记忆 | `#ob-memory` 607 | 左：**对象级**人物设定（`#op-goal`/`#op-stage`/`#op-taboos`/`#op-mystyle`/`#op-profile`/`#op-save`）；右：**已记住的事实** `#ofacts`，按对象级/渠道级两组、**分别计数不去重** |
+| 聊天记录 | `#ob-chat` 651 | **可二次编辑**：`#ob-selall`/`#ob-selnone` 全选清空、`#ob-del` 批量删除、`#ob-role`/`#ob-ts`/`#ob-sender` 批量改、`#ob-add` 手动加一条 |
+| 采集 | `#ob-collect` 684 | 该对象的采集游标与半自动进度 |
+| 历史 | `#ob-history` 699 | `engine_runs` / `sim_runs` / `activity_log`；可展开、可删除（`data-delrun`） |
+
+### 采集页（**四块，原「导入」页并入这里**）
+1. 「自动采集」`746` 起：`#ac-client` `#ac-key` `#ac-check` `#ac-scan` `#ac-preview` `#ac-run` `#ac-report`。
+2. 「半自动采集」`796` 起：`#sc-client` `#sc-person`(+`#sc-persons`) `#sc-time` `#sc-start` `#sc-stop` `#sc-clear` `#sc-hint` `#sc-list`。
+   **`#sc-time` 的选项是 `inferred`（默认）/`ask`** —— 0.4.0 起不再有「用抓取时刻」这个选择，
+   旁边有 `#sc-time-help` 打开 `openTimeHelp()`3609 解释时间的 5 种来源。
+3. **「导入」`#imp-drop` 832**：拖放区 + `#imp-file`（**multiple**）、`#imp-files` `#imp-adapter`
+   `#imp-name` `#imp-mename` `#imp-preview` `#imp-go`；粘贴区 `#paste-text` + `#paste-name` → `#paste-go`。
+   拖放绑定 `bindDrop`2746（区域内）与 `bindWindowDrop`2767（窗口任意位置）。
+4. 「采集进度」`#cur-load`/`#cur-list`。
+
+### 右键菜单 / 弹窗 / 关闭窗口
+- `contextmenu` 绑在 `.chitem` 上；菜单项 `openChatMenu`1554：打开 / 重命名… /
+  **「设置…」1559**（0.4.0 从「会话设置」改名，`openChatSettingsDialog`1397，可改平台
+  微信/QQ 与「对方 / 我」的称呼）/ 导出 JSON / 删除渠道…。
+- 弹窗 `openModal`1245、`modalButton`1269、`confirmWithCountdown`1289。
+- **关闭窗口（需求 9）**：后端拦下系统 × 后调 `window.__wingmanAskClose`（`4015`）→
+  `openCloseDialog`3963 渲染「关闭程序 / 关闭弹窗（后台运行）/ 取消」；`#win-close`（`499`）
+  走同一个函数。三个动作打到 `POST /api/desktop/close`。
+  **配套的回头路**：`POST /api/desktop/show` → `desktop.show_window()`。
+  「后台运行」把窗口藏了之后，再双击 `WingMan.exe` 由 `desktop.main()` 的单实例分支
+  调这个接口把**老进程的**窗口显示出来。不这么做的话第二次双击会开出一个
+  **没有服务的空壳窗口**，关它不会停掉真正在跑的进程。
 
 ### 通用设施
-`$`932 `$$`933 `esc`934 `state`937 `NET_ERR_TEXT`953 ·
-**`api`957-970**（网络层 `TypeError` 时重试 2 次；4xx/5xx 不重试）· **`rawApi`972-983** ·
-`toast`985 · `busy`992 · **`busyClock`1007**（按钮上显示已等待秒数）·
-`openModal`1035 `modalButton`1059 `confirmWithCountdown`1079（删除用，倒计时不可确认）·
-`closeCtxMenu`1131 `openCtxMenu`1135 · `exportChat`1283 `openRenameDialog`1297 ·
-`loadHealth`1355 `loadChats`1372 `init`2774（loadHealth→loadChats→loadSettings→loadSelfCheck，30s 轮询 health）。
+`$` / `$$` / `esc` / `state`1138 ·
+**`api`1167**（网络层失败重发 1 次；4xx/5xx 不重试）· `rawApi`1182 ·
+`toast`1195 · `busy`1202 · `busyClock`1217（按钮上显示已等待秒数）·
+`loadHealth`1582 · **`loadObjects`1617**（拉对象+渠道、清洗失效选择、重绘左栏；
+**导入/采集/改名/删除等会改变归属的动作都调它**）·
+`init`4020（loadHealth→**loadObjects**→loadSettings→loadSelfCheck，30s 轮询 health）。
 
-**没有历史记录 UI**（全文件仅 `814`、`1457` 两处含「历史」字样，都不是功能）。
+> 0.4.0 之前这里有个 `loadChats`，重构时并进了 `loadObjects`。漏改调用点会
+> **静默地**把 init 后半段和指挥台的结果一起搞坏，所以钉了守卫
+> `tests/test_frontend_assets.py::test_no_calls_to_undefined_functions`。
 
 ---
 
@@ -258,28 +285,45 @@ POST /api/collect/run → _request_from(238-261) → pipe.run(store, req)
 监听**剪贴板**（不是窗口）。原因写在 `clipboard.py:3-13`：微信 4.1 聊天区是自绘窗口、QQ 9.9 是 Chromium 无子节点，UIA 都读不到文本，**只有「选中 + Ctrl+C」这条路**能拿到内容。
 
 ```
-ClipboardWatcher(clipboard.py:409)  0.4s 轮询 semi.POLL_INTERVAL(52)
-   sequence_number() 变了才 read_text()          clipboard.py:103/117
-SemiCollector._loop(191) → _tick(201) → watcher.poll(me_names, peer_names)
-   parse_copied(319-392)：块状（称呼[+时间]+正文）/ 单条（需指认）
-   _match_known(266) 精确匹配已知称呼，匹配不上就问用户，**绝不猜**
-_ingest(220) → PendingItem；归属与时间都有依据则直接 _commit_capture(244)
-_commit_capture(253-304)：
-   防重 _seen_recently(532) 只在 ts_source=='assumed' 时启用（DEDUPE_WINDOW=50，264）
-   upsert_chat(291-295) → insert_messages(296)
-挂起的等 POST /semi/commit(306-358)，支持 apply_to_rest 批量归角色
-状态存 DATA_DIR/collect_cache/semi_state.json（51，_save/_load 479/494）
+ClipboardWatcher(clipboard.py:499)  0.4s 轮询 semi.POLL_INTERVAL(60)
+   sequence_number() 变了才 read_text()          clipboard.py:104/118
+SemiCollector._loop(206) → _tick(216) → watcher.poll(me_names, peer_names)
+   parse_copied(408)：块状（称呼[+时间]+正文）/ 单条（需指认）
+   _head_of(376)：切出「称呼 + 时间」两段，时间交给 _parse_ts(304)
+   _match_known(352) 精确匹配已知称呼，匹配不上就问用户，**绝不猜**
+_ingest(235) → PendingItem；归属与时间都有依据则直接 _commit_capture(293)
+_commit_capture(293-358)：
+   防重 _seen_recently(585) 只在 ts_source 是**推定**来的（inferred/assumed）时启用（DEDUPE_WINDOW=61）
+   upsert_chat → insert_messages
+挂起的等 POST /semi/commit(359)，支持 apply_to_rest 批量归角色
+状态存 DATA_DIR/collect_cache/semi_state.json（_save/_load 532/547）
 ```
 > **「数据集」在代码里不存在** —— 它就是**一个 chat**。界面上的「渠道」= `PersonChannel` = 一个 chat。
-> `_resolve_chat_id(461-475)`：优先复用该人同渠道已有 chat_id，否则 `{client}:{person_id}`，再否则 `{client}:semi:{peer_name}`。
+> `_resolve_chat_id(514)`：优先复用该人同渠道已有 chat_id，否则 `{client}:{person_id}`，再否则 `{client}:semi:{peer_name}`。
 
-### 5.3 「时间」现在是怎么填的（需求 3 要改的就是这里）
-- `messages` 只有两列与时间有关：`ts`（`store.py:81`）+ `ts_source`（`89`）。
-- **真正的「抓取时刻」载体是 `Capture.at`**（`clipboard.py:402`，赋值 `434`），它**只写进 `semi_state.json`，不进消息表**。
-- `_ingest`（`semi.py:220-242`）的兜底逻辑：
-  - 剪贴板**带了**时间 → `ts = c.ts`，`ts_source = 'clipboard'`（这已经是消息的真实时刻）
-  - 剪贴板**没带**时间 → `missing_time=='ask'` 就挂起等用户填；否则 **`ts = now`（抓取时刻顶替）+ `ts_source = 'assumed'`** ← 需求 3 明确要去掉的行为
-- 用户在确认框填的 → `manual`（`332-336`）；点「用抓取时刻」→ `assumed`（`337-341`）。
+### 5.3 「时间」是怎么填的（0.4.0 已按需求 3 改完）
+
+`messages` 只有两列与时间有关：`ts`（`store.py:81`）+ `ts_source`（`89`）。
+**`ts_source` 一共 5 种**，界面上每条都会标注，点 `#sc-time-help` 能看解释：
+
+| `ts_source` | 含义 | 怎么算出来的 |
+|---|---|---|
+| `clipboard` | 复制出来的文本自己带了年月日 | 直接用，最可信 |
+| `relative` | 文本里是「昨天 21:03」这类相对时间 | `_parse_relative_ts(217)` 按复制那一刻往前推 |
+| `inferred` | 完全没带时间 | `_infer_iso(618)` 按会话时间线推定（**新的默认**） |
+| `assumed` | 旧的「抓取时刻」 | **仅用于兼容已存在的数据**，不再产生新条目 |
+| `manual` | 用户手填 | 确认框里输入的 |
+
+- **真正的「抓取时刻」载体是 `Capture.at`**（`clipboard.py:489` 起），它**只写进
+  `semi_state.json`，不进消息表** —— 这正是需求 3 要的：采集时刻与消息时刻分开。
+- `_ingest`（`semi.py:235`）的兜底：剪贴板带了时间就用它（`clipboard` / `relative`）；
+  没带就按时间线推定（`inferred`），**不再有「用抓取时刻顶替」这个行为**。
+  `missing_time=='ask'` 时仍然挂起等用户填。
+- `_timeline_anchor(274)` 取**该会话库里最后一条消息的时刻**当锚点，`_infer_iso` 在它之后
+  逐秒递增，且**绝不越过复制时刻**（消息不可能来自未来）。
+- 相对时间解析有两处刻意收紧，都是被真实文本打脸后加的：**裸钟点只在紧跟称呼之后才认**
+  （否则正文里的比分 `3:1` 会被当时间，见 `_parse_ts` 的 `allow_bare_clock`），
+  以及**算出的时刻晚于当下就回退一天**（「21:03」在上午复制指的是昨晚）。
 - 同一客户端每个库的密钥缓存键 = 客户端 + 库 salt（`_key_cache_key` `pipeline.py:639`，`salt_key_for` `keys.py:134`）。
 
 ### 5.4 版本支持矩阵（`matrix.py`）
@@ -304,13 +348,30 @@ _commit_capture(253-304)：
 
 ## 6. 记忆分层与指挥台
 
-分层（`engine/context.py:1-14`）：**L1 事实（全量注入）+ L2 摘要（最近几条）+ L3 检索（向量+关键词动态召回）+ 最近对话 + 人物卡**。
+分层（`engine/context.py`）：**L1 事实（全量注入）+ L2 摘要（最近几条）+ L3 检索（向量+关键词动态召回）+ 最近对话 + 人物卡**。
+
+**0.4.0 起 `build_context` 接受「一组渠道」**（`chat_ids: str | Sequence[str]`，也兼容传单个 str）：
+
+- 第 1 个是**主渠道** —— 人格、昵称（`self_chat_name()`）、检索锚点都取自它，新消息也写进它；
+- 事实：**该对象名下的全部渠道级事实 + 对象级事实**合并成一个视野，各带 `scope` 标注，
+  **只合并视野、不做去重**；
+- 摘要：跨渠道按 `period` 排序取前 N；近期消息：跨渠道合并后**按 `ts` 归并**取尾部 N 条；
+- 检索：**逐渠道**做（`per_chat_k = max(5, top_k // len(ids))`），结果统一按 `score` 排序再截断 ——
+  否则话多的那个渠道会把话少的整个盖掉；
+- 合并了超过 1 个渠道时会往 `warnings` 里放一条说明。
 
 - `memory/embedder.py`：`HashEmbedder`（字符 n-gram 哈希，永远可用，**不认近义词**）+ `CloudEmbedder`（OpenAI 兼容），工厂 `build_embedder` `212-239`。
 - `memory/retriever.py`：`HybridRetriever`，`score = 0.60·语义 + 0.25·关键词 + 0.15·新鲜度`（`30-32`）；`index_chat`90 `search`121 `search_multi`196。
 - `memory/profiler.py`：`build_index`47 `extract_facts`53（→`replace_facts`）`build_profile`111（→`personas`）`summarize_period`168（→`summaries`）。
-- `engine/`：`pipeline.run_analysis`（`pipeline.py:21-42`，调用 `45-89`）、`analyzer.analyze`、`planner.plan`、`suggestor.suggest`（本地打分 `207-262`）、`simulator.simulate`（`74-105`）。
-- **持久化现状：全部零留存。** 唯一被写库的是「对方那条新消息」（`store_peer_message` `56-58`）。`/suggest` 的 `persist` 参数只管这个消息，**与建议本身无关**。
+- `engine/`：`pipeline.run_analysis(ctx, chat_ids, ...)`（接受一组渠道，`ids[0]` 为主渠道，
+  `trace["chat_ids"]` 记下这次用了哪几个）、`analyzer.analyze`、`planner.plan`、
+  `suggestor.suggest`（本地打分）、`simulator.simulate`。
+- **入口**：`POST /api/chats/{id}/suggest`（单渠道，老路径）与
+  `POST /api/persons/{id}/suggest`（多渠道；`chat_ids` 省略=该对象全部渠道）。
+- **持久化：0.4.0 起有留存。** 每次分析落一条 `engine_runs`（含 `chat_ids`、判断、建议、推演），
+  推演落 `sim_runs`，导入/采集/批量编辑落 `activity_log`；对象页「历史」Tab 读它们。
+  `/suggest` 的 `persist` 参数仍然只管「要不要把对方那条新消息写进记忆」，**与建议留存无关** ——
+  建议一律留存，这是两条独立的线。
 
 ---
 
@@ -331,17 +392,31 @@ _commit_capture(253-304)：
 
 `/api/selfcheck`（`routes_admin.py:38-45`）额外附 `runtime`（`context.runtime_info()` `139-146`）与 `paths`（`runtime_paths()` `268-275`）。
 前端消费：`loadSelfCheck` `1954-2013`（分组渲染）、顶部横幅 `updateWizard` `2016-2034`（localStorage 记关闭）、`updateSteps` `2039-2078`、跳转映射 `CHECK_ACTION` `1945-1949`（只对 llm/embedder/database 给跳转按钮）。
-侧边栏已有一个红点 `<span id="nav-badge" class="navdot hidden">`（`423`）与采集页的 `#nav-collect`（`421`）——**外设需求 1 的落点在这里**。
+侧栏有两个红点：`#nav-badge`（设置）与 `#nav-collect`（采集），以及 **`#side-warn` 自检提醒区**（`512` 附近）。
+
+**外设需求 1（把自检提醒放到侧栏）已在 0.4.0 落地**：`renderSideWarn(r)` `3034`
+把 warn / fail 的项渲染成侧栏底部的可点按钮（`data-sw` 带跳转目标），点一下 `goView` 到
+设置页对应位置；**全绿时整条隐藏**。在此之前自检结果只有进设置页才看得到。
 另有非 HTTP 通道：`desktop.py --check` 把报告写到 `DATA_DIR/logs/selfcheck.txt`（`258-298`）。
 
 ---
 
 ## 8. 测试 / CI / 发版
 
-- 测试：`backend/tests/` 18 个文件，**从 `backend/` 目录跑**（`conftest.py` 在那里重定向 `DATA_DIR`；从仓库根跑单文件会因 rootdir 落到 `backend/tests` 而跳过 conftest）。
+- 测试：`backend/tests/` 19 个文件，**从 `backend/` 目录跑**（`conftest.py` 在那里重定向 `DATA_DIR`；从仓库根跑单文件会因 rootdir 落到 `backend/tests` 而跳过 conftest）。
   ```bash
-  cd backend && ./.venv/Scripts/python.exe -m pytest tests/ -q     # 178 passed, 1 skipped（S0 后）
+  cd backend && ./.venv/Scripts/python.exe -m pytest tests/ -q     # 208 passed, 1 skipped（0.4.0）
   ```
+- **0.4.0 新增/扩写的守卫**：
+  - `tests/test_objects_center.py`（新，20 项）：多渠道上下文合并 / 主渠道 / 单渠道兼容 /
+    空渠道报错、`/persons/{id}/suggest` 四类路径、桌面壳关窗状态机与 `/desktop/show`、检查更新。
+  - `tests/test_frontend_assets.py`（8→9 项）：新增 4 条**单文件前端的静态守卫** ——
+    死链 `goView` 目标、旧深链接重定向、`$("#id")` 的 id 有没有人创建、
+    **调用了但没定义的函数**。
+  - 相对时间解析 5 条新用例（`test_collect_clipboard.py`）；
+    半自动「缺时间」的断言从 `assumed` 改成 `inferred`（`test_collect_semi.py`）。
+- **写守卫的标准**：新测试要能在**旧代码上失败**。0.4.0 的 `loadChats` 那条、
+  和「缺时间=inferred」那条都实测过在修复前会挂 —— 不会失败的守卫等于没有。
 - CI（`.github/workflows/ci.yml`）：push/PR 到 main，矩阵 Python 3.11 + 3.13；步骤＝语法检查 → `pytest tests/ -q` → `tests/test_smoke.py` → 冒烟编码防护 → 前端 JS 语法检查。基线耗时 ~40 秒。
 - 发版：
   ```bash
@@ -359,7 +434,11 @@ _commit_capture(253-304)：
 见 `docs/COMPLIANCE.md`。要点：只读用户**自己机器上、自己已登录**的客户端数据；
 不绕过登录/加密的权限边界（密钥来自用户粘贴或进程内存，属于用户自己机器上的既有事实）；
 默认只读、不写回客户端；**语音转写已于 0.2.1 撤下**（`6fb9fdd`、`acff853`），
-通话页现在只剩占位文案，且明确声明「没有任何按钮、后端入口也一并移除」。
+后端入口一并移除，界面上的「通话」于 0.4.0 收进**「设置 · 关于」下的折叠区**
+（不再是独立页签），说明文案保留「没有任何按钮」。
+
+> 采集页「自动找密钥」只读**本机正在运行的客户端进程内存**，不写、不注入、不 hook。
+> 这是本机用户对自己机器上既有数据的读取，不是对第三方的越权访问。
 
 ---
 
@@ -411,62 +490,95 @@ if store is not None and person_id:            # ← 守卫：person_id 非空�
 （真 `start()`；前置=建 person → `upsert_chat(person_id=pid)` → `start(store, person_id=pid)`）。
 按项目标准**先在旧代码上跑过**，复现出原始 `AttributeError: 'PersonChannel' object has no attribute 'peer_name'`。
 
-### 10.2 其它缺口（本轮迭代要补的）
-- ~~消息**无增删改**~~ → **S0 已补**（store 方法与 `PATCH/DELETE /api/messages`、`/api/messages/bulk`）；
-  前端聊天记录页**仍只读**（S1）。
-- ~~指挥台输出**零留存**~~ → **S0 已补**（`engine_runs` / `sim_runs` / `activity_log`）；
-  前端「历史」Tab **尚未接**（S1/S2）。
-- 人物（`persons`）后端接口齐全（含合并/渠道/跨渠道时间线 + S0 的 overview/facts/persona/history），
-  但**前端没用** —— 大量能力闲置。
-- ~~事实与画像都挂 chat，**没有人物级的事实/画像**~~ → **S0 已补**数据层与接口
-  （`facts.person_id` + `person_personas`）；**合并展示规则**（对象级/渠道级如何分组、是否去重计数）待与用户确认后再在前端落地。
-- 前端**没有多选/批量基建**（唯一的 checkbox 与选择无关）。
-- 弹窗**没右上角关闭按钮**；窗口**没有关闭小窗 / 后台运行**。
-- 导航 7 项里有 3 项是要合并/移除的（导入→采集、自检→设置、通话→移除）。
-- 自动采集的界面指引只有两行，且**没说清「怎么拿到密钥」**；实测本机自动取密钥不可行这件事，界面也没说透。
+### 10.2 0.4.0 关闭掉的缺口
+
+| 缺口 | 状态 |
+|---|---|
+| 消息**无增删改** | ✅ 后端 S0 补；**前端 0.4.0 接上了**（`#ob-chat` 的批量选择 / 改角色 / 改时间 / 改发送者 / 手动加一条） |
+| 指挥台输出**零留存** | ✅ 后端 S0 补；**前端 0.4.0 接上了**（对象页「历史」Tab） |
+| 人物后端接口齐全但**前端没用** | ✅ 0.4.0 起对象页 5 Tab 全面消费；`routes_persons.py` 的跨渠道时间线仍未接（见下） |
+| 没有**人物级**事实/画像 | ✅ 数据层 + 接口 S0 补；**前端 0.4.0 落地**（对象级/渠道级分组、**分别计数不去重**） |
+| 前端**没有多选/批量基建** | ✅ 0.4.0 补：聊天记录批量操作 + 指挥台渠道多选 |
+| 窗口**没有关闭小窗 / 后台运行** | ✅ 0.4.0 补（`POST /api/desktop/close`） |
+| 导航 7 项要合并/移除 | ✅ 0.4.0 收敛为 4 项 |
+| 自动采集**没说清「怎么拿到密钥」** | ✅ 0.4.0 重写了采集页指引（含「密钥在哪」的分步说明与「自动找密钥」的预期管理） |
+
+### 10.3 仍然存在的缺口
+
+- `export_chat_json` **尚未**带上 `engine_runs` / `activity_log` —— PLAN 需求 11 的隐私要求是
+  「导出/删除要覆盖历史输出」。**当前导出只覆盖消息、事实、画像，不含分析留存**
+  （→ 历史 Tab 里删单条 `run` 是可以的，但「导出这个对象的全部数据」还不完整）。
+- 自动采集（`collect/pipeline._collect_one_chat`）的 `activity_log` 写入点没有独立单测
+  （需要解密后的库，成本高），靠人工核对 + 半自动那条同构守卫。
+- `delete_person` 删除对象级人物设定、但**不删**对象级事实（假设：事实属不可再生记忆资产，
+  与「删人不删消息」一致）；如需一起删请明确。
+- `routes_persons.py` 的**跨渠道时间线**接口前端仍未使用（对象页概览用的是对象 overview）。
+- **Prompt 调优**仍是最大的质量缺口：默认 Mock 引擎让链路能跑，但建议内容是空的。
 
 ---
 
 ## 11. 当前版本与发布
 
-- 版本号：`backend/app/__init__.py` 的 `__version__ = "0.3.1"`（改版本只改这一处）
-- 仓库：<https://github.com/whyao56/WingMan>（public），tag `v0.2.0` / `v0.2.1` / `v0.3.0` / `v0.3.1`
-- v0.3.1 Release：<https://github.com/whyao56/WingMan/releases/tag/v0.3.1>
-  附件 `WingMan-0.3.1-win64.zip` 35302614 B，SHA256 `f5c9557b9dc782eb5e693bd9d64bc76c42c5f104f7d041ba3e23be7cda2fdb04`
-- 远端 main = `1e73d01`（本地无未推送提交）
+- 版本号：`backend/app/__init__.py` 的 `__version__ = "0.4.0"`（**改版本只改这一处**）
+- 仓库：<https://github.com/whyao56/WingMan>（public），tag `v0.2.0` / `v0.2.1` / `v0.3.0` / `v0.3.1` / `v0.4.0`
+- v0.4.0 Release：<https://github.com/whyao56/WingMan/releases/tag/v0.4.0>
+  附件 `WingMan-0.4.0-win64.zip`（221 个文件，33.8 MB，解压后约 77 MB），
+  SHA256 `bb63f93b666fd9babcd6283ecc3326deaec9a5a61480976731a5af3a02c23657`
+  （**实测同一份 `dist/` 连打两次 SHA 相同**，所以这个值是可核对的事实）
+- 检查更新查的是 GitHub Releases API（`routes_admin.py` 的 `/api/update/check`）。
+  **查不到时不给 `has_update` 字段**，提示「不等于已是最新」—— 这是刻意的，别改成默认「已是最新」。
 - **历史遗留**：曾用 `git-filter-repo` 重写过历史清掉真人姓名；旧 SHA 仍能被 GitHub 缓存视图取到，
   彻底清除需删库或联系 Support（**尚未做**，注意现在删库会连带删掉已发布的 Release）。
   隐私守卫测试：`backend/tests/test_privacy_pseudonyms.py`（扫源码 + `git log -S` 查历史）。
 
 ---
 
-## 12. S0（对象中心后端打底）已落地 —— 未推送
+## 12. 0.4.0（对象中心）已落地
 
-> 这一节记录「0.3.1 之后、尚未并入远端 main」的改动。版本号**仍是 0.3.1**（S4 才升 0.4.0）。
-> 前端 `frontend/index.html` **一个字没动**（S1 才动）。远端 main 与本仓库的差距请看 `git log`。
+> 这一版把 S0（后端打底）→ S1/S2/S3（前端三个方向）→ S4（收尾）一次做完。
+> 计划文档见 [PLAN-对象中心迭代.md](PLAN-对象中心迭代.md)；面向用户的说明见
+> [releases/v0.4.0.md](releases/v0.4.0.md)。
 
-**做了什么**（详见 `docs/PLAN-对象中心迭代.md` §S0）：
+### 12.1 后端
 
-1. 修 Bug 1（`PersonChannel` 补 `peer_name`/`me_name`）+ 真 `start()` 回归守卫。
-2. 迁移与新表（**幂等**）：`messages.captured_at`、`facts.person_id`（放开 `chat_id` 为可空、
+1. **Bug 1 修复**：`schemas.PersonChannel` 补 `peer_name` / `me_name`（只加不删），
+   在 `store.person_detail` 里从 `ChatInfo` 填进去 —— 「渠道视图缺字段」这一类坑一次性消掉。
+   回归守卫 `test_collect_semi.py::test_start_works_when_the_person_already_has_a_channel`
+   **真的调 `start()`**（旧测试绕过了出事那一段），且实测在旧代码上会复现原始 `AttributeError`。
+2. **迁移与新表（幂等）**：`messages.captured_at`、`facts.person_id`（放开 `chat_id` 可空、
    回填、去重、部分唯一索引 `ux_facts_person`），新表 `person_personas` / `engine_runs` /
    `sim_runs` / `activity_log`。
-3. `Store` 新方法：消息增删改（撞键返回结构化错误）、`set_chat_platform`（重算 channel、不改 chat_id）、
-   `save_run`/`list_runs`/`get_run`/`delete_run`、`save_sim_run`/`list_sim_runs`、
-   `log_activity`/`list_activity`、对象级 facts 与 persona 读写。
-4. 新接口：`PATCH/DELETE /api/messages/{id}`、`POST /api/messages/bulk`、
+3. **多渠道上下文**（`engine/context.py` + `engine/pipeline.py`）：
+   `build_context` / `run_analysis` 接受 `chat_ids` 序列，主渠道决定人格/昵称/检索锚点，
+   事实/摘要/近期消息跨渠道合并、检索逐渠道做。单渠道旧路径完全兼容。
+4. **新接口**：`POST /api/persons/{id}/suggest`（多渠道分析）、
+   `GET /api/desktop/state`、`POST /api/desktop/close`、`POST /api/desktop/show`、
+   `GET /api/update/check`。
+   S0 另有：`PATCH/DELETE /api/messages/{id}`、`POST /api/messages/bulk`、
    `POST /api/chats/{id}/messages`、`GET /api/persons/{id}/overview|facts|persona|history`、
    `POST/DELETE /api/persons/{id}/facts`、`GET/DELETE /api/history/runs/{id}`、
    `PATCH /api/chats/{id}` 扩展 `platform`/`channel`。
-5. 写入点：`run_analysis`→`engine_runs`、`simulate`→`sim_runs`、
+5. **时间语义**（需求 3）：`clipboard` / `relative` / `inferred` / `assumed` / `manual` 五种来源，
+   默认从「抓取时刻」改成「按会话时间线推定」，见 §5.3。
+6. **写入点**：`run_analysis`→`engine_runs`、`simulate`→`sim_runs`、
    导入/自动采集/半自动采集/批量编辑→`activity_log`。
-6. 测试：`tests/test_objects_s0.py`（17 项）+ 半自动采集 2 项新守卫。
 
-**给 S1 的接口清单**见当轮交接报告；**未做 / 存疑**：
-- 前端（S1）、对象级与渠道级事实的**合并展示规则**（是否去重计数）—— 需先与用户确认。
-- `export_chat_json` **尚未**带上 `engine_runs`/`activity_log`（PLAN 需求 11 的隐私要求：
-  导出/删除要覆盖历史输出）。
-- 自动采集（`collect/pipeline._collect_one_chat`）的 `activity_log` 写入点没有独立单测
-  （需要解密后的库，成本高），靠人工核对 + 半自动那条同构守卫。
-- `delete_person` 删除对象级人物设定、但**不删**对象级事实（假设：事实属不可再生记忆资产，
-  与「删人不删消息」一致）；如需一起删请明确。
+### 12.2 前端（`frontend/index.html`，4042 行）
+
+- 导航 7→4；旧深链接 `?view=memory/import/check/voice` **做重定向**（`LEGACY_VIEW`）。
+- 左栏两级（对象 → 渠道）；对象页 5 Tab；指挥台对象+渠道多选；聊天记录批量编辑；
+  采集页并入导入（拖放 + 多文件）；设置页并入体检与「关于」；侧栏自检提醒；
+  右上角 × 的关闭小窗。
+- **踩到并修掉的一个 P0**：重构把 `loadChats` 并进 `loadObjects` 时漏改 5 个调用点。
+  它在 `init()` 里抛 ReferenceError 会让后半段初始化全不执行，在指挥台里会把成功结果
+  **覆盖成错误提示**。已修，并加守卫 `test_no_calls_to_undefined_functions`（经过反证）。
+
+### 12.3 未做 / 存疑
+
+- **自动采集取密钥在本机仍跑不通**：实测（QQ NT 9.9.20.37051 / 微信 4.1.13.12）按 SQLCipher
+  规格穷举 8378 万候选未命中，十六进制候选 QQ 8 个全灭、微信 0 处。
+  0.4.0 改的是「取不到时多快、多如实地说出来」，不是「一定能取到」。
+  **半自动仍是最确定能跑通的通道。**
+- 导出不覆盖分析留存（见 §10.3 第 1 条）。
+- 「对象级 / 渠道级事实分别计数、不去重」是**已定的展示规则**（用户确认过）；
+  如果以后想改成合并去重，要同时改后端 `list_facts_for_person` 与前端两组计数。
