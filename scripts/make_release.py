@@ -16,7 +16,7 @@
     python scripts/make_release.py               # 真发版（建 tag、传附件、发布）
 
 版本号默认从 backend/app/__init__.py 里读 —— 这个脚本本身就是为「防止版本号漂移」
-而写的，自己的默认值再硬编码一个版本就自相矛盾了。要覆盖用 --version 0.2.1 --tag v0.2.1。
+而写的，自己的默认值再硬编码一个版本就自相矛盾了。要覆盖用 --version 0.1.1 --tag v0.1.1。
 
 前置条件：先跑过 `python scripts/build_exe.py`，产物归位成 dist/WingMan
 （只发一个包，见 docs/DESKTOP.md 的发布检查清单）。

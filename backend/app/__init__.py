@@ -38,4 +38,4 @@ for _var in (
     os.environ.setdefault(_var, "1")
 del _var      # 别把这个循环变量留在包命名空间里
 
-__version__ = "0.6.0"
+__version__ = "0.2.0"

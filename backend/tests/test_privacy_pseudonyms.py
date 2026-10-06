@@ -1,8 +1,12 @@
-"""仓库里不许出现真人的名字。
+"""仓库里不许出现能反查到真人的信息。
 
 **背景**：采集功能的用例原来用的是真人的名字 —— 那是在本机对着真实聊天记录做验证时
 留下来的。而这个仓库是公开的，名字一旦留在代码、文档和界面占位符里，就等于把它发布了。
 现在统一改成虚构的「小鹿」（`samples/qq_sample_小鹿.txt` 里的示例数据本来就叫这个名字）。
+
+**覆盖两条通道**：① 文件内容（代码 / 文档 / 页面里的姓名）；② **提交元数据**
+（author / committer 邮箱 —— 它不在文件里，但公开仓库的每个提交页都印着）。
+两条都堵上，才算「仓库里没有可反查的信息」。
 
 **为什么被禁的字眼要写成 `\\uXXXX` 转义**：这个文件的职责是「别让某几个字出现在仓库里」。
 如果它自己把那个名字明明白白写出来，它就成了它要防的那个来源 ——
@@ -128,4 +132,45 @@ def test_the_history_does_not_contain_the_name_either() -> None:
         "git 历史里还有不该出现的真实姓名：\n  " + "\n  ".join(hits)
         + "\n只改工作区是不够的 —— 已经提交过的内容要重写历史才清得掉，"
           "而且公开仓库的历史别人 clone 得到。"
+    )
+
+
+# 允许的匿名邮箱形态。GitHub 的 `@users.noreply.github.com` 是官方给提交用的匿名地址，
+# 也是「在公开仓库里留下提交、但不暴露真实邮箱」的标准做法。
+ANON_EMAIL_SUFFIXES = ("@users.noreply.github.com",)
+ANON_EMAIL_EXACT = {"noreply@github.com", "noreply@anthropic.com", "action@github.com"}
+
+
+def _is_anonymous(email: str) -> bool:
+    return email in ANON_EMAIL_EXACT or email.endswith(ANON_EMAIL_SUFFIXES)
+
+
+def test_commit_metadata_does_not_carry_a_real_email() -> None:
+    """提交的 author / committer 邮箱不许是能反查到真人的邮箱。
+
+    **为什么单列一条**：姓名守卫扫的是**文件内容**，而邮箱不在文件里 —— 它在 commit
+    对象的元数据里。GitHub 会把每个提交的作者邮箱明明白白印在提交页和 API 上，
+    公开仓库里任何人都能翻。所以「文件干净」并不等于「没泄漏」，这是另一条通道。
+
+    本仓库先前正是这样：42 个提交的作者邮箱是一个真实邮箱，而所有文件都是干净的。
+    修法不是改文件，而是**重写全部历史**把 author/committer 一起换掉（见 CHANGELOG
+    0.1.2 那条记录，同一类问题的先例）。
+
+    **为什么这里不把那个邮箱写出来**：理由同本文件开头 —— 守卫的职责是让某个字符串
+    不出现在仓库里，它自己就不能是那个字符串。所以这里只判断「是不是匿名形态」，
+    不点名任何一个具体地址。
+
+    浅克隆里 `git log` 仍能拿到邮箱，所以这条在 CI 上**照常生效**；
+    只有在拿不到 git 时（比如只拷了源码目录）才跳过。
+    """
+    code, out = _git("log", "--all", "--format=%ae%n%ce")
+    if code != 0:
+        pytest.skip(f"拿不到 git log（退出码 {code}），跳过提交元数据扫描")
+
+    emails = {line.strip() for line in out.splitlines() if line.strip()}
+    leaked = sorted(e for e in emails if not _is_anonymous(e))
+    assert not leaked, (
+        "提交元数据里有真实邮箱，公开仓库上任何人可见：\n  " + "\n  ".join(leaked)
+        + "\n改 git config 只影响之后的提交；已经提交过的要重写历史才清得掉。"
+          "\n推荐用 GitHub 的匿名地址：<用户名>@users.noreply.github.com"
     )

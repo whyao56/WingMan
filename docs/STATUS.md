@@ -1,7 +1,7 @@
 # WingMan 项目现状（交接文档）
 
 > **用途**：给「全新上下文」的窗口看的一份现状底稿。目标是**读完不用再通读代码**就能动手改。
-> **快照**：2026-10-06 18:00（GMT+8），版本 `0.4.0`，全量 **208 passed + 1 skipped**。
+> **快照**：2026-10-06 18:00（GMT+8），版本 `0.1.4`，全量 **208 passed + 1 skipped**。
 > **注意**：文件行号会随改动漂移。改动前先用函数名定位，再用行号确认。
 > 本文档答的是「现在是什么样」；「要改成什么样」见 [PLAN-对象中心迭代.md](PLAN-对象中心迭代.md)。
 
@@ -11,13 +11,13 @@
 
 WingMan 是一个**跑在本机的聊天记录分析工具**：把微信/QQ 的聊天记录导进来或采进来，
 交给大模型做「记忆 + 人物画像 + 回复建议」。
-**0.4.0 起以「对象」为中心** —— 一个人可以在多处（微信 / QQ / 换过昵称的老号）有记录，
+**0.1.4 起以「对象」为中心** —— 一个人可以在多处（微信 / QQ / 换过昵称的老号）有记录，
 它们算同一个对象的几个**渠道**，看的是合起来的视野。
 数据全部落在本机 SQLite，程序不主动外传任何东西（模型调用按用户自己配的 endpoint 走）。
 
 - 形态：Python FastAPI 后端 + **单文件 HTML 前端**（`frontend/index.html`，4653 行，内联 JS，无构建步骤）
-- 分发：PyInstaller 打包成免安装 zip（`WingMan.exe` + `_internal/`），当前 **v0.4.0**，约 34 MiB
-- 界面：**4 个一级页签** —— 指挥台 / 对象 / 采集 / 设置（0.4.0 从 7 项收敛而来，见 §4）
+- 分发：PyInstaller 打包成免安装 zip（`WingMan.exe` + `_internal/`），当前 **v0.1.4**，约 34 MiB
+- 界面：**4 个一级页签** —— 指挥台 / 对象 / 采集 / 设置（0.1.4 从 7 项收敛而来，见 §4）
 - 合规：`docs/COMPLIANCE.md`；采集能力只读用户自己机器上的库，且**不绕过任何权限**（见 §9）
 
 ---
@@ -56,7 +56,7 @@ wingman/
 │  │  ├─ adapters/          导入适配器（qq.py / wechat.py / generic.py / registry.py）
 │  │  ├─ memory/            embedder(HashEmbedder 兜底/Cloud) + retriever(混合检索) + profiler
 │  │  └─ engine/            analyzer / planner / suggestor / simulator / context / prompts
-│  ├─ tests/                19 个测试文件，全量 208 passed + 1 skipped（0.4.0）
+│  ├─ tests/                19 个测试文件，全量 208 passed + 1 skipped（0.1.4）
 │  ├─ data/                 运行时 SQLite（.gitignore；含 collect_cache/）
 │  └─ logs/wingman.log
 ├─ frontend/index.html      4653 单文件前端
@@ -158,14 +158,14 @@ DDL：`FACTS_DDL` `48-60`、`SCHEMA` `62-180`；建表 `init()` `284-293`。
 ### 指挥台 `routes_engine.py`
 `POST /chats/{id}/suggest`（单渠道，返回 `trace.run_id`）· `POST /chats/{id}/analyze` ·
 `POST /chats/{id}/simulate`（可带 `run_id` 把推演挂到某次运行上）·
-**0.4.0 新增** `POST /persons/{id}/suggest`（**多渠道**：body 可带 `chat_ids`（有序，第 1 个是
+**0.1.4 新增** `POST /persons/{id}/suggest`（**多渠道**：body 可带 `chat_ids`（有序，第 1 个是
 主渠道）；不传就用该对象全部渠道。空渠道 400、未知对象/渠道 404、无消息 400）·
 `GET /history/runs/{run_id}` · `DELETE /history/runs/{run_id}`
 
 ### 设置/自检 `routes_admin.py` + `routes_health.py`
 `GET /health`23 · `GET /selfcheck`38 · `POST /runtime/open`48 · `GET /settings`73 · `PUT /settings`93 ·
 `POST /settings/reset`106 · `POST /settings/test`113 · `GET /settings/models`129 ·
-**0.4.0 新增**：`GET /desktop/state`145（有没有原生窗口）·
+**0.1.4 新增**：`GET /desktop/state`145（有没有原生窗口）·
 `POST /desktop/close`157（action ∈ quit/background/cancel，其余 422）·
 `POST /desktop/show`174（把「后台运行」藏的窗口调回来）·
 `GET /update/check`189（查 GitHub Releases；**查不到时 `ok:false` 且不给 `has_update`**）·
@@ -175,7 +175,7 @@ DDL：`FACTS_DDL` `48-60`、`SCHEMA` `62-180`；建表 `init()` `284-293`。
 
 ## 4. 前端结构（`frontend/index.html`，4653 行）
 
-> **0.4.0 起是一套「对象中心」的界面。** 拿到 0.3.x 的行号来对会全错，
+> **0.1.4 起是一套「对象中心」的界面。** 拿到 0.3.x 的行号来对会全错，
 > 请先用函数名定位，再用行号确认。
 
 ### 导航（**4 项**；重要：**用 `data-v`，不是 `data-page`**）
@@ -225,7 +225,7 @@ DDL：`FACTS_DDL` `48-60`、`SCHEMA` `62-180`；建表 `init()` `284-293`。
 ### 采集页（**四块，原「导入」页并入这里**）
 1. 「自动采集」`746` 起：`#ac-client` `#ac-key` `#ac-check` `#ac-scan` `#ac-preview` `#ac-run` `#ac-report`。
 2. 「半自动采集」`796` 起：`#sc-client` `#sc-person`(+`#sc-persons`) `#sc-time` `#sc-start` `#sc-stop` `#sc-clear` `#sc-hint` `#sc-list`。
-   **`#sc-time` 的选项是 `inferred`（默认）/`ask`** —— 0.4.0 起不再有「用抓取时刻」这个选择，
+   **`#sc-time` 的选项是 `inferred`（默认）/`ask`** —— 0.1.4 起不再有「用抓取时刻」这个选择，
    旁边有 `#sc-time-help` 打开 `openTimeHelp()`3609 解释时间的 5 种来源。
 3. **「导入」`#imp-drop` 832**：拖放区 + `#imp-file`（**multiple**）、`#imp-files` `#imp-adapter`
    `#imp-name` `#imp-mename` `#imp-preview` `#imp-go`；粘贴区 `#paste-text` + `#paste-name` → `#paste-go`。
@@ -234,7 +234,7 @@ DDL：`FACTS_DDL` `48-60`、`SCHEMA` `62-180`；建表 `init()` `284-293`。
 
 ### 右键菜单 / 弹窗 / 关闭窗口
 - `contextmenu` 绑在 `.chitem` 上；菜单项 `openChatMenu`1554：打开 / 重命名… /
-  **「设置…」1559**（0.4.0 从「会话设置」改名，`openChatSettingsDialog`1397，可改平台
+  **「设置…」1559**（0.1.4 从「会话设置」改名，`openChatSettingsDialog`1397，可改平台
   微信/QQ 与「对方 / 我」的称呼）/ 导出 JSON / 删除渠道…。
 - 弹窗 `openModal`1245、`modalButton`1269、`confirmWithCountdown`1289。
 - **关闭窗口（需求 9）**：后端拦下系统 × 后调 `window.__wingmanAskClose`（`4015`）→
@@ -253,7 +253,7 @@ DDL：`FACTS_DDL` `48-60`、`SCHEMA` `62-180`；建表 `init()` `284-293`。
 **导入/采集/改名/删除等会改变归属的动作都调它**）·
 `init`4020（loadHealth→**loadObjects**→loadSettings→loadSelfCheck，30s 轮询 health）。
 
-> 0.4.0 之前这里有个 `loadChats`，重构时并进了 `loadObjects`。漏改调用点会
+> 0.1.4 之前这里有个 `loadChats`，重构时并进了 `loadObjects`。漏改调用点会
 > **静默地**把 init 后半段和指挥台的结果一起搞坏，所以钉了守卫
 > `tests/test_frontend_assets.py::test_no_calls_to_undefined_functions`。
 
@@ -301,7 +301,7 @@ _commit_capture(293-358)：
 > **「数据集」在代码里不存在** —— 它就是**一个 chat**。界面上的「渠道」= `PersonChannel` = 一个 chat。
 > `_resolve_chat_id(514)`：优先复用该人同渠道已有 chat_id，否则 `{client}:{person_id}`，再否则 `{client}:semi:{peer_name}`。
 
-### 5.3 「时间」是怎么填的（0.4.0 已按需求 3 改完）
+### 5.3 「时间」是怎么填的（0.1.4 已按需求 3 改完）
 
 `messages` 只有两列与时间有关：`ts`（`store.py:81`）+ `ts_source`（`89`）。
 **`ts_source` 一共 5 种**，界面上每条都会标注，点 `#sc-time-help` 能看解释：
@@ -338,7 +338,7 @@ _commit_capture(293-358)：
 两级搜索 `scan_memory_for_key`（`194-391`）：
 1. **第 1 级 十六进制串**（`234-284`，秒级）：`x'..'`/引号包裹（`_HEX_WRAPPED` 49-54）、裸 64 位串且邻域含 `sqlite`/`PRAGMA`（`_HEX_BARE` 55，上下文判定 258-260），逐候选 `verify_key`。
 2. **第 2 级 32 字节滑窗穷举**（`303-379`，贵）：先按 **salt / 库文件名**找锚点区域（`325-330`，对齐 64KB），只在这些区域、只上最可能的 **2 套参数**穷举。
-`Budget`（`172-191`）**每层循环都查**（这是 0.3.1 修的）。到点收工 ≠ 失败：返回 `budget_hit=True` + 「扫到哪了」。
+`Budget`（`172-191`）**每层循环都查**（这是 0.1.3 修的）。到点收工 ≠ 失败：返回 `budget_hit=True` + 「扫到哪了」。
 
 **实测结论（`keys.py:13-27`，必须照实告诉用户）**：本机 QQ NT 9.9.20.37051 与微信 4.1.13.12，
 全内存穷举 8378 万候选未命中；hex 候选 QQ 30 处全灭、微信 0 处。
@@ -350,7 +350,7 @@ _commit_capture(293-358)：
 
 分层（`engine/context.py`）：**L1 事实（全量注入）+ L2 摘要（最近几条）+ L3 检索（向量+关键词动态召回）+ 最近对话 + 人物卡**。
 
-**0.4.0 起 `build_context` 接受「一组渠道」**（`chat_ids: str | Sequence[str]`，也兼容传单个 str）：
+**0.1.4 起 `build_context` 接受「一组渠道」**（`chat_ids: str | Sequence[str]`，也兼容传单个 str）：
 
 - 第 1 个是**主渠道** —— 人格、昵称（`self_chat_name()`）、检索锚点都取自它，新消息也写进它；
 - 事实：**该对象名下的全部渠道级事实 + 对象级事实**合并成一个视野，各带 `scope` 标注，
@@ -368,7 +368,7 @@ _commit_capture(293-358)：
   `suggestor.suggest`（本地打分）、`simulator.simulate`。
 - **入口**：`POST /api/chats/{id}/suggest`（单渠道，老路径）与
   `POST /api/persons/{id}/suggest`（多渠道；`chat_ids` 省略=该对象全部渠道）。
-- **持久化：0.4.0 起有留存。** 每次分析落一条 `engine_runs`（含 `chat_ids`、判断、建议、推演），
+- **持久化：0.1.4 起有留存。** 每次分析落一条 `engine_runs`（含 `chat_ids`、判断、建议、推演），
   推演落 `sim_runs`，导入/采集/批量编辑落 `activity_log`；对象页「历史」Tab 读它们。
   `/suggest` 的 `persist` 参数仍然只管「要不要把对方那条新消息写进记忆」，**与建议留存无关** ——
   建议一律留存，这是两条独立的线。
@@ -394,7 +394,7 @@ _commit_capture(293-358)：
 前端消费：`loadSelfCheck` `1954-2013`（分组渲染）、顶部横幅 `updateWizard` `2016-2034`（localStorage 记关闭）、`updateSteps` `2039-2078`、跳转映射 `CHECK_ACTION` `1945-1949`（只对 llm/embedder/database 给跳转按钮）。
 侧栏有两个红点：`#nav-badge`（设置）与 `#nav-collect`（采集），以及 **`#side-warn` 自检提醒区**（`512` 附近）。
 
-**外设需求 1（把自检提醒放到侧栏）已在 0.4.0 落地**：`renderSideWarn(r)` `3034`
+**外设需求 1（把自检提醒放到侧栏）已在 0.1.4 落地**：`renderSideWarn(r)` `3034`
 把 warn / fail 的项渲染成侧栏底部的可点按钮（`data-sw` 带跳转目标），点一下 `goView` 到
 设置页对应位置；**全绿时整条隐藏**。在此之前自检结果只有进设置页才看得到。
 另有非 HTTP 通道：`desktop.py --check` 把报告写到 `DATA_DIR/logs/selfcheck.txt`（`258-298`）。
@@ -405,17 +405,17 @@ _commit_capture(293-358)：
 
 - 测试：`backend/tests/` 21 个文件，**从 `backend/` 目录跑**（`conftest.py` 在那里重定向 `DATA_DIR`；从仓库根跑单文件会因 rootdir 落到 `backend/tests` 而跳过 conftest）。
   ```bash
-  cd backend && ./.venv/Scripts/python.exe -m pytest tests/ -q     # 240 passed, 1 skipped（0.6.0）
+  cd backend && ./.venv/Scripts/python.exe -m pytest tests/ -q     # 240 passed, 1 skipped（0.2.0）
   ```
-- **0.5.0 新增/扩写的守卫**：
+- **0.1.5 新增/扩写的守卫**：
   - `tests/test_adapter_import.py`（新，10 项）：**导入这条路本身能不能走通** ——
     仓库自带的两份示例文件各经其适配器导入（QQ / 微信）、界面写的粘贴格式真能用、
     粘 JSON 也能认、列名匹配拿真实列名、解析为空时提示能指路、
     `ImportResult` 回报归宿渠道、声明来源压过适配器猜测、
     以及一条**静态守卫**：`app/` 下任何模块都不许引用「既没定义也没导入」的全局名
     （用 `symtable` 看符号表）。这一条是被 `iter_blocks` 那个 Bug 逼出来的，见 §10.4。
-  - `tests/test_frontend_assets.py`（11→13 项）：收集侧客户端下拉已在 0.4.0 钉住；
-    0.5.0 补两条 —— **平台/来源下拉的取值必须在后端平台表里**（粘贴框 + `CHAT_PLATFORMS`），
+  - `tests/test_frontend_assets.py`（11→13 项）：收集侧客户端下拉已在 0.1.4 钉住；
+    0.1.5 补两条 —— **平台/来源下拉的取值必须在后端平台表里**（粘贴框 + `CHAT_PLATFORMS`），
     以及粘贴框必须给出「来源」入口。
   - `tests/test_persons.py`（24→26 项）：手建的空对象接住同名导入（复用而不是新建），
     以及反例：那个名字下**已有记录**时仍保守新建（重名不能静默合并）。
@@ -424,7 +424,7 @@ _commit_capture(293-358)：
     `kept` 里照样要有。实现方式是把 `ctx._llm` 换成只答对象级画像的桩
     （`llm` 是只读属性，换的是 `_llm` 这个缓存槽）。
   - `tests/test_version.py`（新增 1 条）：前端 `BUILD` 常量必须等于后端 `__version__`。
-- **0.6.0 新增的守卫**：
+- **0.2.0 新增的守卫**：
   - `tests/test_memory_footprint.py`（新，2 项）：用**干净子解释器**验证「BLAS 限流
     发生在 numpy 被导入之前」，并直接量提交内存（< 200 MB）。
     为什么非要子进程：测试进程自己早就把 numpy 导进来了，环境变量设得再对也看不出效果。
@@ -440,9 +440,9 @@ _commit_capture(293-358)：
     必须补关窗，否则 × 变成「点了没反应」；
     `test_state_is_shared_even_when_desktop_py_runs_as_main` —— 以 `__main__` 加载
     `desktop.py` 再 `import app.desktop`，两者必须是**同一个模块对象**（否则状态两份）。
-- **写守卫的标准**：新测试要能在**旧代码上失败**。0.4.0 的 `loadChats` 那条、
+- **写守卫的标准**：新测试要能在**旧代码上失败**。0.1.4 的 `loadChats` 那条、
   和「缺时间=inferred」那条都实测过在修复前会挂 —— 不会失败的守卫等于没有。
-  0.5.0 的六条关键守卫做了脚本化反证（把修复逐条改回旧写法 → 对应用例必须失败，
+  0.1.5 的六条关键守卫做了脚本化反证（把修复逐条改回旧写法 → 对应用例必须失败，
   跑完自动还原源码），六条全过：
 
   | 改回旧写法 | 如期失败的用例 |
@@ -453,20 +453,20 @@ _commit_capture(293-358)：
   | `_guess_paste_suffix` 一律返回 `.txt` | `test_column_names_are_matched_against_the_real_columns` |
   | `import_file` 忽略用户声明的 `platform` | `test_declaring_the_source_beats_the_adapter_guess` |
   | `kept` 改成「模型也想改时才列入」 | `test_refine_still_reports_a_draft_field_the_model_said_nothing_about` |
-  | **0.6.0** 删掉 BLAS 限流 | `test_the_package_caps_blas_threads_before_numpy_arrives` |
-  | **0.6.0** 删掉 BLAS 限流（效果侧） | `test_importing_numpy_stays_within_a_sane_memory_budget` |
-  | **0.6.0** 关窗钩子改回同步调 `evaluate_js` | `test_the_close_hook_never_blocks_on_evaluate_js` |
-  | **0.6.0** 退出只 `set()` 一个没人读的 Event | `test_desktop_close_quit_actually_tells_the_server_to_stop` |
-  | **0.6.0** 通知不到界面时不补关窗 | `test_when_the_page_cannot_be_reached_the_window_is_still_closed` |
-  | **0.6.0** 去掉 `desktop.py` 顶部的自我登记 | `test_state_is_shared_even_when_desktop_py_runs_as_main` |
+  | **0.2.0** 删掉 BLAS 限流 | `test_the_package_caps_blas_threads_before_numpy_arrives` |
+  | **0.2.0** 删掉 BLAS 限流（效果侧） | `test_importing_numpy_stays_within_a_sane_memory_budget` |
+  | **0.2.0** 关窗钩子改回同步调 `evaluate_js` | `test_the_close_hook_never_blocks_on_evaluate_js` |
+  | **0.2.0** 退出只 `set()` 一个没人读的 Event | `test_desktop_close_quit_actually_tells_the_server_to_stop` |
+  | **0.2.0** 通知不到界面时不补关窗 | `test_when_the_page_cannot_be_reached_the_window_is_still_closed` |
+  | **0.2.0** 去掉 `desktop.py` 顶部的自我登记 | `test_state_is_shared_even_when_desktop_py_runs_as_main` |
 
   **反证本身才是价值所在**，两次都印证了这点：
-  1. （0.5.0）「`kept` 只在模型也想改时才列出来」这条改动**本来没有任何测试盯着** ——
+  1. （0.1.5）「`kept` 只在模型也想改时才列出来」这条改动**本来没有任何测试盯着** ——
      旧测试用的是 Mock 引擎，而 Mock 会把全部字段都填满，所以新旧写法都能过。
      为此专门加了一个「没有证据的字段就不写」的模型桩，才把这件事钉住。
-  2. （0.5.0）第一次写的反证脚本里，「`_resolve_map`」那条改动**不够忠实**（改成了另一种坏法，
+  2. （0.1.5）第一次写的反证脚本里，「`_resolve_map`」那条改动**不够忠实**（改成了另一种坏法，
      恰好被别的修复兜住了），于是它「通过」了。
-  3. （0.6.0）「关窗死锁」那条第一版**也没抓住**，原因同类但更微妙：我只把 `_on_closing`
+  3. （0.2.0）「关窗死锁」那条第一版**也没抓住**，原因同类但更微妙：我只把 `_on_closing`
      改回了同步调用，却留着 `_ask_frontend_to_choose` 内部的线程包装 ——
      那是个现实中不存在的混合状态。改成「两处必须一起改回」之后才如期失败。
      **一条通过了的反证，可能只是因为你复现得不够像。**
@@ -486,8 +486,8 @@ _commit_capture(293-358)：
 
 见 `docs/COMPLIANCE.md`。要点：只读用户**自己机器上、自己已登录**的客户端数据；
 不绕过登录/加密的权限边界（密钥来自用户粘贴或进程内存，属于用户自己机器上的既有事实）；
-默认只读、不写回客户端；**语音转写已于 0.2.1 撤下**（`6fb9fdd`、`acff853`），
-后端入口一并移除，界面上的「通话」于 0.4.0 收进**「设置 · 关于」下的折叠区**
+默认只读、不写回客户端；**语音转写已于 0.1.1 撤下**（`6fb9fdd`、`acff853`），
+后端入口一并移除，界面上的「通话」于 0.1.4 收进**「设置 · 关于」下的折叠区**
 （不再是独立页签），说明文案保留「没有任何按钮」。
 
 > 采集页「自动找密钥」只读**本机正在运行的客户端进程内存**，不写、不注入、不 hook。
@@ -543,18 +543,18 @@ if store is not None and person_id:            # ← 守卫：person_id 非空�
 （真 `start()`；前置=建 person → `upsert_chat(person_id=pid)` → `start(store, person_id=pid)`）。
 按项目标准**先在旧代码上跑过**，复现出原始 `AttributeError: 'PersonChannel' object has no attribute 'peer_name'`。
 
-### 10.2 0.4.0 关闭掉的缺口
+### 10.2 0.1.4 关闭掉的缺口
 
 | 缺口 | 状态 |
 |---|---|
-| 消息**无增删改** | ✅ 后端 S0 补；**前端 0.4.0 接上了**（`#ob-chat` 的批量选择 / 改角色 / 改时间 / 改发送者 / 手动加一条） |
-| 指挥台输出**零留存** | ✅ 后端 S0 补；**前端 0.4.0 接上了**（对象页「历史」Tab） |
-| 人物后端接口齐全但**前端没用** | ✅ 0.4.0 起对象页 5 Tab 全面消费；`routes_persons.py` 的跨渠道时间线仍未接（见下） |
-| 没有**人物级**事实/画像 | ✅ 数据层 + 接口 S0 补；**前端 0.4.0 落地**（对象级/渠道级分组、**分别计数不去重**） |
-| 前端**没有多选/批量基建** | ✅ 0.4.0 补：聊天记录批量操作 + 指挥台渠道多选 |
-| 窗口**没有关闭小窗 / 后台运行** | ✅ 0.4.0 补（`POST /api/desktop/close`） |
-| 导航 7 项要合并/移除 | ✅ 0.4.0 收敛为 4 项 |
-| 自动采集**没说清「怎么拿到密钥」** | ✅ 0.4.0 重写了采集页指引（含「密钥在哪」的分步说明与「自动找密钥」的预期管理） |
+| 消息**无增删改** | ✅ 后端 S0 补；**前端 0.1.4 接上了**（`#ob-chat` 的批量选择 / 改角色 / 改时间 / 改发送者 / 手动加一条） |
+| 指挥台输出**零留存** | ✅ 后端 S0 补；**前端 0.1.4 接上了**（对象页「历史」Tab） |
+| 人物后端接口齐全但**前端没用** | ✅ 0.1.4 起对象页 5 Tab 全面消费；`routes_persons.py` 的跨渠道时间线仍未接（见下） |
+| 没有**人物级**事实/画像 | ✅ 数据层 + 接口 S0 补；**前端 0.1.4 落地**（对象级/渠道级分组、**分别计数不去重**） |
+| 前端**没有多选/批量基建** | ✅ 0.1.4 补：聊天记录批量操作 + 指挥台渠道多选 |
+| 窗口**没有关闭小窗 / 后台运行** | ✅ 0.1.4 补（`POST /api/desktop/close`） |
+| 导航 7 项要合并/移除 | ✅ 0.1.4 收敛为 4 项 |
+| 自动采集**没说清「怎么拿到密钥」** | ✅ 0.1.4 重写了采集页指引（含「密钥在哪」的分步说明与「自动找密钥」的预期管理） |
 
 ### 10.3 仍然存在的缺口
 
@@ -568,7 +568,7 @@ if store is not None and person_id:            # ← 守卫：person_id 非空�
 - `routes_persons.py` 的**跨渠道时间线**接口前端仍未使用（对象页概览用的是对象 overview）。
 - **Prompt 调优**仍是最大的质量缺口：默认 Mock 引擎让链路能跑，但建议内容是空的。
 
-### 10.4 【0.5.0 修复】三个「静默坏了很久」的问题
+### 10.4 【0.1.5 修复】三个「静默坏了很久」的问题
 
 这一轮最值得记的不是新功能，而是**三个一直坏着、但没有任何东西会报错的问题**。
 它们有共同的形状：**编译不报、导入不报、界面照常打开**，只有真走到那一条路时才出问题 ——
@@ -588,7 +588,7 @@ if store is not None and person_id:            # ← 守卫：person_id 非空�
 但本模块既没赋值也没导入、又不是内置名」的符号。Python 自己已经算出了这个事实，
 我们只是把它问出来。**带 `import *` 的文件跳过**（星号导入会让符号表失真）。
 
-### 10.5 【0.6.0 修复】点 × 卡死、状态两份、以及 760 MB 的 numpy
+### 10.5 【0.2.0 修复】点 × 卡死、状态两份、以及 760 MB 的 numpy
 
 这四个都不是新写坏的功能，而是**一直那样、只在特定路径上才显形**的问题。
 
@@ -682,7 +682,7 @@ OpenBLAS 默认按**逻辑核数**开线程，并给每个线程预留工作缓�
 > 32 位 int 截断，调用静默返回 0、结构体字段全是 0 —— 不报错，只是永远读到 0。
 > 这个坑让我第一次的探针白跑了一轮。
 
-#### 5. 内存画像（0.6.0 实测，打包版）
+#### 5. 内存画像（0.2.0 实测，打包版）
 
 | 部分 | WorkingSet |
 |---|---|
@@ -690,7 +690,7 @@ OpenBLAS 默认按**逻辑核数**开线程，并给每个线程预留工作缓�
 | 6 个 `msedgewebview2.exe` 子进程（Edge 渲染引擎） | 400.8 MB |
 | 合计 | 约 563 MB |
 
-主进程那部分已经压到位（0.6.0 之前光提交内存就 845 MB）。剩下 400 MB 是 WebView2 的
+主进程那部分已经压到位（0.2.0 之前光提交内存就 845 MB）。剩下 400 MB 是 WebView2 的
 固有成本 —— 那是一整套 Chromium 进程组（browser / gpu / network / renderer / utility /
 crashpad）。压它需要限制渲染参数，**副作用不可控且收益不确定，这一版刻意没动**。
 
@@ -702,30 +702,33 @@ crashpad）。压它需要限制渲染参数，**副作用不可控且收益不�
 
 ## 11. 当前版本与发布
 
-- 版本号：`backend/app/__init__.py` 的 `__version__ = "0.6.0"`（**改版本只改这一处**；
+- 版本号：`backend/app/__init__.py` 的 `__version__ = "0.2.0"`（**改版本只改这一处**；
   前端 `frontend/index.html` 顶部的 `const BUILD` 必须跟着改，`test_version.py` 会盯着）
-- 仓库：<https://github.com/whyao56/WingMan>（public），
-  tag `v0.2.0` / `v0.2.1` / `v0.3.0` / `v0.3.1` / `v0.4.0` / `v0.5.0` / `v0.6.0`
-- v0.6.0 Release：<https://github.com/whyao56/WingMan/releases/tag/v0.6.0>
-  附件 `WingMan-0.6.0-win64.zip`（SHA256 见 [releases/v0.6.0.md](releases/v0.6.0.md)）
-- v0.5.0 Release：<https://github.com/whyao56/WingMan/releases/tag/v0.5.0>
-  附件 `WingMan-0.5.0-win64.zip`（221 个文件，33.8 MB，解压后约 77 MB），
-  SHA256 `d96894fe2a41eb4091357c6938ebe87a84cbe0082f790c3ce698aadc93d0b184`
-- **本地 tag 可能是旧的**：这个仓库只在远端有 `v0.3.x` / `v0.4.x` / `v0.5.x` 标签（本地只推过
-  `v0.2.x` 时容易误判成「没发过版」）。查远端用 `git ls-remote --tags origin`，别只看 `git tag`。
+- 仓库：<https://github.com/whyao56/WingMan>（public）
+- **0.1.x 是历史归档，不再提供二进制** —— 只保留发行说明正文。唯一带安装包的是 v0.2.0：
+  - v0.2.0 Release：<https://github.com/whyao56/WingMan/releases/tag/v0.2.0>
+    附件 `WingMan-0.2.0-win64.zip`（SHA256 见 [releases/v0.2.0.md](releases/v0.2.0.md)）
+  - v0.1.0 ~ v0.1.5 Release：只有发行说明，**没有附件**
+- 版本编号对照（现编号 ← 原编号）：`0.1.0 ← 0.2.0`、`0.1.1 ← 0.2.1`、`0.1.2 ← 0.3.0`、
+  `0.1.3 ← 0.3.1`、`0.1.4 ← 0.4.0`、`0.1.5 ← 0.5.0`、**`0.2.0 ← 0.6.0`**。
+  完整的过程记录见 [DEVLOG.md](DEVLOG.md)。
+- **本地 tag 通常不全**：这个仓库只在远端有全量标签。查远端用
+  `git ls-remote --tags origin`，别只看 `git tag`。
 - 检查更新查的是 GitHub Releases API（`routes_admin.py` 的 `/api/update/check`）。
   **查不到时不给 `has_update` 字段**，提示「不等于已是最新」—— 这是刻意的，别改成默认「已是最新」。
-- **历史遗留**：曾用 `git-filter-repo` 重写过历史清掉真人姓名；旧 SHA 仍能被 GitHub 缓存视图取到，
-  彻底清除需删库或联系 Support（**尚未做**，注意现在删库会连带删掉已发布的 Release）。
-  隐私守卫测试：`backend/tests/test_privacy_pseudonyms.py`（扫源码 + `git log -S` 查历史）。
+- **历史遗留**：曾两次重写 git 历史 —— 一次清掉真人姓名，一次清掉**提交元数据里的真实邮箱**
+  （作者/提交者字段不在文件里，但公开仓库的每个提交页都印着）。旧 SHA 仍可能被 GitHub
+  缓存视图取到，彻底清除需删库或联系 Support（**尚未做**，注意现在删库会连带删掉已发布的 Release）。
+  隐私守卫：`backend/tests/test_privacy_pseudonyms.py`（扫源码 + `git log -S` 查历史 +
+  查提交元数据邮箱是不是匿名形态）。
 
 ---
 
-## 12. 0.4.0（对象中心）已落地
+## 12. 0.1.4（对象中心）已落地
 
 > 这一版把 S0（后端打底）→ S1/S2/S3（前端三个方向）→ S4（收尾）一次做完。
 > 计划文档见 [PLAN-对象中心迭代.md](PLAN-对象中心迭代.md)；面向用户的说明见
-> [releases/v0.4.0.md](releases/v0.4.0.md)。
+> [releases/v0.1.4.md](releases/v0.1.4.md)。
 
 ### 12.1 后端
 
@@ -765,7 +768,7 @@ crashpad）。压它需要限制渲染参数，**副作用不可控且收益不�
 
 - **自动采集取密钥在本机仍跑不通**：实测（QQ NT 9.9.20.37051 / 微信 4.1.13.12）按 SQLCipher
   规格穷举 8378 万候选未命中，十六进制候选 QQ 8 个全灭、微信 0 处。
-  0.4.0 改的是「取不到时多快、多如实地说出来」，不是「一定能取到」。
+  0.1.4 改的是「取不到时多快、多如实地说出来」，不是「一定能取到」。
   **半自动仍是最确定能跑通的通道。**
 - 导出不覆盖分析留存（见 §10.3 第 1 条）。
 - 「对象级 / 渠道级事实分别计数、不去重」是**已定的展示规则**（用户确认过）；
@@ -773,9 +776,9 @@ crashpad）。压它需要限制渲染参数，**副作用不可控且收益不�
 
 ---
 
-## 13. 0.5.0（先填后补 + 其他聊天 + 三个静默 Bug）已落地
+## 13. 0.1.5（先填后补 + 其他聊天 + 三个静默 Bug）已落地
 
-> 面向用户的说明见 [releases/v0.5.0.md](releases/v0.5.0.md)；被修掉的三个静默问题见 §10.4。
+> 面向用户的说明见 [releases/v0.1.5.md](releases/v0.1.5.md)；被修掉的三个静默问题见 §10.4。
 
 ### 13.1 后端
 
@@ -835,9 +838,9 @@ crashpad）。压它需要限制渲染参数，**副作用不可控且收益不�
 
 ---
 
-## 14. 0.6.0（关窗死锁 + 内存）已落地
+## 14. 0.2.0（关窗死锁 + 内存）已落地
 
-> 面向用户的说明见 [releases/v0.6.0.md](releases/v0.6.0.md)；成因与实测数据见 §10.5。
+> 面向用户的说明见 [releases/v0.2.0.md](releases/v0.2.0.md)；成因与实测数据见 §10.5。
 
 ### 14.1 后端
 

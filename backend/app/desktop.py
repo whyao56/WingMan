@@ -194,7 +194,7 @@ def _on_closing() -> bool:
     ⚠️ 这个函数跑在 **UI 线程**上（winforms 的 `FormClosing` 事件回调），
     所以这里**绝不允许出现同步的 `evaluate_js`**。
 
-    0.5.0 及以前正是那么写的：本函数直接调 `_ask_frontend_to_choose()`
+    0.1.5 及以前正是那么写的：本函数直接调 `_ask_frontend_to_choose()`
     → `evaluate_js` → 内部 `semaphore.acquire()` 死等一个**必须由 UI 线程
     执行**的回调（`ContinueWith(..., syncContextTaskScheduler)`）。
     而 UI 线程正卡在本函数里，两边互等 —— 后果是**点一下 × 必卡死**：
@@ -268,7 +268,7 @@ def close_action(action: str) -> dict[str, Any]:
 def _ask_server_to_stop() -> None:
     """告诉 uvicorn 收工。
 
-    0.5.0 及以前这里只有一个 `_STOP.set()`，而那个 Event **没有任何消费者** ——
+    0.1.5 及以前这里只有一个 `_STOP.set()`，而那个 Event **没有任何消费者** ——
     注释写着「先让 uvicorn 收工」，实际 uvicorn 根本没收到信号，整个退出完全靠
     1.2 秒后 `os._exit(0)` 硬切。正在写的库随时可能被掐断，WAL 也来不及 checkpoint。
     现在是真的通知到它了。

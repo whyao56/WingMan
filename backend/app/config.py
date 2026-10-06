@@ -108,7 +108,7 @@ KEEP_ALIVE_S: float = 600.0
 
 后果是不对称的：GET 会被浏览器静默重试（所以「检查本机版本」看着是好的），
 而 POST **不重试**，浏览器把 `net::ERR_CONNECTION_CLOSED` 原样抛给 JS，
-界面上就出现一句英文 `Failed to fetch`。实测复现（v0.3.0 桌面版，默认配置）：
+界面上就出现一句英文 `Failed to fetch`。实测复现（v0.1.2 桌面版，默认配置）：
 
     第一次 GET → 200 OK（连接进入 keep-alive）
     空闲 6 秒后在**同一条连接**上发 POST → ConnectionAbortedError [WinError 10053]

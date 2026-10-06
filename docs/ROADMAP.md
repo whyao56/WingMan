@@ -25,9 +25,9 @@
 | ✅ | **采集**：客户端探测 + 版本矩阵 + SQLCipher 解密 + 认列 + 增量游标 | `app/collect/` |
 | ✅ | **半自动采集**：剪贴板监听 → 归属判定 → 挂起确认 → 落库 | `app/collect/semi.py`、`clipboard.py` |
 | ✅ | **以人为中心**：`persons` 表 + 跨渠道归并/合并 + 按人取消息 | `store.py`、`routes_persons.py` |
-| ✅ | **0.4.0「对象中心」界面**：左栏两级、对象页 5 Tab、指挥台多渠道合并、聊天记录二次编辑、历史留存 | `frontend/index.html`、`app/api/` |
-| ✅ | **0.5.0「先填后补」**：对象可预建（只填名字）、右键菜单、对象级 AI 整理画像（默认不吃手写稿）、新增「其他聊天」渠道 | `frontend/index.html`、`memory/profiler.py`、`store.py` |
-| ✅ | **0.6.0「关窗不再卡死 + 瘦身」**：修掉点 × 时 UI 线程死锁、退出让 uvicorn 真的收工、消除 `-m` 启动的双份状态；限掉 OpenBLAS 线程池（提交内存 −87%） | `app/desktop.py`、`app/__init__.py` |
+| ✅ | **0.1.4「对象中心」界面**：左栏两级、对象页 5 Tab、指挥台多渠道合并、聊天记录二次编辑、历史留存 | `frontend/index.html`、`app/api/` |
+| ✅ | **0.1.5「先填后补」**：对象可预建（只填名字）、右键菜单、对象级 AI 整理画像（默认不吃手写稿）、新增「其他聊天」渠道 | `frontend/index.html`、`memory/profiler.py`、`store.py` |
+| ✅ | **0.2.0「关窗不再卡死 + 瘦身」**：修掉点 × 时 UI 线程死锁、退出让 uvicorn 真的收工、消除 `-m` 启动的双份状态；限掉 OpenBLAS 线程池（提交内存 −87%） | `app/desktop.py`、`app/__init__.py` |
 
 ---
 
@@ -35,7 +35,7 @@
 
 目标：拿真实数据跑一周，你能真的靠它聊天。
 
-### 1.1 以人为中心的记忆重构 ✅ 0.4.0 已完成主干
+### 1.1 以人为中心的记忆重构 ✅ 0.1.4 已完成主干
 
 目标：把记忆从「按 chat 存」改成「按人存」—— **一个人**下面挂他的 QQ 聊天、
 微信聊天、通话、当面聊天，不论从哪个入口进来，都汇进同一个人的永久记忆。
@@ -44,10 +44,10 @@
 |---|---|---|
 | ✅ 人物实体与合并 | 把同一个人跨平台的身份（QQ 号 / 微信号 / 通话对手 / 手动新建）归并成一个「人」，作为记忆主键 | `store.py` 的 `persons`、`routes_persons.py` |
 | ✅ 多渠道时间线 | QQ / 微信 / 通话 / 当面聊天统一按 `(时间, 渠道, 说话人, 文本)` 落进同一个人的时间线 —— QQ 与微信两条渠道已通，通话/当面等新渠道接上时不用改结构 | `store.py`（`chats.channel`）、`routes_persons.py` |
-| ✅ 界面以人为中心 | 左栏两级（对象 → 渠道）、对象页 5 Tab、指挥台可勾多个渠道并**合并上下文**（0.4.0） | `frontend/index.html`、`engine/context.py` |
-| ✅ 对象级事实与画像 | 事实与人物设定提到对象级；事实按对象级/渠道级**分组、分别计数不去重**（0.4.0） | `store.py`（`facts.person_id`、`person_personas`） |
-| ✅ 整体分析 | 对一个人跨渠道的历史做整体分析（0.4.0 的 `/persons/{id}/suggest`），不再只看单次会话 | `engine/pipeline.py`、`api/routes_engine.py` |
-| ✅ 阶段目标 | 每段关系可设当前目标，建议围绕目标给（0.4.0 放进对象页「记忆」Tab） | `person_personas.stage` / `goal` |
+| ✅ 界面以人为中心 | 左栏两级（对象 → 渠道）、对象页 5 Tab、指挥台可勾多个渠道并**合并上下文**（0.1.4） | `frontend/index.html`、`engine/context.py` |
+| ✅ 对象级事实与画像 | 事实与人物设定提到对象级；事实按对象级/渠道级**分组、分别计数不去重**（0.1.4） | `store.py`（`facts.person_id`、`person_personas`） |
+| ✅ 整体分析 | 对一个人跨渠道的历史做整体分析（0.1.4 的 `/persons/{id}/suggest`），不再只看单次会话 | `engine/pipeline.py`、`api/routes_engine.py` |
+| ✅ 阶段目标 | 每段关系可设当前目标，建议围绕目标给（0.1.4 放进对象页「记忆」Tab） | `person_personas.stage` / `goal` |
 | ⬜ 关系定位 | 目前只有人工选的「关系阶段」，还没有让模型判断「现在处于什么阶段」 | `engine/` |
 
 > 通话只是这条链路的其中一个数据来源；主干已经跑通，将来把通话接回来会顺很多。
@@ -56,8 +56,8 @@
 
 | 事项 | 说明 | 文件 |
 |---|---|---|
-| ✅ 拖放与多文件 | 0.4.0：窗口任意位置拖入 + 一次选多个文件，**逐个导入**，一个失败不拖垮后面几个 | `frontend/index.html`、`api/routes_data.py` |
-| ✅ 多会话合并 | 0.4.0 用「对象 → 渠道」的结构解决：同一个人跨平台的记录不再需要合并成同一个 chat，而是在**对象**这一层统一看待 | `store.py`、`engine/context.py` |
+| ✅ 拖放与多文件 | 0.1.4：窗口任意位置拖入 + 一次选多个文件，**逐个导入**，一个失败不拖垮后面几个 | `frontend/index.html`、`api/routes_data.py` |
+| ✅ 多会话合并 | 0.1.4 用「对象 → 渠道」的结构解决：同一个人跨平台的记录不再需要合并成同一个 chat，而是在**对象**这一层统一看待 | `store.py`、`engine/context.py` |
 | ⬜ 增量导入 | 记录已导入位置，重复导入只加新消息（现在靠 `UNIQUE` 去重，会重复解析整个文件） | `adapters/registry.py` |
 | ⬜ 大文件流式解析 | 现在整文件读入内存，改成生成器逐行 | `adapters/*.py` |
 | ⬜ 表情包/图片/语音消息处理 | 现在只存文本，`msg_type` 已预留 | `adapters/base.py` |
@@ -67,7 +67,7 @@
 
 | 事项 | 说明 | 文件 |
 |---|---|---|
-| ✅ 事实人工校对 | 0.4.0：对象页「记忆」Tab 可逐条删除事实；「聊天记录」Tab 可改角色/时间/发送者、批量删除、手动加一条 | `frontend/index.html`、`routes_data.py` |
+| ✅ 事实人工校对 | 0.1.4：对象页「记忆」Tab 可逐条删除事实；「聊天记录」Tab 可改角色/时间/发送者、批量删除、手动加一条 | `frontend/index.html`、`routes_data.py` |
 | ⬜ 事实冲突消解 | 「她说喜欢猫」和「她说猫毛过敏」要能识别并保留时间序 | `memory/profiler.py` |
 | ⬜ 定期自动摘要 | 后台任务，每周为活跃对象生成时间线 | 新增 `jobs/` |
 | ⬜ 检索重排 | 召回 50 条后用模型 rerank 到 15 条 | `memory/retriever.py` |
@@ -79,7 +79,7 @@
 | ⬜ Prompt 调优 | 拿真实 20 组样本，逐条看输出质量（**当前最大的质量缺口**） | `engine/prompts.py` |
 | ⬜ few-shot 注入 | 从历史里自动抽 5 段对方的话做风格锚点 | `engine/prompts.py` |
 | ⬜ 打分权重调参 | 收集"我实际选了哪条"，反推权重 | `engine/suggestor.py` |
-| ✅ 结果落库 | 0.4.0：每次分析落 `engine_runs`（含当时用的渠道、判断、建议、推演），推演落 `sim_runs`，可在对象页「历史」回看 | `store.py`、`frontend/index.html` |
+| ✅ 结果落库 | 0.1.4：每次分析落 `engine_runs`（含当时用的渠道、判断、建议、推演），推演落 `sim_runs`，可在对象页「历史」回看 | `store.py`、`frontend/index.html` |
 | ⬜ 反馈闭环 | 在上面基础上记录「我最后实际选了哪条」，反推权重 | `store.py`、`engine/suggestor.py` |
 
 ---

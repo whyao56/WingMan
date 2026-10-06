@@ -12,7 +12,7 @@ uvicorn 的 `timeout_keep_alive` 默认是 **5 秒** —— 一条连接空闲�
 而前端那时候是 `catch (e) { toast(e.message, "err") }`，于是界面上显示的就是
 那句英文 `Failed to fetch`。采集页上所有动作都是 POST —— 所以只有采集「坏了」。
 
-实测复现（v0.3.0 桌面版，默认配置）：
+实测复现（v0.1.2 桌面版，默认配置）：
 
     第一次 GET                         → HTTP/1.1 200 OK（连接进入 keep-alive）
     空闲 6 秒后在同一连接上发 POST     → ConnectionAbortedError [WinError 10053]

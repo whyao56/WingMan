@@ -181,7 +181,7 @@
 - **检查更新**：调 `GET https://api.github.com/repos/whyao56/WingMan/releases/latest`，
   与 `__version__` 做 semver 比较；显示「有新版本 vX.Y.Z + 下载链接」或「已是最新」。
   - **坑**：无网/被墙/代理环境下必须优雅降级 —— 超时 5 秒，失败文案是「**没检查成功**（原因）」，
-    **绝不能**显示成「已是最新」（这是两件完全不同的事，和 0.3.1 修 `Failed to fetch` 是同一个教训）。
+    **绝不能**显示成「已是最新」（这是两件完全不同的事，和 0.1.3 修 `Failed to fetch` 是同一个教训）。
   - **不做**自动下载/静默安装。只给链接。
 - **项目地址**：<https://github.com/whyao56/WingMan>
 - 许可证、致谢（PyInstaller / FastAPI / pywebview 等）
@@ -196,7 +196,7 @@
 - 删除导航项 `data-v="voice"`（`index.html:422`）与 `#view-voice`（700-819）。
 - 把其中的**有价值内容**（「已经想清楚的思路」那 5 条 + 「还是想要这个功能？」）压缩成
   「关于 → 路线图」一节或 `docs/ROADMAP.md`，**不要**把整页原样搬过去（那是另一种冗余）。
-- **注意**：语音转写后端已于 0.2.1 撤下（`acff853`），`docs/COMPLIANCE.md` 与
+- **注意**：语音转写后端已于 0.1.1 撤下（`acff853`），`docs/COMPLIANCE.md` 与
   `README.md` 里有相关表述 —— 一起核对，别留下「通话页还在」的描述。CSS 里 `.subs/.cap/.meter`（231-243）随之清理。
 
 **验收**：导航里没有「通话」；全仓 grep `view-voice` / `data-v="voice"` 无残留；文档里没有「通话功能」的失实描述。
@@ -406,15 +406,15 @@
 
 ### S4 · 收尾
 去冗余复查（对照需求 10 的表格逐条确认）、文档（ARCHITECTURE 概念映射 / TROUBLESHOOTING 新增坑 /
-CHANGELOG / ROADMAP / README 界面截图与导航描述）、版本号 → **0.4.0**、
-`docs/releases/v0.4.0.md`、全量测试、`scripts/preflight.py`。
+CHANGELOG / ROADMAP / README 界面截图与导航描述）、版本号 → **0.1.4**、
+`docs/releases/v0.1.4.md`、全量测试、`scripts/preflight.py`。
 
 ---
 
 ## 3. 给执行窗口的几条硬约束
 
 1. **不确定就问**：需求里有模糊处（例如「对象」是否允许多人合并成一个、多选渠道的上下文预算上限）先问用户，不要自行发明规则。
-2. **守卫式测试**：新增测试要能在**旧代码上失败**（项目已有这个标准，见 `test_http_keepalive.py` 的注释与 0.3.1 的教训）。
+2. **守卫式测试**：新增测试要能在**旧代码上失败**（项目已有这个标准，见 `test_http_keepalive.py` 的注释与 0.1.3 的教训）。
 3. **隐私红线不变**：真人姓名已从代码与 git 历史清除，`backend/tests/test_privacy_pseudonyms.py` 是守卫；
    新代码、新测试、新文档里**不要**引入真实姓名（用「小鹿」）。历史输出（需求 11）是隐私数据，进 `DATA_DIR`，导出/删除要覆盖。
 4. **不要动合规边界**：采集只读本机、用户自己的数据；不新增任何绕过权限的行为。

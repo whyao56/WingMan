@@ -370,7 +370,7 @@ def test_desktop_close_background_without_a_window_does_not_kill_the_server() ->
 def test_desktop_close_quit_actually_tells_the_server_to_stop() -> None:
     """「关闭程序」要**真的**通知 uvicorn 收工，不能只靠定时强退。
 
-    0.5.0 及以前这里只有一个 `_STOP.set()`，而那个 Event **没有任何消费者** ——
+    0.1.5 及以前这里只有一个 `_STOP.set()`，而那个 Event **没有任何消费者** ——
     注释里写着「先让 uvicorn 收工」，实际它压根没收到信号：整个退出完全靠
     1.2 秒后的 `os._exit(0)` 硬切，正在写的库随时可能被掐断。
     """
@@ -407,7 +407,7 @@ def test_desktop_close_quit_actually_tells_the_server_to_stop() -> None:
 def test_the_close_hook_never_blocks_on_evaluate_js() -> None:
     """⚠️ 核心守卫：关窗钩子里**不许**同步调用 evaluate_js。
 
-    这就是 0.5.0「点 × 必卡死、Windows 提示未响应」的成因，形状很特别：
+    这就是 0.1.5「点 × 必卡死、Windows 提示未响应」的成因，形状很特别：
     `_on_closing` 跑在 UI 线程（winforms 的 `FormClosing`）上，而
     `evaluate_js` 内部是 `semaphore.acquire()` 死等一个**只能由 UI 线程执行**
     的回调 —— UI 线程正卡在钩子里，两边互等，CPU 一个 tick 都不动。
@@ -627,7 +627,7 @@ def test_version_tuple_orders_numerically_not_lexically() -> None:
     from app.api.routes_admin import _ver_tuple
 
     assert _ver_tuple("0.10.0") > _ver_tuple("0.9.0")
-    assert _ver_tuple("v0.4.0") == _ver_tuple("0.4.0")
+    assert _ver_tuple("v0.1.4") == _ver_tuple("0.1.4")
     assert _ver_tuple("1.0") > _ver_tuple("0.9.9")
     assert _ver_tuple("") == (0,)
 
