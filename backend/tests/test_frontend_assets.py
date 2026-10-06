@@ -183,6 +183,93 @@ def test_no_calls_to_undefined_functions(html: str) -> None:
     assert not unknown, f"这些函数被调用了但没人定义：{unknown}"
 
 
+def test_version_mismatch_can_be_detected_by_the_page_itself(html: str) -> None:
+    """界面必须能自己发现「我连的那个进程不是我这个版本」。
+
+    背景是一个真实的误判：升级完之后旧进程还在跑，页面是新的、版本号是旧的，
+    用户以为「你把 0.4.0 写成 0.3.1 了」。**版本号没写错，是进程没退干净** ——
+    但界面自己不说，用户就只能靠猜。
+
+    三件事缺一不可：一个自带的版本号、一处比对、一个能显示结论的容器。
+    少任何一件，这段防呆都是死的（而且死得无声无息）。
+    """
+    script = html[html.index("<script>"):]
+    assert re.search(r'^const BUILD\s*=\s*"[0-9.]+"', html, re.MULTILINE), \
+        "前端没有 `const BUILD`，就没法判断自己和服务是不是同一个版本"
+    assert "function checkBuildMatches" in script, "没有比对函数"
+    assert re.search(r"await checkBuildMatches\(", script), \
+        "比对函数定义了却没人调用 —— 那条横幅永远不会出现"
+    assert 'id="ver-warn"' in html, "没有放结论的地方"
+
+
+def test_frontend_collect_clients_stay_within_the_backend_allowlist(html: str) -> None:
+    """半自动采集的客户端下拉，不能出现后端不认的值。
+
+    这是一条**跨层**守卫：前端 `<option value="x">` 和后端 `SEMI_CLIENTS` 是
+    两处独立维护的名单，漂移之后的表现是「选完点开始监听 → 404 不认识这个客户端」，
+    而且只在选到那一项时才炸。加「其他聊天」正好踩在这个接缝上，所以钉住它。
+    """
+    from app.api.routes_collect import SEMI_CLIENTS
+
+    m = re.search(r'<select id="sc-client">(.*?)</select>', html, re.S)
+    assert m, "找不到半自动采集的客户端下拉"
+    options = set(re.findall(r'<option value="([^"]+)"', m.group(1)))
+    assert options, "这个下拉里一个选项都没解析到，说明匹配规则失效了"
+    assert options <= set(SEMI_CLIENTS), (
+        f"前端提供了后端不认的客户端：{sorted(options - set(SEMI_CLIENTS))}"
+    )
+    assert "other" in options, "「其他聊天」没有出现在半自动采集的下拉里"
+
+
+def test_platform_selects_only_offer_platforms_the_backend_knows(html: str) -> None:
+    """界面上所有「选平台/来源」的下拉，取值都要在后端的平台表里。
+
+    又一条跨层守卫，理由和上面那条一样：两处独立维护的名单迟早分叉，
+    而分叉的表现是「选中某一项之后才炸」——正常点测很难覆盖到。
+
+    「粘贴文本」那个下拉是这一轮新加的：粘贴过来的内容**看起来**像什么
+    （适配器按文本排布猜的）和它**实际是在哪说的**（只有用户知道）不是一回事，
+    所以要给用户一个说清楚的机会。它的取值同样不能被后端当成陌生平台。
+    """
+    from app.store import _CHANNEL_BY_PLATFORM
+
+    known = set(_CHANNEL_BY_PLATFORM)
+
+    # 粘贴框的选项是静态 HTML，直接读；空值表示「自动判断」，不是平台
+    m = re.search(r'<select id="paste-platform"[^>]*>(.*?)</select>', html, re.S)
+    assert m, "找不到粘贴框的「来源」下拉"
+    paste_values = {v for v in re.findall(r'<option value="([^"]*)"', m.group(1)) if v}
+    assert paste_values, "这个下拉一个选项都没解析到，匹配规则可能失效了"
+    assert not (paste_values - known), (
+        f"paste-platform 提供了后端不认的平台：{sorted(paste_values - known)}"
+        f"（后端认得：{sorted(known)}）"
+    )
+
+    # 渠道设置的下拉是 JS 用常量表拼的（要处理「保持原样」那一项），改从常量表读
+    m = re.search(r"const CHAT_PLATFORMS = \[(.*?)\];", html, re.S)
+    assert m, "找不到渠道设置的平台常量表 CHAT_PLATFORMS"
+    chat_values = set(re.findall(r'\[\s*"([^"]+)"\s*,', m.group(1)))
+    assert chat_values, "CHAT_PLATFORMS 一个值都没解析到，匹配规则可能失效了"
+    assert not (chat_values - known), (
+        f"CHAT_PLATFORMS 提供了后端不认的平台：{sorted(chat_values - known)}"
+        f"（后端认得：{sorted(known)}）"
+    )
+
+
+def test_paste_box_offers_a_way_to_say_where_it_came_from(html: str) -> None:
+    """粘贴框必须让用户能指定来源。
+
+    粘贴过来的文本只能靠排布猜来源，而别的聊天工具导出的文本常常长成
+    「微信的样子」。用户是唯一知道「这话是在哪说的」的人 ——
+    不给他这个入口，机器就只能猜，猜错了还会静默贴上微信的标签。
+    """
+    m = re.search(r'<select id="paste-platform"[^>]*>(.*?)</select>', html, re.S)
+    assert m, "粘贴框没有「来源」下拉，用户就没法纠正猜错的来源"
+    values = set(re.findall(r'<option value="([^"]+)"', m.group(1)))
+    assert "other" in values, "「来源」下拉里没有「其他聊天」"
+    assert re.search(r"来源：自动判断", m.group(1)), "缺少「自动判断」这一项（要能啥都不选）"
+
+
 def test_presets_do_not_use_retired_deepseek_models(html: str) -> None:
     """预设里不能出现已下线的模型名。
 

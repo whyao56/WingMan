@@ -101,6 +101,26 @@ def test_no_stale_hardcoded_download_links(rel: str) -> None:
     assert not stale, f"{rel} 里有过期下载链接：v{', v'.join(sorted(stale))}（当前 v{v}）"
 
 
+def test_frontend_build_stamp_matches_the_backend_version() -> None:
+    """前端 `BUILD` 常量必须等于 `backend/app/__init__.py` 的 `__version__`。
+
+    这是「界面版本 vs 本机服务版本」那道防呆的**依赖条件**：装的是同一个程序时
+    两边必须一致，不一致才说明「有个旧进程还在跑」。如果这个常量长期没人改，
+    这道检查就会变成天天误报的噪音，用户很快学会无视它 —— 那还不如没有。
+
+    这个常量存在于前端的理由见 `frontend/index.html` 里 `const BUILD` 上方的注释：
+    前端是**每次从磁盘现读**的，服务却是一个一直在跑的进程，两者可以来自不同版本。
+    """
+    v = _version()
+    text = _read("frontend/index.html")
+    m = re.search(r'^const BUILD\s*=\s*"([^"]+)"', text, re.MULTILINE)
+    assert m, "前端里找不到 `const BUILD = \"x.y.z\";` —— 版本防呆就失效了"
+    assert m.group(1) == v, (
+        f"前端 BUILD 是 {m.group(1)}，后端 __version__ 是 {v} —— "
+        "改版本号时这两处必须一起改"
+    )
+
+
 def _docs_mentioning_selfcheck() -> list[str]:
     rels = ["README.md", "scripts/make_release.py", "docs/DESKTOP.md",
             "docs/TROUBLESHOOTING.md"]

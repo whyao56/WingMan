@@ -18,7 +18,7 @@ from typing import Any
 from ..schemas import AdapterProbe, ImportPreview, ImportResult, Msg, ParsedMsg
 from ..store import Store
 from .base import ENCODINGS, ChatSourceAdapter, clean_sender
-from .generic import GenericAdapter
+from .generic import DEFAULT_MAP, GenericAdapter
 from .qq import QQAdapter
 from .wechat import WeChatAdapter
 
@@ -80,7 +80,55 @@ def detect(path: Path, forced: str | None = None) -> list[AdapterProbe]:
 def _pick(probes: list[AdapterProbe]) -> ChatSourceAdapter:
     if not probes:
         return GenericAdapter()
-    return get_adapter(probes[0].name)
+    best = probes[0]
+    # 一个都不像（最高分 0）时用 `generic` 兜底，而不是听凭注册顺序落到 QQ 上。
+    # 落到 QQ 的后果不只是「猜错」，而是**提示词也错**：用户会看到
+    # 「「QQ 聊天记录」读不了这份内容」—— 可问题根本不在于它是 QQ，
+    # 而 generic 那句会告诉他能改走剪贴板。选错适配器会连带着说错话。
+    if best.confidence <= 0:
+        return GenericAdapter()
+    return get_adapter(best.name)
+
+
+def _guess_paste_suffix(text: str) -> str:
+    """从粘贴内容猜一个后缀，让适配器能进对分支。
+
+    粘贴过来的东西**没有文件名**，而 `generic` 适配器是靠扩展名分支的
+    （只有 `.json` / `.csv` / `.tsv` 才走结构化解析）。一律按 `.txt` 落盘的话，
+    用户粘一段 JSON 或一张表进来会一条都读不出来 —— 数据他明明给全了。
+
+    判断刻意保守，拿不准就退回 `.txt`（交给行式解析器）：
+
+    - 首个非空字符是 `[` / `{` → `.json`
+    - 首行能切出 ≥2 列，且**表头里出现了已知列名**（时间 / 发送者 / 内容…），
+      或者**每一行的列数都一样**（表格的形状，散文几乎不可能满足）→ `.csv` / `.tsv`
+    - 其余 → `.txt`
+    """
+    head = text.lstrip("\ufeff \t\r\n")
+    if not head:
+        return ".txt"
+    if head[0] in ("[", "{"):
+        return ".json"
+
+    lines = [ln for ln in head.splitlines() if ln.strip()][:20]
+    first = lines[0]
+    delim = "\t" if "\t" in first else ("," if "," in first else "")
+    if not delim:
+        return ".txt"
+
+    def cells(line: str) -> list[str]:
+        return [c.strip().lower() for c in line.split(delim)]
+
+    header = cells(first)
+    if len(header) < 2:
+        return ".txt"
+    known = {c.lower() for column_names in DEFAULT_MAP.values() for c in column_names}
+    tabular = bool(set(header) & known) or all(
+        len(cells(ln)) == len(header) for ln in lines
+    )
+    if not tabular:
+        return ".txt"
+    return ".tsv" if delim == "\t" else ".csv"
 
 
 # ---------------------------------------------------------------- 角色判定
@@ -218,7 +266,18 @@ def import_file(
     chat_name: str | None = None,
     adapter_name: str | None = None,
     options: dict[str, Any] | None = None,
+    platform: str | None = None,
 ) -> ImportResult:
+    """把一份文件导入成一段渠道记录。
+
+    `platform` 是**渠道来源**的显式声明（qq / wechat / other / call / offline），
+    不传就跟着适配器走。
+
+    为什么需要它：适配器认的是**文件长什么样**，用户知道的是**话是在哪说的**。
+    这两件事不等价 —— 一份 Telegram 导出的文本很可能被文本排布识别成「微信」，
+    于是明明是「其他聊天」的内容被贴上微信的标签。机器猜不出来的事就别猜，
+    让用户在一开始说一句，比事后在渠道设置里返工便宜得多。
+    """
     path = Path(path)
     probes = detect(path, forced=adapter_name)
     adapter = _pick(probes)
@@ -234,15 +293,20 @@ def import_file(
     parsed = adapter.parse(path, opts)
     warnings: list[str] = []
     me_name, peer_name, role_warnings = _resolve_roles(parsed, opts)
-    warnings.extend(role_warnings)
+    # 一条都没解析出来时，`_resolve_roles` 也会报一句「没解析出任何消息」——
+    # 但那是它视角下的话（不知道用的是哪个适配器）。下面 pending 的那句会点名
+    # 「这个适配器吃什么、另一条路怎么走」，两句一起出现只会互相稀释。
+    if parsed:
+        warnings.extend(role_warnings)
 
     # 优先级：用户显式传入 > 文件元信息 > 自动推断
     peer_name = clean_sender(str(opts.get("peer_name") or "")) or meta.get("peer_name") or peer_name
     me_name = clean_sender(str(opts.get("me_name") or "")) or me_name
     name = (chat_name or "").strip() or peer_name or path.stem or "未命名会话"
 
-    chat_id = make_chat_id(adapter.platform, name)
-    store.upsert_chat(chat_id, adapter.platform, name, peer_name, me_name)
+    plat = (str(platform or "").strip() or adapter.platform) or "other"
+    chat_id = make_chat_id(plat, name)
+    store.upsert_chat(chat_id, plat, name, peer_name, me_name)
 
     msgs: list[Msg] = []
     for p in parsed:
@@ -251,7 +315,7 @@ def import_file(
         if sender != me_name and peer_name and sender != peer_name:
             role = "peer"  # 群聊里的第三人，暂按对方处理
         msgs.append(Msg(
-            chat_id=chat_id, platform=adapter.platform, sender=sender, role=role,
+            chat_id=chat_id, platform=plat, sender=sender, role=role,
             ts=p.ts, text=p.text, msg_type=p.msg_type,
         ))
 
@@ -260,14 +324,26 @@ def import_file(
         first, last = 0, 0
     inserted, skipped = store.insert_messages(msgs)
     if not msgs:
-        warnings.append("解析结果为空：可能是格式不匹配，或文件被加密/压缩过。")
+        # 「解析结果为空」是用户最容易停在这里的地方：他明明把内容贴进来了，
+        # 界面却说一条都没读到，而旧文案只说「格式不匹配」—— 等于让他自己猜。
+        # 所以这里点名**这个适配器到底吃什么**，并给出另一条确定能走通的路。
+        warnings.append(
+            f"没解析出消息：「{adapter.display_name}」读不了这份内容。"
+            "它认的是结构化格式（要有时间、发送者、内容三列 / 三个字段）；"
+            "要是手里只有整段文字，改走「采集 → 半自动（剪贴板）」："
+            "在客户端里选中聊天内容按 Ctrl+C，它接到什么就存什么。"
+        )
     if not peer_name:
-        warnings.append("未能确定对方昵称，请在后端或前端补充，否则画像会缺少主语。")
+        warnings.append("未能确定对方昵称，可以在对象或渠道设置里补上，否则画像会缺少主语。")
 
+    # 渠道名从库里读回来，而不是在这里再算一遍 —— 映射规则只有 store 那一份，
+    # 复制一份出来就等着两边慢慢分叉（`generic → other` 就是这么分叉过的一次）。
+    info = store.get_chat(chat_id)
     return ImportResult(
         chat_id=chat_id, adapter=adapter.name, parsed=len(parsed),
         inserted=inserted, skipped=skipped,
         speakers=adapter.speakers(parsed), warnings=warnings,
+        platform=plat, channel=(info.channel if info else ""),
     )
 
 
@@ -276,17 +352,30 @@ def import_text(
     text: str,
     *,
     chat_name: str,
-    adapter_name: str = "generic",
+    adapter_name: str = "auto",
     options: dict[str, Any] | None = None,
-    suffix: str = ".txt",
+    platform: str | None = None,
+    suffix: str | None = None,
 ) -> ImportResult:
-    """把用户直接粘进来的文本当记录导入。内部写临时文件复用同一条解析链路。"""
+    """把用户直接粘进来的文本当记录导入。内部写临时文件复用同一条解析链路。
+
+    默认适配器是 `auto`（交给嗅探决定），**不是 `generic`**。这里踩过一个坑：
+    粘贴框旁边写着的示范格式是「`2024-01-01 12:00:00 昵称` + 内容」，
+    而 `generic` 只认 JSON / CSV —— 照着自己界面上的说明粘贴，结果一条都读不出来。
+    界面上写的格式必须真的能用，所以默认改成让嗅探去认。
+
+    后缀也从内容推（见 `_guess_paste_suffix`）：`generic` 是靠扩展名分支的
+    （`.json` 才会走 JSON 解析），一律写成 `.txt` 的话，用户粘一段 JSON
+    或一张 CSV 进来同样读不出来。
+    """
+    if suffix is None:
+        suffix = _guess_paste_suffix(text)
     tmp = Path(tempfile.gettempdir()) / f"wingman_paste_{hashlib.md5(text.encode('utf-8', 'ignore')).hexdigest()[:8]}{suffix}"
     tmp.write_text(text, encoding="utf-8")
     try:
         return import_file(
             store, tmp, chat_name=chat_name,
-            adapter_name=adapter_name, options=options,
+            adapter_name=adapter_name, options=options, platform=platform,
         )
     finally:
         try:

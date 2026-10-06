@@ -61,6 +61,7 @@ PROMPT_TAIL_LINES: tuple[str, ...] = (
     "请给出 4 条候选回复。",
     "请推演发出这句话之后，对话会怎么走。",
     "请综合出画像。",
+    "请在此基础上完善画像。用户已经写好的内容要保留，只做补充与润色。",
 )
 
 
@@ -389,6 +390,7 @@ class MockProvider(ChatProvider):
             "SIMULATE": self._simulate,
             "FACTS": self._facts,
             "PROFILE": self._profile,
+            "PERSON_PROFILE": self._person_profile,
         }.get(tag)
         if handler is None:
             raise LLMError(
@@ -606,4 +608,57 @@ class MockProvider(ChatProvider):
             "taboos": "、".join(taboos) if taboos else "暂未识别到明确雷区",
             "stage": "熟悉期",
             "my_style": "（Mock 模式无法推断你的说话风格，接入真实模型后会自动总结。）",
+        }
+
+    def _person_profile(self, user: str) -> dict[str, Any]:
+        """对象级画像整理（跨渠道）。
+
+        演示引擎也要把**最关键的那条语义**演对：**用户手写的草稿要保留**。
+        真模型那边靠 prompt 约束，这里靠代码照做 —— 如果演示模式下把用户打的
+        「雷区：提她前任」冲掉，用户就再也不敢按这个按钮了，而那正是这个功能
+        存在的意义。所以这里对 `- 字段：值` 逐行读回草稿，原样带出去。
+        """
+        def draft(label: str) -> str:
+            m = re.search(rf"^-\s*{re.escape(label)}：(.*)$", user, re.M)
+            if not m:
+                return ""
+            v = strip_prompt_tail(m.group(1)).strip()
+            return "" if v in ("（未设定）", "（无）", "（还没有）") else v
+
+        cur_goal = draft("目标")
+        cur_stage = draft("关系阶段")
+        cur_taboos = draft("雷区")
+        cur_style = draft("我平时的说话风格")
+        cur_profile = draft("对方的画像（旧版，可被改写）")
+        notes = draft("其它备注")
+
+        facts = extract_facts_from_context(user)
+        likes = [f["value"] for f in facts if f["key"] in ("喜欢", "爱吃", "最近在学")]
+        dislikes = [f["value"] for f in facts if f["key"] == "讨厌"]
+        pets = [f["value"] for f in facts if "宠物" in f["key"]]
+
+        bits: list[str] = []
+        if cur_profile:
+            bits.append(f"【沿用你写下的】{cur_profile}")
+        if likes:
+            bits.append(f"从对话里新看到：偏好{'、'.join(likes[:5])}。")
+        if dislikes:
+            bits.append(f"明确说过不喜欢：{'、'.join(dislikes[:4])}。")
+        if pets:
+            bits.append(f"养了宠物：{'、'.join(pets[:3])}。")
+        if notes:
+            bits.append(f"结合你的备注：{notes}")
+        if not bits:
+            bits.append("这份记录里还没看出稳定的偏好，先按你写的来。")
+        bits.append("（Mock 引擎按本地规则整理，跨渠道差异需要真实模型才看得出来。）")
+
+        taboos = cur_taboos
+        if not taboos and dislikes:
+            taboos = "、".join(dislikes[:2])
+        return {
+            "peer_profile": "".join(bits),
+            "taboos": taboos or "暂未识别到明确雷区",
+            "stage": cur_stage or "熟悉期",
+            "my_style": cur_style or "（Mock 模式无法推断你的说话风格，接入真实模型后会自动总结。）",
+            "goal": cur_goal,
         }

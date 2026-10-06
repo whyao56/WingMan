@@ -264,6 +264,15 @@ def _request_from(payload: dict[str, Any], force_dry: bool = False) -> pipe.Coll
 # ================================================================ 半自动采集
 
 
+# 半自动采集能收哪些来源。
+#
+# **刻意不复用 `SUPPORT_MATRIX`**：那张表回答的是「能不能自动读这个客户端的加密库」，
+# QQ/微信 之外的东西自动采不了，但半自动（剪贴板）采得了 —— 你复制什么它接什么。
+# 若沿用同一张表当白名单，就等于「其他聊天」这个渠道被自动采集的短板连坐了，
+# 而那正是用户明确要求补上的一类。
+SEMI_CLIENTS: tuple[str, ...] = ("qq", "wechat", "wechat3", "other")
+
+
 @router.post("/semi/start")
 async def semi_start(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
     """开启剪贴板监听。
@@ -273,8 +282,11 @@ async def semi_start(payload: dict[str, Any] = Body(default={})) -> dict[str, An
     """
     ctx = get_ctx()
     client = str(payload.get("client") or "").strip()
-    if client not in SUPPORT_MATRIX:
-        raise HTTPException(status_code=404, detail=f"不认识这个客户端：{client}")
+    if client not in SEMI_CLIENTS:
+        raise HTTPException(
+            status_code=404,
+            detail=f"不认识这个客户端：{client}（可选：{'、'.join(SEMI_CLIENTS)}）",
+        )
     peer_name = str(payload.get("peer_name") or "").strip()
     person_id = str(payload.get("person_id") or "").strip()
     if person_id and ctx.store.get_person(person_id) is None:

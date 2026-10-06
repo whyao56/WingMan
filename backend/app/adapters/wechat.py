@@ -26,6 +26,7 @@ from .base import (
     clean_sender,
     guess_msg_type,
     is_noise,
+    iter_blocks,
     read_text,
 )
 

@@ -290,18 +290,45 @@ _MESSAGE_EDITABLE_FIELDS = ("sender", "role", "text", "ts", "ts_source")
 # 渠道：这个人的记录是从哪儿来的。渠道决定界面上的分组，也决定
 # 「按时间合并看」时怎么标注来源。platform 是数据格式，channel 是人的体感 ——
 # 用户想的是「我们的微信聊天」，不是「platform=wechat 的数据集」。
+#
+# `other`：除 QQ / 微信以外的聊天（Telegram、钉钉、短信、贴吧、游戏内私聊…）。
+# 它们是**同一个位置**，不是「未知」—— 用户明确说过「其他聊天也算一类」。
+# `generic` 是导入适配器的名字（「通用 JSON / CSV」），作为渠道它只是历史遗留的
+# 写法，统一归到 `other`，免得列表里出现「通用」这种不懂是什么的标签。
 _CHANNEL_BY_PLATFORM = {
     "qq": "qq",
     "wechat": "wechat",
+    "other": "other",
+    "generic": "other",
     "call": "call",
     "voice": "call",
     "offline": "offline",
     "face": "offline",
 }
 
-
 def _channel_from_platform(platform: str) -> str:
-    return _CHANNEL_BY_PLATFORM.get((platform or "").strip().lower(), "generic")
+    """platform → channel。**兜底是 `other`，不是 `generic`。**
+
+    认不出来的平台，语义上就是「其他聊天」；旧库里存的 `generic` 也是同一个意思。
+    如果这里还留着 `generic` 兜底，界面上就会出现「未知」这种既不准确、
+    也没告诉用户该做什么的标签。
+    """
+    return _CHANNEL_BY_PLATFORM.get((platform or "").strip().lower(), "other")
+
+
+def _norm_channel(channel: str, platform: str = "") -> str:
+    """归一一个**显式传入**的渠道名；传空则按平台推。
+
+    为什么显式传也要过一遍映射：`generic` 这个写法是从导入适配器那边漏进来的，
+    界面上它是「其他聊天」。放它进库，就等于允许同一个渠道有两个名字 ——
+    而半自动采集正是靠 `channel == client` 认领已有渠道的，两个名字会让它
+    在同一个对象下重复建出两个「其他聊天」。
+    认不出的名字保持原样：那是调用方有意为之，不该被悄悄改成 other。
+    """
+    key = (channel or "").strip().lower()
+    if not key:
+        return _channel_from_platform(platform)
+    return _CHANNEL_BY_PLATFORM.get(key, key)
 
 
 # 「对象级事实」的判定条件。它同时是部分唯一索引的 WHERE、也是写入时的冲突目标 ——
@@ -450,6 +477,17 @@ class Store:
                 )
         if rows:
             log.info("已为 %d 个会话补上渠道标记", len(rows))
+
+        # `generic` → `other`。这两个词指的是同一件事（「其他聊天」），
+        # 但 `generic` 是导入适配器的术语，作为渠道名用户看不懂。归一之后
+        # 「谁和谁是同一个渠道」的比较才只有一个口径 —— 半自动采集就是靠
+        # `channel == client` 认领已有渠道的，两个写法并存会让它重复建渠道。
+        with self.conn() as c:
+            n = c.execute(
+                "UPDATE chats SET channel = 'other' WHERE channel = 'generic'"
+            ).rowcount
+        if n:
+            log.info("已把 %d 个会话的渠道从 generic 归一为 other", n)
 
     def _migrate_message_columns(self) -> None:
         """给 messages 补上 `ts_source` 与 `captured_at`。
@@ -653,7 +691,7 @@ class Store:
                 """,
                 (
                     chat_id, platform, name, peer_name, me_name, _now(),
-                    channel or _channel_from_platform(platform),
+                    _norm_channel(channel, platform),
                     source or "import",
                 ),
             )
@@ -683,11 +721,36 @@ class Store:
         if row["person_id"]:
             return row["person_id"]
         name = (row["peer_name"] or row["name"] or "未命名").strip()
+
+        # 「提前新建的对象」必须接得住后来导入的记录。
+        #
+        # 用户被明确告知可以先建一个只有名字的「小鹿」（这时记录还没导），
+        # 随后导入小鹿的 QQ 记录。如果这里无条件新建，他会看到两个「小鹿」，
+        # 还得自己去合并 —— 而「这条记录属于小鹿」本来就是他表达过的意图。
+        #
+        # 判据是**这个名字下还没有任何渠道**，这一点是刻意的：
+        #   · 空对象里没有任何数据，接住它不可能把谁的记忆混在一起，没有猜错的风险；
+        #   · 那个名字下**已经有**记录时，就退回原来的保守策略（新建，让用户显式合并）——
+        #     因为此时「QQ 上的张三」和「微信上的张三」是不是同一人，程序无从判断。
+        placeholder = self.find_person_by_alias(name)
+        if placeholder is not None and self._channel_count(placeholder.id) == 0:
+            log.info("「%s」是先前手建的空对象，这次的记录挂到它名下（%s）", name, placeholder.id)
+            self.bind_chat(chat_id, placeholder.id)
+            return placeholder.id
+
         new_id = self.create_person(
             name=name, aliases=[row["peer_name"]] if row["peer_name"] else []
         )
         self.bind_chat(chat_id, new_id)
         return new_id
+
+    def _channel_count(self, person_id: str) -> int:
+        """这个人名下有几段记录。用来区分「空对象」和「已经有料的人」。"""
+        with self.conn() as c:
+            row = c.execute(
+                "SELECT COUNT(*) AS n FROM chats WHERE person_id = ?", (person_id,)
+            ).fetchone()
+        return int(row["n"] or 0)
 
     def get_chat(self, chat_id: str) -> ChatInfo | None:
         with self.conn() as c:
@@ -762,7 +825,7 @@ class Store:
         if info is None:
             return None
         plat = (platform or "").strip() or info.platform
-        ch = (channel or "").strip() or _channel_from_platform(plat)
+        ch = _norm_channel(channel, plat)
         with self.conn() as c:
             c.execute(
                 "UPDATE chats SET platform = ?, channel = ? WHERE id = ?",

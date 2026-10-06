@@ -15,7 +15,7 @@ WingMan 是一个**跑在本机的聊天记录分析工具**：把微信/QQ 的�
 它们算同一个对象的几个**渠道**，看的是合起来的视野。
 数据全部落在本机 SQLite，程序不主动外传任何东西（模型调用按用户自己配的 endpoint 走）。
 
-- 形态：Python FastAPI 后端 + **单文件 HTML 前端**（`frontend/index.html`，4042 行，内联 JS，无构建步骤）
+- 形态：Python FastAPI 后端 + **单文件 HTML 前端**（`frontend/index.html`，4653 行，内联 JS，无构建步骤）
 - 分发：PyInstaller 打包成免安装 zip（`WingMan.exe` + `_internal/`），当前 **v0.4.0**，约 34 MiB
 - 界面：**4 个一级页签** —— 指挥台 / 对象 / 采集 / 设置（0.4.0 从 7 项收敛而来，见 §4）
 - 合规：`docs/COMPLIANCE.md`；采集能力只读用户自己机器上的库，且**不绕过任何权限**（见 §9）
@@ -59,7 +59,7 @@ wingman/
 │  ├─ tests/                19 个测试文件，全量 208 passed + 1 skipped（0.4.0）
 │  ├─ data/                 运行时 SQLite（.gitignore；含 collect_cache/）
 │  └─ logs/wingman.log
-├─ frontend/index.html      4042 单文件前端
+├─ frontend/index.html      4653 单文件前端
 ├─ scripts/                 build_exe.py / make_release.py / preflight.py / e2e_check.py …
 ├─ docs/                    本目录（ARCHITECTURE / MODELS / ENGINE_DESIGN / TROUBLESHOOTING / STATUS / PLAN…）
 ├─ build/wingman.spec       PyInstaller 配置（**要提交**）
@@ -173,7 +173,7 @@ DDL：`FACTS_DDL` `48-60`、`SCHEMA` `62-180`；建表 `init()` `284-293`。
 
 ---
 
-## 4. 前端结构（`frontend/index.html`，4042 行）
+## 4. 前端结构（`frontend/index.html`，4653 行）
 
 > **0.4.0 起是一套「对象中心」的界面。** 拿到 0.3.x 的行号来对会全错，
 > 请先用函数名定位，再用行号确认。
@@ -403,20 +403,47 @@ _commit_capture(293-358)：
 
 ## 8. 测试 / CI / 发版
 
-- 测试：`backend/tests/` 19 个文件，**从 `backend/` 目录跑**（`conftest.py` 在那里重定向 `DATA_DIR`；从仓库根跑单文件会因 rootdir 落到 `backend/tests` 而跳过 conftest）。
+- 测试：`backend/tests/` 20 个文件，**从 `backend/` 目录跑**（`conftest.py` 在那里重定向 `DATA_DIR`；从仓库根跑单文件会因 rootdir 落到 `backend/tests` 而跳过 conftest）。
   ```bash
-  cd backend && ./.venv/Scripts/python.exe -m pytest tests/ -q     # 208 passed, 1 skipped（0.4.0）
+  cd backend && ./.venv/Scripts/python.exe -m pytest tests/ -q     # 235 passed, 1 skipped（0.5.0）
   ```
-- **0.4.0 新增/扩写的守卫**：
-  - `tests/test_objects_center.py`（新，20 项）：多渠道上下文合并 / 主渠道 / 单渠道兼容 /
-    空渠道报错、`/persons/{id}/suggest` 四类路径、桌面壳关窗状态机与 `/desktop/show`、检查更新。
-  - `tests/test_frontend_assets.py`（8→9 项）：新增 4 条**单文件前端的静态守卫** ——
-    死链 `goView` 目标、旧深链接重定向、`$("#id")` 的 id 有没有人创建、
-    **调用了但没定义的函数**。
-  - 相对时间解析 5 条新用例（`test_collect_clipboard.py`）；
-    半自动「缺时间」的断言从 `assumed` 改成 `inferred`（`test_collect_semi.py`）。
+- **0.5.0 新增/扩写的守卫**：
+  - `tests/test_adapter_import.py`（新，10 项）：**导入这条路本身能不能走通** ——
+    仓库自带的两份示例文件各经其适配器导入（QQ / 微信）、界面写的粘贴格式真能用、
+    粘 JSON 也能认、列名匹配拿真实列名、解析为空时提示能指路、
+    `ImportResult` 回报归宿渠道、声明来源压过适配器猜测、
+    以及一条**静态守卫**：`app/` 下任何模块都不许引用「既没定义也没导入」的全局名
+    （用 `symtable` 看符号表）。这一条是被 `iter_blocks` 那个 Bug 逼出来的，见 §10.4。
+  - `tests/test_frontend_assets.py`（11→13 项）：收集侧客户端下拉已在 0.4.0 钉住；
+    0.5.0 补两条 —— **平台/来源下拉的取值必须在后端平台表里**（粘贴框 + `CHAT_PLATFORMS`），
+    以及粘贴框必须给出「来源」入口。
+  - `tests/test_persons.py`（24→26 项）：手建的空对象接住同名导入（复用而不是新建），
+    以及反例：那个名字下**已有记录**时仍保守新建（重名不能静默合并）。
+  - `tests/test_objects_center.py`（28→29 项）：`kept` 是给用户的**保证**而不是模型的成绩单 ——
+    用一个「没有证据的字段就不写」的模型验证：模型一个字没提的字段，
+    `kept` 里照样要有。实现方式是把 `ctx._llm` 换成只答对象级画像的桩
+    （`llm` 是只读属性，换的是 `_llm` 这个缓存槽）。
+  - `tests/test_version.py`（新增 1 条）：前端 `BUILD` 常量必须等于后端 `__version__`。
 - **写守卫的标准**：新测试要能在**旧代码上失败**。0.4.0 的 `loadChats` 那条、
   和「缺时间=inferred」那条都实测过在修复前会挂 —— 不会失败的守卫等于没有。
+  0.5.0 的六条关键守卫做了脚本化反证（把修复逐条改回旧写法 → 对应用例必须失败，
+  跑完自动还原源码），六条全过：
+
+  | 改回旧写法 | 如期失败的用例 |
+  |---|---|
+  | 删掉 `wechat.py` 的 `iter_blocks` 导入 | `test_bundled_samples_import_through_their_own_adapter` |
+  | `_resolve_map` 拿候选表当实际列名 | `test_column_names_are_matched_against_the_real_columns` |
+  | `_pick` 直接取 `probes[0]` | `test_nothing_matches_falls_back_to_the_generic_parser` |
+  | `_guess_paste_suffix` 一律返回 `.txt` | `test_column_names_are_matched_against_the_real_columns` |
+  | `import_file` 忽略用户声明的 `platform` | `test_declaring_the_source_beats_the_adapter_guess` |
+  | `kept` 改成「模型也想改时才列入」 | `test_refine_still_reports_a_draft_field_the_model_said_nothing_about` |
+
+  **这次反证有两个额外收获**（这才是它真正的价值）：
+  1. 「`kept` 只在模型也想改时才列出来」这条改动**本来没有任何测试盯着** ——
+     旧测试用的是 Mock 引擎，而 Mock 会把全部字段都填满，所以新旧写法都能过。
+     为此专门加了一个「没有证据的字段就不写」的模型桩，才把这件事钉住。
+  2. 第一次写的反证脚本里，「`_resolve_map`」那条改动**不够忠实**（改成了另一种坏法，
+     恰好被别的修复兜住了），于是它「通过」了 —— 说明**反证本身也要被怀疑**。
 - CI（`.github/workflows/ci.yml`）：push/PR 到 main，矩阵 Python 3.11 + 3.13；步骤＝语法检查 → `pytest tests/ -q` → `tests/test_smoke.py` → 冒烟编码防护 → 前端 JS 语法检查。基线耗时 ~40 秒。
 - 发版：
   ```bash
@@ -515,16 +542,40 @@ if store is not None and person_id:            # ← 守卫：person_id 非空�
 - `routes_persons.py` 的**跨渠道时间线**接口前端仍未使用（对象页概览用的是对象 overview）。
 - **Prompt 调优**仍是最大的质量缺口：默认 Mock 引擎让链路能跑，但建议内容是空的。
 
+### 10.4 【0.5.0 修复】三个「静默坏了很久」的问题
+
+这一轮最值得记的不是新功能，而是**三个一直坏着、但没有任何东西会报错的问题**。
+它们有共同的形状：**编译不报、导入不报、界面照常打开**，只有真走到那一条路时才出问题 ——
+而那条路恰好没有测试。
+
+| 问题 | 坏在哪 | 为什么没人发现 | 现在的守卫 |
+|---|---|---|---|
+| **导入微信记录必崩** | `wechat.py` 用了 `iter_blocks` 却从未导入它（从项目**第一个提交**起就这样） | 当时**没有任何测试跑过微信适配器**；自带的 `samples/wechat_sample_阿哲.txt` 也是这份坏代码的一部分 | 两份示例文件端到端导入 + `symtable` 静态守卫（见下） |
+| **通用 JSON / CSV 列名匹配失效** | `_resolve_map` 把「候选列名表」当成「数据里实际有的列名」传进去，于是永远只返回候选表的第一个名字 | 只测过「列名恰好等于候选表首项」的形状，而模块文档里写的 `who` / `content` 从来没被测过 | `test_column_names_are_matched_against_the_real_columns`（5 种形状） |
+| **粘贴框读不了自己写的格式** | 界面写着「`时间 昵称` + 内容」，默认适配器却是只认 JSON / CSV 的 `generic` | 前后端各测各的，没人把「界面上的示范格式」当成输入去跑一遍 | `test_the_paste_format_documented_in_the_ui_actually_parses` |
+
+**「删掉一个没用的桩」这类改动要特别小心。** `iter_blocks` 在 `qq.py` 里是正常导入的，
+`wechat.py` 里少了这一行 —— 从 diff 上看只差一行 import，很容易被当成「多余」删掉或漏加。
+
+**静态守卫怎么做**（`test_adapter_import.py::test_no_module_references_a_global_that_was_never_defined`）：
+用标准库 `symtable` 编译每个模块，对每个作用域取符号表，找「`is_global()` 且被引用、
+但本模块既没赋值也没导入、又不是内置名」的符号。Python 自己已经算出了这个事实，
+我们只是把它问出来。**带 `import *` 的文件跳过**（星号导入会让符号表失真）。
+
 ---
 
 ## 11. 当前版本与发布
 
-- 版本号：`backend/app/__init__.py` 的 `__version__ = "0.4.0"`（**改版本只改这一处**）
-- 仓库：<https://github.com/whyao56/WingMan>（public），tag `v0.2.0` / `v0.2.1` / `v0.3.0` / `v0.3.1` / `v0.4.0`
-- v0.4.0 Release：<https://github.com/whyao56/WingMan/releases/tag/v0.4.0>
-  附件 `WingMan-0.4.0-win64.zip`（221 个文件，33.8 MB，解压后约 77 MB），
-  SHA256 `bb63f93b666fd9babcd6283ecc3326deaec9a5a61480976731a5af3a02c23657`
+- 版本号：`backend/app/__init__.py` 的 `__version__ = "0.5.0"`（**改版本只改这一处**；
+  前端 `frontend/index.html` 顶部的 `const BUILD` 必须跟着改，`test_version.py` 会盯着）
+- 仓库：<https://github.com/whyao56/WingMan>（public），
+  tag `v0.2.0` / `v0.2.1` / `v0.3.0` / `v0.3.1` / `v0.4.0` / `v0.5.0`
+- v0.5.0 Release：<https://github.com/whyao56/WingMan/releases/tag/v0.5.0>
+  附件 `WingMan-0.5.0-win64.zip`（221 个文件，33.8 MB，解压后约 77 MB），
+  SHA256 `d96894fe2a41eb4091357c6938ebe87a84cbe0082f790c3ce698aadc93d0b184`
   （**实测同一份 `dist/` 连打两次 SHA 相同**，所以这个值是可核对的事实）
+- **本地 tag 可能是旧的**：这个仓库只在远端有 `v0.3.x` / `v0.4.x` 标签（本地只推过 `v0.2.x` 时
+  容易误判成「没发过版」）。查远端用 `git ls-remote --tags origin`，别只看 `git tag`。
 - 检查更新查的是 GitHub Releases API（`routes_admin.py` 的 `/api/update/check`）。
   **查不到时不给 `has_update` 字段**，提示「不等于已是最新」—— 这是刻意的，别改成默认「已是最新」。
 - **历史遗留**：曾用 `git-filter-repo` 重写过历史清掉真人姓名；旧 SHA 仍能被 GitHub 缓存视图取到，
@@ -563,7 +614,7 @@ if store is not None and person_id:            # ← 守卫：person_id 非空�
 6. **写入点**：`run_analysis`→`engine_runs`、`simulate`→`sim_runs`、
    导入/自动采集/半自动采集/批量编辑→`activity_log`。
 
-### 12.2 前端（`frontend/index.html`，4042 行）
+### 12.2 前端（`frontend/index.html`，4653 行）
 
 - 导航 7→4；旧深链接 `?view=memory/import/check/voice` **做重定向**（`LEGACY_VIEW`）。
 - 左栏两级（对象 → 渠道）；对象页 5 Tab；指挥台对象+渠道多选；聊天记录批量编辑；
@@ -582,3 +633,65 @@ if store is not None and person_id:            # ← 守卫：person_id 非空�
 - 导出不覆盖分析留存（见 §10.3 第 1 条）。
 - 「对象级 / 渠道级事实分别计数、不去重」是**已定的展示规则**（用户确认过）；
   如果以后想改成合并去重，要同时改后端 `list_facts_for_person` 与前端两组计数。
+
+---
+
+## 13. 0.5.0（先填后补 + 其他聊天 + 三个静默 Bug）已落地
+
+> 面向用户的说明见 [releases/v0.5.0.md](releases/v0.5.0.md)；被修掉的三个静默问题见 §10.4。
+
+### 13.1 后端
+
+1. **对象可提前新建，且空对象会接住之后的同名导入**（`store.ensure_person_for_chat`）：
+   判据是 `_channel_count(person_id) == 0`（新增的辅助方法）。空对象里没有数据，
+   接住它不可能混掉谁的记忆；**那个名字下已有记录时仍退回保守策略（新建）**，
+   把合并留给用户显式发起。这一条同时修掉了「先建对象再导入 → 变成两个同名对象」。
+2. **对象级画像整理**（`memory/profiler.build_person_profile` + `POST /api/persons/{id}/refine`）：
+   跨渠道读全部消息与事实，逐渠道建索引 / 抽事实（各自 try/except，一个失败不拖垮其它），
+   事实按 `对象级 / 渠道级` 标注，抽样**按渠道配额**（`per_chat = max(10, PROFILE_SAMPLE // len(channels))`）。
+   合并策略：`_USER_FIELDS = (goal, stage, taboos, my_style)` 有值且非 `overwrite` 就进 `kept`，
+   `_MODEL_FIELDS = (peer_profile,)` 允许改写；返回 `kept` / `updated` 两组字段名。
+   **`kept` 的判定不看模型有没有给新值** —— 它是给用户的一句保证，不是模型的成绩单（见 §8）。
+3. **「其他聊天」渠道类型**：`_CHANNEL_BY_PLATFORM` 加 `other→other` / `generic→other`；
+   `_channel_from_platform` 兜底从 `generic` 改成 `other`；新增 `_norm_channel(channel, platform)`
+   让**显式传入**的渠道名也过映射；迁移把历史 `generic` 行 UPDATE 成 `other`。
+   `SEMI_CLIENTS = ("qq", "wechat", "wechat3", "other")` **刻意不复用 `SUPPORT_MATRIX`** ——
+   后者回答「能不能读加密库」，其他聊天读不了但剪贴板采得了。
+4. **导入侧三处修复**（`adapters/`）：
+   - `wechat.py` 补 `iter_blocks` 导入（**从第一个提交起就缺**，见 §10.4）；
+   - `generic._resolve_map(options, rows)` 改成拿**真实列名**去挑，
+     `_auto_map_from_rows` 改成按列顺序 + 先定内容列再定说话人列（原来用 `set` 遍历，顺序不确定）；
+   - `registry._guess_paste_suffix` 从粘贴内容推后缀（`.json` / `.csv` / `.tsv` / `.txt`）；
+     `_pick` 在最高分为 0 时兜底 `GenericAdapter` 而不是听凭注册顺序落到 QQ。
+5. **`ImportResult` 新增 `platform` / `channel`**（只加不删），让导入结果回报归宿渠道；
+   `import_file` / `import_text` 新增 `platform` 参数，用户声明的来源压过适配器猜测。
+   **不认得的平台：渠道兜底 `other`，平台原样保留** —— 与 `openChatSettingsDialog`
+   的「（保持原样）」是同一条规矩，理由不同（见 §13.3）。
+6. **版本防呆**：`desktop.desktop_state()` 增加 `version / started_at / uptime_seconds /
+   mode(exe|source) / pid`；`main.py` 新增 `NoStoreHtmlMiddleware`（只给 `text/html`
+   补 `Cache-Control: no-store`，不覆盖已有头）。
+
+### 13.2 前端（`frontend/index.html`，4653 行）
+
+- 左栏：`232px → 248px` 栅格；新增「＋ 新建」与搜索框（对象 < 6 个时隐藏搜索）；
+  `.objitem` 改为两行（名字 + 关系/时间/渠道数），空对象标「还没有聊天记录」。
+- 对象页：新增对象头（名字 + 关系/阶段/近况 + 去指挥台分析 + 对象设置）；
+  空状态区分「一个对象都没有」与「选中的对象还没记录」两种。
+- 对象右键菜单（打开 / 设置… / 重命名… / 合并到… / 删除对象…）+ 键盘等价。
+- 「记忆」Tab 加「让 AI 帮我整理」与「连我手写的那几项也一起改写」。
+- 「检查更新」的**旧进程横幅** `#ver-warn`（`const BUILD` vs `/api/health.version`）。
+- 文案：「会话」→「渠道」；导入页「其他聊天记录」不再声称支持「通用文本」；
+  粘贴框加「来源」下拉；结果提示带上归宿渠道。
+
+### 13.3 未做 / 存疑
+
+- **`_pick` 兜底 `generic` 会让「所有适配器都打 0 分」的输入落到通用解析器**。
+  这是一次刻意的取舍：它能给出最能指路的失败提示，代价是**极端情况下**（某个适配器
+  的嗅探规则退化成 0 分而它本来能解析）会少一点容错。若将来出现这种退化，先修 `sniff`。
+- **不认得的平台保留原样**意味着库里可能出现 `telegram` 这样的平台值（渠道仍归 `other`）。
+  界面下拉只提供已知值，所以这条路只有直接调 API 才会走到；留原样是为了不静默改用户输入。
+- `.tsv` / `.csv` 的判定依赖「首行能切出 ≥2 列且**列数一致**或**含已知列名**」。
+  粘贴一张**只有一行**的表头 + 一行数据、且列名完全自定义时，可能退回 `.txt` 而读不出来 ——
+  此时用户改走「导入文件」即可（那条路带真正的扩展名）。
+- 导出仍未覆盖 `engine_runs` / `activity_log`（见 §10.3）。
+- 自动采集取密钥在本机仍跑不通（见 §12.3）。

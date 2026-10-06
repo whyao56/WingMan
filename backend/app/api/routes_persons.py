@@ -15,8 +15,10 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException
 
 from ..context import get_ctx
+from ..memory import profiler
 from ..schemas import (
     Fact, Person, PersonDetail, PersonOverview, PersonPersona,
+    PersonProfileBuildResult,
 )
 
 log = logging.getLogger("wingman.api.persons")
@@ -266,6 +268,29 @@ async def put_person_persona(person_id: str, payload: dict[str, Any] = Body(...)
     if saved is None:
         raise HTTPException(status_code=404, detail=f"这个人不存在：{person_id}")
     return saved
+
+
+@router.post("/persons/{person_id}/refine", response_model=PersonProfileBuildResult)
+async def refine_person_profile(
+    person_id: str, payload: dict[str, Any] = Body(default={})
+) -> PersonProfileBuildResult:
+    """让模型把这个人的资料整理一遍（跨渠道）——「我先填一部分，之后再让 AI 优化」。
+
+    默认**不动用户手写的那几项**（目标 / 关系阶段 / 雷区 / 我的说话风格），
+    只在空着的时候填上；传 `overwrite: true` 才允许改写。理由见内存层
+    `build_person_profile` 的注释：一个会悄悄吃掉手写内容的按钮，用户是不会按的。
+
+    结果里 `kept` / `updated` 分别列出「保留」与「更新」了哪几项 ——
+    这是这个接口对用户的交代，不能省。
+    """
+    _require_person(person_id)
+    ctx = get_ctx()
+    try:
+        return await profiler.build_person_profile(
+            ctx, person_id, overwrite=bool(payload.get("overwrite"))
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 # ================================================================ 历史留存（需求 11）

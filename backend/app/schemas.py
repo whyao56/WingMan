@@ -113,6 +113,12 @@ class ImportResult(BaseModel):
     skipped: int
     speakers: list[str]
     warnings: list[str] = Field(default_factory=list)
+    # 这段记录最后归到了哪个渠道。
+    # 为什么必须回报：`platform` 可能来自用户的显式声明，也可能是适配器猜的，
+    # 两者结果不一样时用户得看得见 —— 否则「粘贴的是 Telegram，界面给它贴上微信」
+    # 这种事只会在之后某次分析里以「答得不对」的形式浮出来，很难回溯到这里。
+    platform: str = ""
+    channel: str = ""
 
 
 # ============================================================= 记忆 / 画像
@@ -276,7 +282,9 @@ class PersonChannel(BaseModel):
     """人下面的一个渠道 —— 界面上的「QQ 聊天 / 微信聊天 / 通话 / 当面聊天」。"""
 
     chat_id: str
-    channel: str = "generic"
+    # 渠道名的取值集合：qq | wechat | other | call | offline。
+    # `other` 就是界面上的「其他聊天」（除 QQ / 微信以外的来源）。
+    channel: str = "other"
     platform: str = ""
     name: str = ""
     # 渠道两端的称呼。`name` 是渠道的显示名，多数时候等于 `peer_name`，
@@ -333,6 +341,22 @@ class PersonPersona(BaseModel):
     taboos: str = ""
     stage: str = ""
     updated_at: str = ""
+
+
+class PersonProfileBuildResult(BaseModel):
+    """对象级「让 AI 帮我整理」的结果。
+
+    `kept` / `updated` 是**必须回报**的两组字段名：用户手写的设定有没有被改，
+    是他最关心的事。只回一个「成功」等于让他自己去比对 —— 那就别怪他不敢用。
+    """
+
+    facts_extracted: int = 0
+    facts_total: int = 0
+    channels: list[str] = Field(default_factory=list)
+    persona: PersonPersona = Field(default_factory=PersonPersona)
+    kept: list[str] = Field(default_factory=list)
+    updated: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
 
 
 class EngineRun(BaseModel):

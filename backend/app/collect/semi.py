@@ -63,6 +63,19 @@ DEDUPE_WINDOW = 50
 # 「我的称呼」候选。库里记的是 me_name，用户也可能把消息头写成「我」。
 DEFAULT_ME_NAMES = ("我", "自己", "本机")
 
+# 客户端代号 → 给人看的名字。用于提示语（「现在去 **微信** 里选中…」）。
+# `other` 不能直接印出来 —— 提示语里写着「现在去 other 里」，用户不知道那是哪。
+_CLIENT_LABELS = {
+    "qq": "QQ",
+    "wechat": "微信",
+    "wechat3": "微信 3.x",
+    "other": "其他聊天",
+}
+
+
+def client_label(client: str) -> str:
+    return _CLIENT_LABELS.get((client or "").strip().lower(), client or "客户端")
+
 
 @dataclass
 class PendingItem:
@@ -350,7 +363,7 @@ class SemiCollector:
                 store.log_activity(
                     "collect_semi", person_id=self.state.person_id, chat_id=chat_id,
                     summary=f"半自动采集新增 {inserted} 条",
-                    detail=f"来源 {self.state.client}，复制 {len(cap.items)} 条",
+                    detail=f"来源 {client_label(self.state.client)}，复制 {len(cap.items)} 条",
                 )
             except Exception as exc:      # pragma: no cover - 痕迹写不进去不该挡住采集
                 log.warning("记录半自动采集痕迹失败：%s", exc)
@@ -488,7 +501,7 @@ class SemiCollector:
         if not self.state.active:
             return "半自动采集没在运行。"
         who = self.state.peer_name or "选定的对象"
-        return (f"现在去 {self.state.client} 里选中「{who}」的聊天内容，"
+        return (f"现在去 {client_label(self.state.client)} 里选中「{who}」的聊天内容，"
                 "按 Ctrl+C 复制 —— 内容和时间会立刻出现在这里。")
 
     def _resolve_names(self, store, person_id: str,

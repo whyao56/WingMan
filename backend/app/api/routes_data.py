@@ -91,6 +91,7 @@ async def import_records(
     file: UploadFile = File(...),
     chat_name: str | None = Form(default=None),
     adapter: str | None = Form(default=None),
+    platform: str | None = Form(default=None),
     options: str | None = Form(default=None),
 ) -> ImportResult:
     ctx = get_ctx()
@@ -101,6 +102,7 @@ async def import_records(
         result = await asyncio.to_thread(
             registry.import_file, ctx.store, tmp,
             chat_name=chat_name, adapter_name=adapter,
+            platform=(platform or "").strip() or None,
             options=_parse_options(options),
         )
     finally:
@@ -128,7 +130,9 @@ async def import_pasted_text(payload: dict[str, Any] = Body(...)) -> ImportResul
     result = await asyncio.to_thread(
         registry.import_text, ctx.store, text,
         chat_name=name,
-        adapter_name=str(payload.get("adapter") or "generic"),
+        # 默认 `auto`：粘贴框上写的示范格式是行式的，`generic` 读不了它。
+        adapter_name=str(payload.get("adapter") or "auto"),
+        platform=str(payload.get("platform") or "").strip() or None,
         options={"order": payload.get("order") or "ts_first"},
     )
     if result.inserted:

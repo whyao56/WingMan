@@ -23,15 +23,22 @@ import time
 import urllib.error
 import urllib.request
 import webbrowser
+from datetime import datetime
 from typing import Any
 
-from .config import APP_DIR, KEEP_ALIVE_S, LOG_DIR, RESOURCE_DIR, get_settings
+from . import __version__
+from .config import APP_DIR, IS_FROZEN, KEEP_ALIVE_S, LOG_DIR, RESOURCE_DIR, get_settings
 
 log = logging.getLogger("wingman.desktop")
 
 DEFAULT_PORT = 8787
 # 从 8787 起往后试几个，避免和别的程序撞车
 PORT_SCAN_RANGE = 20
+
+# 这个**进程**是什么时候起来的。存在的理由很具体：界面是每次从磁盘现读的，
+# 服务却是一个一直在跑的进程。升级完程序忘了重启，就会出现「界面是新的、
+# 版本号是旧的」——用户会以为是版本号写错了。有了它，那种情况一眼可辨。
+_STARTED_AT = time.time()
 
 
 # ---------------------------------------------------------------- 小工具
@@ -228,11 +235,23 @@ def show_window() -> dict[str, Any]:
 
 
 def desktop_state() -> dict[str, Any]:
-    """界面用来自查「有没有原生窗口」——决定 × 按钮该怎么说话。"""
+    """界面用来自查「有没有原生窗口」——决定 × 按钮该怎么说话。
+
+    顺便交代**这个进程的身份**：版本、启动时刻、打包版还是源码运行。
+    打包版和源码版跑同一份前端，光看界面分不出来；而「我明明升级过了，
+    怎么还是旧版本」这种疑问，答案通常就是「那是个没退干净的老进程」。
+    有了 `started_at`，用户看到的时间和自己的操作一对，就能自己得出结论，
+    不用来问人。
+    """
     return {
         "native_window": _WINDOW is not None,
         "pending_close": _CLOSE["pending"],
         "platform": sys.platform,
+        "version": __version__,
+        "started_at": datetime.fromtimestamp(_STARTED_AT).astimezone().isoformat(timespec="seconds"),
+        "uptime_seconds": int(max(0, time.time() - _STARTED_AT)),
+        "mode": "exe" if IS_FROZEN else "source",
+        "pid": os.getpid(),
     }
 
 

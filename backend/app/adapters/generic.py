@@ -104,24 +104,41 @@ class GenericAdapter(ChatSourceAdapter):
     # -------------------------------------------------------- 字段映射
 
     @staticmethod
-    def _resolve_map(options: dict[str, Any] | None) -> dict[str, str]:
+    def _resolve_map(
+        options: dict[str, Any] | None, rows: list[dict[str, Any]] | None = None
+    ) -> dict[str, str]:
+        """按 DEFAULT_MAP 的候选顺序，在**这份数据真实的列名**里挑字段。
+
+        这里曾经有个很隐蔽的错：候选人名表被直接当成了「可用列名」传进来，
+        于是 `pick` 永远命中候选表的第一个名字，跟数据里到底有什么列毫无关系。
+        表现是 —— 列的排布稍有不同就读不出来：JSON 里时间字段叫 `time`
+        （候选表里排第二）选不中，中文表头 `时间 / 内容 / 发送者` 更是一个都不中。
+
+        最坏的地方在于**嗅探和解析说两套话**：`sniff` 看到中文表头给 0.85 的高分，
+        用户看到「匹配度很高」，然后一条都没导进去。所以必须拿真实列名去挑。
+        """
         opts = options or {}
         explicit = opts.get("field_map") or {}
 
-        def pick(role: str, keys: list[str]) -> str | None:
+        # 列名出现过的都算，且保持列顺序（后面的兜底推断也依赖顺序）
+        present: list[str] = []
+        for r in (rows or [])[:50]:
+            for k in r:
+                if k not in present:
+                    present.append(k)
+        lowered = {k.lower(): k for k in present}
+
+        def pick(role: str) -> str:
             if role in explicit:
-                return explicit[role]
-            lowered = {k.lower(): k for k in keys}
+                return str(explicit[role])
             for cand in DEFAULT_MAP[role]:
-                if cand in keys:
+                if cand in present:
                     return cand
                 if cand.lower() in lowered:
                     return lowered[cand.lower()]
-            return None
+            return ""
 
-        return {"sender": pick("sender", list(DEFAULT_MAP["sender"])) or "",
-                "ts": pick("ts", list(DEFAULT_MAP["ts"])) or "",
-                "text": pick("text", list(DEFAULT_MAP["text"])) or ""}
+        return {"sender": pick("sender"), "ts": pick("ts"), "text": pick("text")}
 
     def _row_to_parsed(self, row: dict[str, Any], fmap: dict[str, str],
                        me_names: tuple[str, ...]) -> ParsedMsg | None:
@@ -142,11 +159,12 @@ class GenericAdapter(ChatSourceAdapter):
         ext = path.suffix.lower()
         text, _ = read_text(path)
         me_names = self.hint_me_names(options)
-        fmap = self._resolve_map(options)
-        if not (fmap["ts"] and fmap["text"]):
-            # 没有可用的字段映射，交给自动推断兜底
-            fmap = self._auto_map_from_rows(self._rows_from_text(text, ext), options)
         rows = self._rows_from_text(text, ext)
+        fmap = self._resolve_map(options, rows)
+        if not (fmap["ts"] and fmap["text"]):
+            # 列名一个都没对上（用户自己的叫法），交给按值推断兜底。
+            # 注意 `_resolve_map` 必须拿到 rows —— 没有真实列名它就是瞎猜。
+            fmap = self._auto_map_from_rows(rows, options)
         out: list[ParsedMsg] = []
         for row in rows:
             if not isinstance(row, dict):
@@ -208,30 +226,55 @@ class GenericAdapter(ChatSourceAdapter):
 
     @staticmethod
     def _auto_map_from_rows(rows: list[dict[str, Any]], options: dict[str, Any] | None) -> dict[str, str]:
+        """列名全都不认识时，按**值的形状**猜哪一列是什么。
+
+        只在 `DEFAULT_MAP` 一个候选都没命中时才走到这里（用户自己的列名，
+        比如 `A / B / C` 或 `日期 / 说话人 / 说了什么`）。
+
+        这里原来有两个毛病，一起修掉了：
+        1. 用 `set` 遍历列名 —— 顺序不确定，同一份文件两次跑可能得到不同结果。
+           现在按列顺序走，并且**先定内容列再定说话人列**：反过来定的话，
+           短的文本列会被先认成内容，把真正的消息正文挤掉。
+        2. 推断出的「内容列」只要长度 ≥2 就算，于是 `小鹿 / 我` 这种说话人列
+           很容易被当成正文，消息就变成了发送者的名字。所以内容列取**平均最长**
+           的那一列，说话人列则在剩下的里取**重复度最高**的那一列。
+        """
         if not rows:
             return {"sender": "", "ts": "", "text": ""}
-        # 用全量键名再试一次
-        keys = set()
+
+        keys: list[str] = []
         for r in rows[:50]:
-            keys.update(r.keys())
-        opts = dict(options or {})
-        opts["field_map"] = {}
-        adapter = GenericAdapter()
-        m = adapter._resolve_map({})
-        # 逐键判断类型：值能变 datetime 的是 ts，最长文本的是 text
-        ts_key, text_key, sender_key = m["ts"], m["text"], m["sender"]
-        for k in keys:
-            sample = [r.get(k) for r in rows[:30] if r.get(k) not in (None, "")]
-            if not sample:
-                continue
-            if not ts_key and any(_to_dt(v) for v in sample):
-                ts_key = k
-                continue
-            if not text_key and all(isinstance(v, str) for v in sample):
-                if max((len(str(v)) for v in sample), default=0) >= 2:
-                    text_key = k
-            if not sender_key:
-                uniq = {str(v) for v in sample}
-                if 1 < len(uniq) <= 30 and all(len(str(v)) <= 20 for v in sample):
-                    sender_key = k
-        return {"sender": sender_key or "", "ts": ts_key or "", "text": text_key or ""}
+            for k in r:
+                if k not in keys:
+                    keys.append(k)  # 保持列顺序；集合的迭代顺序不可依赖
+
+        def sample_of(k: str) -> list[Any]:
+            return [r.get(k) for r in rows[:30] if r.get(k) not in (None, "")]
+
+        def avg_len(k: str) -> float:
+            vals = [str(v) for v in sample_of(k)]
+            return sum(len(v) for v in vals) / max(1, len(vals))
+
+        # 1. 时间列：能解析成 datetime 的取值最多的一列
+        timed = [k for k in keys if any(_to_dt(v) for v in sample_of(k))]
+        ts_key = max(
+            timed, key=lambda k: sum(1 for v in sample_of(k) if _to_dt(v)), default=""
+        )
+
+        # 2. 内容列：剩下的列里平均最长的那一列
+        rest = [k for k in keys if k != ts_key]
+        text_key = max(rest, key=avg_len, default="") if rest else ""
+
+        # 3. 说话人列：再剩下的列里，取值重复度高、且都不长的那个
+        others = [k for k in rest if k != text_key]
+        sender_key = ""
+        if others:
+            def distinct(k: str) -> int:
+                return len({str(v) for v in sample_of(k)})
+
+            cand = min(others, key=lambda k: (distinct(k), avg_len(k)))
+            vals = [str(v) for v in sample_of(cand)]
+            if vals and distinct(cand) <= 30 and all(len(v) <= 20 for v in vals):
+                sender_key = cand
+
+        return {"sender": sender_key, "ts": ts_key, "text": text_key}

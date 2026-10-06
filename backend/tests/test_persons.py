@@ -203,6 +203,69 @@ def test_upsert_chat_can_bind_to_an_existing_person_explicitly() -> None:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_a_hand_made_empty_person_catches_the_first_import() -> None:
+    """「提前新建的对象」要接得住后来导入的记录，而不是变成两个同名的人。
+
+    这是新手最容易踩的顺序：先在界面上建一个「小鹿」（只填了名字），
+    再回头去导聊天记录 —— 如果建人逻辑只顾着「一个会话一个人」，
+    结果就是列表里冒出两个「小鹿」，用户不知道哪个才是自己填的那个。
+
+    判据是「那个名字下**一段记录都没有**」：
+    - 空对象里没有任何数据，接住它不可能混掉谁的记忆 → 复用；
+    - 已经有记录了，说明这是个真实存在的人 → 保守新建，让用户自己决定要不要合并。
+    """
+    tmp = _tmp_dir()
+    try:
+        store = _fresh_store(tmp)
+
+        # 用户先在界面上手建一个只有名字的空对象
+        pid = store.create_person("小鹿", ["鹿鹿"])
+        assert store.list_persons()[0].channel_count == 0
+
+        # 之后导入微信记录，对方昵称就叫「鹿鹿」
+        store.upsert_chat("wx-鹿", "wechat", "鹿鹿", peer_name="鹿鹿")
+
+        persons = store.list_persons()
+        assert len(persons) == 1, (
+            "手建的空对象应该被复用，而不是又新建一个同名的人："
+            f"{[(p.name, p.id) for p in persons]}"
+        )
+        assert persons[0].id == pid, "复用的必须就是用户手建的那一个"
+        assert store.get_chat("wx-鹿").person_id == pid
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_a_person_that_already_has_records_is_not_silently_reused() -> None:
+    """反例：那个名字下**已经有记录**时，绝不偷偷塞进去。
+
+    如果无条件按名字复用，一个重名（比如微信里有两个「小李」）就会让
+    第二个人直接被并进第一个人 —— 记忆混在一起比多建一个人严重得多。
+    所以这里必须退回到保守策略：新建，把要不要合并交给用户显式决定。
+    """
+    tmp = _tmp_dir()
+    try:
+        store = _fresh_store(tmp)
+
+        # 手建的对象，且它名下已经有一段记录了
+        pid = store.create_person("小鹿", ["鹿鹿"])
+        store.upsert_chat("qq-鹿", "qq", "小鹿", peer_name="小鹿", person_id=pid)
+
+        # 现在导入微信侧的记录，对方昵称同样是「鹿鹿」
+        store.upsert_chat("wx-鹿", "wechat", "鹿鹿", peer_name="鹿鹿")
+
+        persons = store.list_persons()
+        assert len(persons) == 2, (
+            "名字下已有记录时应该保守新建，不能静默合并："
+            f"{[(p.name, p.id) for p in persons]}"
+        )
+        assert store.get_chat("wx-鹿").person_id != pid
+        # 原来的记录不能被搬走
+        assert store.get_chat("qq-鹿").person_id == pid
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def test_chat_channel_is_filled_so_readers_do_not_see_null() -> None:
     """`chats.channel` 必须真的有值。
 
@@ -221,7 +284,28 @@ def test_chat_channel_is_filled_so_readers_do_not_see_null() -> None:
             c.execute("UPDATE chats SET channel = NULL")
         store.init()
         channels = {c.id: c.channel for c in store.list_chats()}
-        assert channels == {"qq-a": "qq", "wx-b": "wechat", "misc-c": "generic"}
+        # `generic` 平台推出来的渠道是 `other`（「其他聊天」）而不是 `generic` ——
+        # 后者是导入适配器的名字，不是给人看的渠道名。
+        assert channels == {"qq-a": "qq", "wx-b": "wechat", "misc-c": "other"}
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_legacy_generic_channels_are_normalised_to_other() -> None:
+    """老库里已经被写成 `generic` 的行，也要被迁移扫成 `other`。
+
+    只改「空则按 platform 推」是不够的：`generic` 不是空，是**旧的正确值**。
+    归一之前，同一个「其他聊天」在库里有两个写法 —— 半自动采集靠
+    `channel == client` 认领已有渠道，认不出就会给同一个对象再建一个。
+    """
+    tmp = _tmp_dir()
+    try:
+        store = _fresh_store(tmp)
+        store.upsert_chat("misc", "generic", "C")
+        with store.conn() as c:
+            c.execute("UPDATE chats SET channel = 'generic'")   # 模拟迁移前的状态
+        store.init()                                            # 迁移是幂等的，再跑一次
+        assert store.get_chat("misc").channel == "other"
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

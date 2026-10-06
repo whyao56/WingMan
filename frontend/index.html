@@ -67,7 +67,9 @@ button{cursor:pointer}
 ::-webkit-scrollbar-thumb:hover{background:#b3bbc6;background-clip:content-box;border:3px solid transparent}
 ::-webkit-scrollbar-track{background:transparent}
 
-.app{display:grid;grid-template-columns:232px 1fr;height:100vh}
+/* 248px 而不是 232：左栏现在是两级（对象 → 渠道），对象项还有一行副标题。
+   窄一点就会把「3 渠道 · 128 条 · 9-28」截成「3 渠道 · 12…」。 */
+.app{display:grid;grid-template-columns:248px 1fr;height:100vh}
 
 /* ---------- 侧栏 ---------- */
 .side{background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
@@ -293,6 +295,19 @@ table.t tr:hover td{background:var(--panel2)}
 .wizard.ok{background:var(--ok-bg);border-color:var(--ok-line)}
 .wizard.bad{background:var(--danger-bg);border-color:var(--danger-line)}
 
+/* ---------- 版本不一致横幅 ----------
+   只在真的不一致时出现。它的价值全在于「罕见但立刻看得懂」：
+   用户升级完没完全退出，老进程还在答话，界面上就会冒出一条说清
+   「界面是哪个版本、答话的是哪个版本、怎么办」的话。 */
+.verwarn{
+  background:var(--danger-bg);border:1px solid var(--danger-line);border-radius:var(--r);
+  padding:16px 18px;margin-bottom:20px;line-height:1.8;
+}
+.verwarn .vt{font-weight:620;color:var(--danger);margin-bottom:4px}
+.verwarn .vs{font-size:13px;color:var(--text)}
+.verwarn .vd{font-size:12.5px;color:var(--muted);margin-top:6px}
+.verwarn .row{margin-top:12px}
+
 /* ---------- 敬请期待 ---------- */
 .soonbar{
   background:var(--accent-weak);border:1px solid var(--accent-line);border-radius:var(--r);
@@ -443,18 +458,38 @@ table.t tr:hover td{background:var(--panel2)}
    类名一律新起，不和上面任何顶层类重名 —— 同名类会静默覆盖，
    这条由 test_frontend_assets.py::test_no_duplicate_top_level_class_rules 钉住。
    左栏两级：`objitem` 是「对象」（人），`chitem` 是它下面的「渠道」（一段记录）。 */
+/* 左栏小标题栏：标题 + 一个「＋」。新建对象是新手的第一条路（先建人，
+   再往里装记录），所以它必须常驻、且就在「对象」这两个字旁边。 */
+.sidehead{display:flex;align-items:center;gap:6px;padding:14px 11px 6px}
+.sidehead .sh-t{flex:1;font-size:11.5px;color:var(--dim);letter-spacing:.8px;font-weight:600}
+.sideadd{
+  flex:none;border:1px solid var(--border2);background:var(--panel);border-radius:6px;
+  color:var(--muted);font-size:12px;line-height:1;padding:4px 7px;cursor:pointer;transition:.12s;
+}
+.sideadd:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-weak)}
+/* 对象多起来之后才出现 —— 只有三五个人的时候放个搜索框纯属噪音 */
+.sidefind{padding:0 11px 6px}
+.sidefind input{width:100%;font-size:12.5px;padding:5px 9px}
+
+/* 对象项：两行。第一行是名字，第二行是「几个渠道 · 多少条 · 最近联系」。
+   为什么值得占两行：一个人有 QQ 也有微信时，「3 渠道」是这个界面里
+   唯一能让人意识到「我其实在好几个地方跟同一个人说话」的地方。 */
 .objitem{
   padding:8px 11px;border-radius:var(--r-sm);cursor:pointer;font-size:13.5px;
-  display:flex;justify-content:space-between;gap:8px;align-items:center;transition:.12s;
+  display:flex;flex-direction:column;gap:2px;transition:.12s;
 }
 .objitem:hover{background:var(--panel3)}
 .objitem.on{background:var(--accent-weak);color:var(--accent);font-weight:600}
 .objitem:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
-.objitem .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.objitem .ct{font-size:12px;color:var(--dim);flex:none}
-.objitem.on .ct{color:var(--accent)}
+.objitem .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.objitem .ct{font-size:11.5px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.objitem.on .ct{color:var(--accent);opacity:.85}
+/* 一个还没来得及装记录的人：不装作有数据，直接标出来 */
+.objitem .ct.fresh{color:var(--warn)}
+.objitem.on .ct.fresh{color:var(--accent)}
+
 .chitem{
-  padding:6px 11px 6px 22px;border-radius:var(--r-sm);cursor:pointer;font-size:13px;
+  padding:6px 11px 6px 16px;border-radius:var(--r-sm);cursor:pointer;font-size:13px;
   display:flex;justify-content:space-between;gap:8px;align-items:center;color:var(--muted);transition:.12s;
 }
 .chitem:hover{background:var(--panel3);color:var(--text)}
@@ -463,6 +498,25 @@ table.t tr:hover td{background:var(--panel2)}
 .chitem .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chitem .ct{font-size:12px;color:var(--dim);flex:none}
 .chitem.on .ct{color:var(--accent)}
+/* 渠道类型标记（QQ / 微信 / 其他）。一眼分清「这段记录是从哪来的」。 */
+.cbadge{
+  flex:none;font-size:10.5px;font-weight:600;letter-spacing:.2px;padding:1px 6px;
+  border-radius:20px;border:1px solid var(--border2);background:var(--panel2);color:var(--dim);
+}
+.cbadge.qq{color:#2f6fed;border-color:#c9dcfe;background:#eef4ff}
+.cbadge.wechat{color:#0f7a52;border-color:#b4e2ce;background:#eaf7f1}
+.cbadge.other{color:#8a5a00;border-color:#edd8a4;background:#fdf6e7}
+.cbadge.call,.cbadge.offline{color:#7c4ddb;border-color:#ddd2fb;background:#f4f0ff}
+
+/* 对象页页头：这个人是谁、我们现在什么关系、有多少料。 */
+.objhead{
+  display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;
+  padding:0 0 16px;border-bottom:1px solid var(--border);margin-bottom:20px;
+}
+.objhead .oh-main{flex:1;min-width:240px}
+.objhead .oh-name{font-size:22px;font-weight:660;letter-spacing:-.2px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.objhead .oh-meta{color:var(--muted);font-size:13px;margin-top:6px;line-height:1.7}
+.objhead .oh-acts{display:flex;gap:8px;flex-wrap:wrap}
 
 /* 对象详情的 5 个 Tab */
 .otabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
@@ -508,8 +562,16 @@ table.t tr:hover td{background:var(--panel2)}
       <button data-v="settings"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5h16"/><path d="M4 12h16"/><path d="M4 17.5h16"/><circle cx="9" cy="6.5" r="2.1"/><circle cx="15" cy="12" r="2.1"/><circle cx="8" cy="17.5" r="2.1"/></svg></i>设置<span id="nav-badge" class="navdot hidden"></span></button>
     </nav>
     <div class="sidebody">
-      <div class="sidelabel">对象 <span style="font-weight:500;letter-spacing:0;color:var(--dim)">· 点对象看它的渠道</span></div>
-      <div id="objlist"><div class="empty-hint">还没有任何对象。先去「采集」导一段或采一段。</div></div>
+      <!-- 左栏的第一件事是「有哪些人」。新建入口就放在标题旁边 ——
+           「先建人、再往里装记录」是最顺的一条路，不该藏在某个二级菜单里。 -->
+      <div class="sidehead">
+        <span class="sh-t">对象</span>
+        <button class="sideadd" id="obj-new" title="新建一个对象（可以先只填名字，之后再导记录）">＋ 新建</button>
+      </div>
+      <div class="sidefind hidden" id="obj-find-wrap">
+        <input type="text" id="obj-find" placeholder="搜对象…" autocomplete="off" />
+      </div>
+      <div id="objlist"><div class="empty-hint">还没有任何对象。点上面的「＋ 新建」先建一个人，或者去「采集」导一段聊天记录。</div></div>
     </div>
     <div style="padding:10px 14px;border-top:1px solid var(--border)">
       <!-- 外设 1：自检提醒放到侧边栏。
@@ -533,6 +595,12 @@ table.t tr:hover td{background:var(--panel2)}
       </div>
     </div>
 
+    <!-- 界面版本 ≠ 本机服务版本时才会出现。
+         真实的坑：升级完程序没完全退出，老进程还在 8787 上答话 ——
+         用户看到的是新界面配旧版本号，会以为是「版本号写错了」。
+         这里把两边的版本都摆出来，并说清怎么处理。 -->
+    <div id="ver-warn" class="verwarn hidden"></div>
+
     <!-- ============ 指挥台 ============ -->
     <section class="view on" id="view-copilot">
       <h2>指挥台</h2>
@@ -542,9 +610,19 @@ table.t tr:hover td{background:var(--panel2)}
       <div id="cp-steps" class="steps3 hidden"></div>
 
       <div id="cp-nochat" class="card">
-        <h3>先选一个对象</h3>
-        <p class="small muted">左侧还没有对象。到「采集」页上传一份聊天记录（QQ / 微信导出的 txt 都支持），
-          或者直接用示例文件 <span class="mono">samples/qq_sample_小鹿.txt</span> 试跑一遍流程。</p>
+        <h3 id="cp-nochat-t">先选一个对象</h3>
+        <p class="small muted" id="cp-nochat-d">
+          左侧还没有对象。到「采集」页上传一份聊天记录（QQ / 微信导出的 txt 都支持），
+          或者直接用示例文件 <span class="mono">samples/qq_sample_小鹿.txt</span> 试跑一遍流程。
+        </p>
+        <div class="row" id="cp-nochat-acts">
+          <button class="btn primary sm" id="cp-nochat-new">＋ 先建一个人</button>
+          <button class="btn sm" id="cp-nochat-collect">去导入 / 采集聊天记录</button>
+        </div>
+        <p class="small dim" style="margin-top:12px;line-height:1.8" id="cp-nochat-hint">
+          「对象」就是你在聊的那个人。一个人可以有好几段记录（微信、QQ、其他聊天工具），
+          它们都归到同一个对象名下 —— 指挥台就能一次看全，而不是只看其中一段。
+        </p>
       </div>
 
       <div id="cp-main" class="hidden">
@@ -571,7 +649,7 @@ table.t tr:hover td{background:var(--panel2)}
           <textarea id="cp-msg" placeholder="把对方刚发的那句话粘在这里，例如：哈哈哈今天好累啊"></textarea>
           <div class="row" style="margin-top:10px">
             <button class="btn primary" id="cp-go">分析并给建议</button>
-            <button class="btn sm ghost" id="cp-last">取会话里最后一条对方消息</button>
+            <button class="btn sm ghost" id="cp-last">取最后一条对方消息</button>
             <label class="small muted" style="display:flex;align-items:center;gap:6px">
               <input type="checkbox" id="cp-persist" checked /> 存入记忆
             </label>
@@ -585,15 +663,32 @@ table.t tr:hover td{background:var(--panel2)}
 
     <!-- ============ 对象（以人为中心；原「记忆」页并入这里） ============ -->
     <section class="view" id="view-objects">
-      <h2 id="obj-title">对象</h2>
-      <p class="sub" id="obj-sub">左栏选一个对象。Ta 的人物设定、已记住的事实、聊天记录、采集进度与历史输出，都在这一页。</p>
-
-      <div id="obj-empty" class="card">
-        <h3>还没有任何对象</h3>
-        <p class="small muted">先去「采集」页导入或采集一段聊天记录 —— 导入时会自动把记录挂到对应的对象名下。</p>
+      <!-- 没有对象时：先讲清「对象」是什么，再给两条能立刻走的路。
+           新手在这里最常卡住的不是不会点按钮，而是不知道「对象」是干什么的。 -->
+      <div id="obj-empty">
+        <h2>对象</h2>
+        <p class="sub">「对象」就是你在聊的那个人。一个人可以有好几段记录（微信一段、QQ 一段、
+          其他聊天工具一段），它们都归到同一个对象名下 —— 这样你看到的是「关于这个人」的全部，
+          而不是散在几个会话里的碎片。</p>
+        <div class="card">
+          <h3>现在还没有对象</h3>
+          <p class="small muted" style="margin-bottom:12px">
+            两条路都行，先做哪条都可以：
+          </p>
+          <div class="row">
+            <button class="btn primary" id="obj-new2">＋ 先建一个人</button>
+            <button class="btn" id="obj-go-collect">去导入 / 采集聊天记录</button>
+          </div>
+          <p class="small dim" style="margin-top:12px;line-height:1.8">
+            先建人：适合「我知道要分析谁，但记录还没导」。可以先填你能想到的（关系、目标、雷区），
+            之后导入聊天记录，再用「记忆」里的「让 AI 帮我整理」把它补全。<br>
+            先导记录：适合「记录已经导出好了」。导入时说话人会自动归到对应的对象名下，不用手工建。
+          </p>
+        </div>
       </div>
 
       <div id="obj-main" class="hidden">
+        <div class="objhead" id="obj-head"></div>
         <div class="otabs" id="obj-tabs">
           <button class="otab on" data-otab="overview">概览</button>
           <button class="otab" data-otab="memory">记忆</button>
@@ -622,8 +717,21 @@ table.t tr:hover td{background:var(--panel2)}
                 <textarea id="op-mystyle" style="min-height:56px"></textarea></label>
               <label class="f"><span>对方画像（模型生成，可手改）</span>
                 <textarea id="op-profile" style="min-height:100px"></textarea></label>
-              <button class="btn primary sm" id="op-save">保存设定</button>
-              <span id="op-msg" class="small dim"></span>
+              <div class="row">
+                <button class="btn primary sm" id="op-save">保存设定</button>
+                <button class="btn sm" id="op-refine" title="把这个人名下所有渠道读一遍，补全画像与事实">
+                  让 AI 帮我整理</button>
+                <span id="op-msg" class="small dim"></span>
+              </div>
+              <!-- 「我先填一部分，之后再让 AI 优化」是这个按钮存在的全部理由。
+                   所以它必须**说清自己会不会动你写的东西** —— 一个有可能悄悄吃掉
+                   手写内容的按钮，用户是不会按的。 -->
+              <div class="fhint" style="margin-top:10px">
+                「让 AI 帮我整理」会把这个人名下<b>所有渠道</b>的聊天记录读一遍，
+                补全画像、归纳事实、并补齐你还没填的几项。
+                <b>你手写过的</b>目标 / 关系阶段 / 雷区 / 说话风格<b>默认不动</b>，
+                整理完会告诉你哪几项保留了、哪几项被更新了。
+              </div>
             </div>
 
             <div class="card">
@@ -767,9 +875,14 @@ table.t tr:hover td{background:var(--panel2)}
       <div class="card">
         <h3>③ 半自动采集 <span class="tag">不依赖版本和密钥</span></h3>
         <p class="small muted" style="margin-bottom:12px">
-          开启后，你在 QQ / 微信里选中消息按 <span class="mono">Ctrl+C</span>，
+          开启后，你在聊天窗口里选中消息按 <span class="mono">Ctrl+C</span>，
           内容和时间会立刻被接住，并归到对的人名下。
           <b>认不出是谁说的，程序会停下来问你，不会替你猜。</b>
+        </p>
+        <p class="small muted" style="margin-bottom:12px">
+          QQ 和微信之外的聊天（Telegram / 钉钉 / 短信 / 贴吧 / 游戏内私聊…）也走这条路 ——
+          把客户端选成「<b>其他聊天</b>」即可。它读不了别人的加密数据库，
+          但你复制什么它就接住什么。
         </p>
         <p class="small muted" style="margin-bottom:12px">
           记录的是<b>消息自己的时刻</b>，不是你按下复制的那一刻。想在客户端里
@@ -784,6 +897,8 @@ table.t tr:hover td{background:var(--panel2)}
             <select id="sc-client">
               <option value="qq">QQ</option>
               <option value="wechat">微信</option>
+              <option value="wechat3">微信 3.x（旧版）</option>
+              <option value="other">其他聊天</option>
             </select>
           </label>
           <label class="f" style="margin:0;flex:1;min-width:220px">
@@ -826,7 +941,9 @@ table.t tr:hover td{background:var(--panel2)}
       <div class="card">
         <h3>⑤ 手动导入 · 上传文件 <span class="tag">原「导入」页</span></h3>
         <p class="small muted" style="margin-bottom:12px">
-          支持 QQ / 微信导出的 txt，以及自定义 JSON / CSV。<b>先「预览」看清再「确认导入」</b> —— 入库就撤不回来了。
+          支持 QQ / 微信导出的 txt，以及别的工具导出的 JSON / CSV（选「其他聊天记录」）。
+          只有整段文字、没有文件的，用下面那个「粘贴文本」更快。
+          <b>先「预览」看清再「确认导入」</b> —— 入库就撤不回来了。
           说话人会自动归到对应的对象名下，导入完就能在「对象」里看到。
         </p>
         <div class="drop" id="imp-drop">
@@ -840,10 +957,10 @@ table.t tr:hover td{background:var(--panel2)}
           <label class="f" style="margin:0;flex:1;min-width:150px">
             <span>适配器（留空自动判断）</span>
             <select id="imp-adapter">
-              <option value="">自动</option>
+              <option value="">自动判断</option>
               <option value="qq">QQ 聊天记录</option>
               <option value="wechat">微信聊天记录</option>
-              <option value="generic">通用 JSON / CSV</option>
+              <option value="generic">其他聊天记录（JSON / CSV）</option>
             </select>
           </label>
           <label class="f" style="margin:0;flex:1;min-width:150px">
@@ -865,11 +982,21 @@ table.t tr:hover td{background:var(--panel2)}
       <div class="card">
         <h3>⑤ 手动导入 · 粘贴文本</h3>
         <p class="small muted" style="margin-bottom:8px">
-          格式：每行 <span class="mono">2024-01-01 12:00:00 昵称</span>，下一行是内容，消息之间空一行。
+          不用选文件，最快的一条路：每行 <span class="mono">2024-01-01 12:00:00 昵称</span>，
+          下一行是内容，消息之间空一行。整段 JSON / CSV 也可以直接粘，会自动认格式。
         </p>
         <textarea id="paste-text" style="min-height:120px" placeholder="2024-01-01 21:00:00 小鹿&#10;在吗&#10;&#10;2024-01-01 21:02:00 我&#10;在的"></textarea>
         <div class="row" style="margin-top:10px">
-          <input type="text" id="paste-name" placeholder="会话名称" style="max-width:200px" />
+          <input type="text" id="paste-name" placeholder="这是谁（会话名称）" style="max-width:200px" />
+          <select id="paste-platform" style="max-width:168px"
+                  title="这段内容是在哪说的？只有你知道。拿不准就留「自动判断」，导入后会在右边告诉你它归到了哪个渠道。">
+            <option value="">来源：自动判断</option>
+            <option value="qq">来源：QQ</option>
+            <option value="wechat">来源：微信</option>
+            <option value="other">来源：其他聊天</option>
+            <option value="call">来源：通话</option>
+            <option value="offline">来源：当面</option>
+          </select>
           <button class="btn sm" id="paste-go">导入这段文本</button>
           <span id="paste-msg" class="small dim"></span>
         </div>
@@ -1135,6 +1262,15 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c =>
 
 // 以对象为中心之后，state 的主线是「当前对象 → 它下面的渠道 → 当前会话」。
 // `chatId` 仍是「指挥台正在用的那一条记录」，由左栏点渠道时写入。
+// 界面自己带的版本号。它和 `backend/app/__init__.py` 的 `__version__` 必须一致 ——
+// 由 `backend/tests/test_version.py` 钉住，改版本时漏改这一处测试会红。
+//
+// 为什么值得让版本号出现两次：这个前端是**每次从磁盘现读**的，而服务是一个
+// 一直在跑的进程。两者可以来自不同的程序版本 —— 用户升级完没完全退出，
+// 老进程还在答话，于是「界面是新的、版本号是旧的」。有了这个常量，界面才能
+// 自己发现这件事并说人话，而不是让用户怀疑是版本号写错了。
+const BUILD = "0.5.0";
+
 const state = {
   persons: [], personId: null, channels: [],
   chats: [], chatId: null, bundle: null, check: null,
@@ -1142,6 +1278,7 @@ const state = {
   // 你贴的那句话会记到它名下，检索也以它为主；其余渠道的上下文合并进来。
   cpChatIds: [],
   objTab: "overview",            // 对象详情当前 Tab
+  objQuery: "",                  // 左栏对象搜索词（对象少于 6 个时不显示搜索框）
   chatFilter: "",                // 「聊天记录」Tab 的渠道筛选（""=全部渠道）
   messages: [], msgSel: new Set(), firstMsgId: null,
 };
@@ -1384,20 +1521,46 @@ document.addEventListener("scroll", closeCtxMenu, true);
 
 // ---------------------------------------------------------------- 会话操作
 //
-// 会话的「设置」和「删除」都从左侧列表的右键菜单进 —— 这是聊天类软件的肌肉记忆。
+// 渠道（一段记录）的「设置」和「删除」都从左侧列表的右键菜单进 —— 这是聊天类软件的肌肉记忆。
 // 记忆页那几个按钮保留（那里也能改、也能删），两处走的是同一套实现。
 
+// 渠道类型。`other` 是「其他聊天」—— Telegram / 钉钉 / 短信 / 贴吧 / 游戏内私聊……
+// 它们是**同一个位置**，不是「认不出来的东西」。`generic` 是导入适配器的术语
+// （「通用 JSON / CSV」），库里可能还有老数据用它当渠道名，所以显示上并到「其他聊天」，
+// 而不是让用户看见一个含义不明的「通用」。
+const PLATFORM_LABELS = {
+  qq: "QQ", wechat: "微信", other: "其他聊天", generic: "其他聊天",
+  call: "通话", offline: "当面",
+};
+
 function chatPlatformLabel(platform) {
-  return ({ qq: "QQ", wechat: "微信", generic: "通用", call: "通话", offline: "当面" })[platform] || (platform || "未知");
+  const k = String(platform || "").toLowerCase();
+  return PLATFORM_LABELS[k] || (platform || "未知");
 }
 
-/** 渠道「设置…」：改会话名 / 平台 / 双方称呼 / 重新判定「哪边是我」。 */
-const CHAT_PLATFORMS = [["wechat", "微信"], ["qq", "QQ"], ["call", "通话"], ["offline", "当面"], ["generic", "其他"]];
+/** 渠道类型标记用的 CSS 类（颜色按类型分，一眼分清）。 */
+function platformClass(platform) {
+  const k = String(platform || "").toLowerCase();
+  if (k === "generic") return "other";
+  return PLATFORM_LABELS[k] ? k : "other";
+}
+
+/** 渠道「设置…」：改渠道名 / 平台 / 双方称呼 / 重新判定「哪边是我」。 */
+const CHAT_PLATFORMS = [
+  ["qq", "QQ"], ["wechat", "微信"], ["other", "其他聊天"],
+  ["call", "通话"], ["offline", "当面"],
+];
 
 function openChatSettingsDialog(chat) {
-  const known = CHAT_PLATFORMS.some(([v]) => v === chat.platform);
+  // 下拉里没有这个值时（比如老库存着 `generic`、或导入时带了别的平台名），
+  // 补一条「保持原样」并让它成为选中项。**不能**悄悄把它折成 `other` ——
+  // 打开设置看一眼就把人家的平台改掉，是那种事后很难查的静默改动。
+  const raw = String(chat.platform || "").toLowerCase();
+  const known = CHAT_PLATFORMS.some(([v]) => v === raw);
   const opts = CHAT_PLATFORMS.map(([v, t]) =>
-    `<option value="${v}"${v === chat.platform ? " selected" : ""}>${t}</option>`).join("");
+    `<option value="${v}"${known && v === raw ? " selected" : ""}>${t}</option>`).join("");
+  const keep = known ? ""
+    : `<option value="${esc(raw)}" selected>${esc(chatPlatformLabel(raw))}（保持原样）</option>`;
   const h = openModal({
     title: "设置",
     sub: `ID：${chat.id} · ${chatPlatformLabel(chat.platform)} · ${chat.message_count} 条消息`,
@@ -1405,9 +1568,9 @@ function openChatSettingsDialog(chat) {
       <div class="frow"><span>平台 / 渠道</span>
         <select id="cs-platform">
           ${opts}
-          ${known ? "" : `<option value="${esc(chat.platform)}" selected>${esc(chatPlatformLabel(chat.platform))}（当前）</option>`}
+          ${keep}
         </select></div>
-      <div class="frow"><span>会话名称</span>
+      <div class="frow"><span>渠道名称</span>
         <input type="text" id="cs-name" value="${esc(chat.name)}" placeholder="列表里显示的名字" /></div>
       <div class="frow"><span>对方称呼</span>
         <input type="text" id="cs-peer" value="${esc(chat.peer_name)}" placeholder="不知道就留空" /></div>
@@ -1422,7 +1585,7 @@ function openChatSettingsDialog(chat) {
       <div class="fhint">
         最后一项是<b>重新判定角色</b>用的：填上你在记录里用过的所有昵称（比如「我, 小明, 阿明」），
         系统会把匹配到的消息改判成「我」说的，其余归给对方。<b>只在不填时不动</b>；
-        一次纠正会覆盖整条会话 —— 导完先看一眼「聊天记录」里的归属对不对。
+        一次纠正会覆盖整段记录 —— 导完先看一眼「聊天记录」里的归属对不对。
       </div>`,
   });
 
@@ -1434,7 +1597,7 @@ function openChatSettingsDialog(chat) {
     modalButton("保存", "primary", async (e) => {
       const btn = e.currentTarget;
       const name = h.root.querySelector("#cs-name").value.trim();
-      if (!name) { note.textContent = "会话名称不能为空。"; return; }
+      if (!name) { note.textContent = "渠道名称不能为空。"; return; }
       busy(btn, true, "保存中…");
       try {
         const r = await api(`/api/chats/${encodeURIComponent(chat.id)}`, {
@@ -1461,9 +1624,9 @@ function openChatSettingsDialog(chat) {
   );
 }
 
-/** 删除会话：先摊开「会失去什么」，再倒计时够久了才允许点。 */
+/** 删除一段记录（渠道）：先摊开「会失去什么」，再倒计时够久了才允许点。 */
 async function openChatDeleteDialog(chat) {
-  // 事实条数要单独问一次 —— 它不在会话列表里，而「会丢掉几条记忆」恰恰是关键信息
+  // 事实条数要单独问一次 —— 它不在列表里，而「会丢掉几条记忆」恰恰是关键信息
   let facts = null;
   try {
     const rows = await api(`/api/chats/${encodeURIComponent(chat.id)}/facts`);
@@ -1471,11 +1634,11 @@ async function openChatDeleteDialog(chat) {
   } catch (e) { facts = null; }
 
   const factsLine = facts === null
-    ? `<li>抽取出来的全部事实（本条会话下的事实会一并删除）</li>`
+    ? `<li>抽取出来的全部事实（这个渠道下的事实会一并删除）</li>`
     : `<li>抽取出来的 <span class="dl">${facts}</span> 条事实</li>`;
 
   confirmWithCountdown({
-    title: "删除会话前请确认",
+    title: "删除这段记录前请确认",
     sub: `${chat.name} · ${chatPlatformLabel(chat.platform)}`,
     confirmLabel: "我确认，删除",
     seconds: 6,
@@ -1550,7 +1713,7 @@ function openRenameDialog(chat) {
                 modalButton("保存", "primary", save));
 }
 
-/** 会话右键菜单。列表项和记忆页都复用它。 */
+/** 渠道右键菜单。左栏的渠道项和「聊天记录」页都复用它。 */
 function openChatMenu(x, y, chat) {
   openCtxMenu(x, y, [
     { label: "打开", run: () => { openObjectChat(chat.id); } },
@@ -1593,11 +1756,54 @@ async function loadHealth() {
     const about = $("#about-ver");
     if (about) {
       about.innerHTML = `当前版本 <b>v${esc(h.version)}</b> · ${h.counts.messages} 条消息 · `
-        + `${(h.counts.chats ?? "—")} 个会话 · 数据只在本机`;
+        + `${(h.counts.chats ?? "—")} 个渠道 · 数据只在本机`;
     }
+    await checkBuildMatches(String(h.version || ""));
   } catch (e) {
     $("#health").innerHTML = `<span class="delta-up">后端未连接</span>`;
   }
+}
+
+/** 界面版本 vs 正在答话的那个进程的版本。
+ *
+ * 不一致这件事**不是**「版本号写错了」，而是「有一个旧进程还开着」——
+ * 把这句话说出来，用户三秒就能自己解决；不说，他会来问人，或者更糟：
+ * 以为新版本没生效而反复重装。
+ */
+async function checkBuildMatches(serverVersion) {
+  const box = $("#ver-warn");
+  if (!box) return;
+  if (!serverVersion || serverVersion === BUILD) { box.classList.add("hidden"); return; }
+
+  // 只在真的不一致时多问一句「你是谁」——正常情况下一次多余的请求都不发。
+  let who = "";
+  try {
+    const d = await api("/api/desktop/state");
+    const when = d.started_at ? new Date(d.started_at) : null;
+    const hhmm = when && !isNaN(when)
+      ? `${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}`
+      : "?";
+    who = `本机服务：${d.mode === "exe" ? "打包版" : "源码运行"} · 启动于 ${hhmm}`
+        + ` · 已运行 ${Math.max(0, Math.round((d.uptime_seconds || 0) / 60))} 分钟 · PID ${d.pid}`;
+  } catch { /* 问不到就不显示这一行，结论本身仍然成立 */ }
+
+  box.classList.remove("hidden");
+  box.innerHTML = `
+    <div class="vt">界面和正在跑的程序不是同一个版本</div>
+    <div class="vs">界面 <b>v${esc(BUILD)}</b>，但答话的本机服务是 <b>v${esc(serverVersion)}</b>。</div>
+    <div class="vd">
+      最常见的原因：升级完之后程序没有<b>完全退出</b>，一个旧版本的进程还在后台跑着，
+      现在的页面连的就是它。办法是把它退干净再重新打开一次 ——
+      <b>数据不会丢</b>，聊天记录和设置都存在本机数据目录里。<br>
+      如果你是在浏览器里打开的，先关掉所有 WingMan 的标签页，重新启动程序再打开。
+    </div>
+    ${who ? `<div class="vd">${esc(who)}</div>` : ""}
+    <div class="row">
+      <button class="btn sm" id="ver-reload">刷新页面</button>
+      <button class="btn sm ghost" id="ver-hide">知道了</button>
+    </div>`;
+  $("#ver-reload")?.addEventListener("click", () => location.reload());
+  $("#ver-hide")?.addEventListener("click", () => box.classList.add("hidden"));
 }
 
 // ================================================================ 对象列表（左栏两级）
@@ -1626,7 +1832,7 @@ async function loadObjects() {
   if (state.chatId && !state.chats.some(c => c.id === state.chatId)) state.chatId = null;
   if (!state.chatId && state.chats.length) state.chatId = state.chats[0].id;
 
-  // 指挥台勾的渠道可能已经被删掉/换归属了 —— 清掉失效的，别让一次分析打到一个不存在的会话上
+  // 指挥台勾的渠道可能已经被删掉/换归属了 —— 清掉失效的，别让一次分析打到一个不存在的渠道上
   state.cpChatIds = state.cpChatIds.filter(id => state.chats.some(c => c.id === id));
   if (!state.cpChatIds.length && state.chatId) state.cpChatIds = [state.chatId];
 
@@ -1635,28 +1841,79 @@ async function loadObjects() {
   updateSteps();
 }
 
+/** 「9-28」这种短日期；今天/昨天直接说人话。 */
+function shortDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d)) return "";
+  const today = new Date();
+  const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((day(today) - day(d)) / 86400000);
+  if (diff === 0) return "今天";
+  if (diff === 1) return "昨天";
+  if (diff < 7) return `${diff} 天前`;
+  return `${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+/** 对象项副标题：几个渠道 · 多少条 · 最近什么时候聊过。 */
+function personMeta(p) {
+  if (!p.channel_count) return { text: "还没有聊天记录", fresh: true };
+  const bits = [`${p.channel_count} 个渠道`, `${p.message_count} 条`];
+  const when = shortDate(p.last_ts);
+  if (when) bits.push(`最近 ${when}`);
+  return { text: bits.join(" · "), fresh: false };
+}
+
+/** 左栏当前生效的搜索词（对象多的时候才出现）。 */
+function personMatches(p) {
+  const q = (state.objQuery || "").trim().toLowerCase();
+  if (!q) return true;
+  return (p.name || "").toLowerCase().includes(q)
+    || (p.aliases || []).some(a => String(a).toLowerCase().includes(q))
+    || (p.relation || "").toLowerCase().includes(q);
+}
+
 function renderObjects() {
   const box = $("#objlist");
   if (!box) return;
+
+  // 搜索框只在对象确实多起来之后出现。三个人的时候放个搜索框是噪音，
+  // 而且会让人怀疑「是不是还有我看不到的」。
+  const findWrap = $("#obj-find-wrap");
+  if (findWrap) findWrap.classList.toggle("hidden", state.persons.length < 6);
+
   if (!state.persons.length) {
-    box.innerHTML = `<div class="empty-hint">还没有任何对象。先去「采集」导一段或采一段。</div>`;
+    box.innerHTML = `<div class="empty-hint">还没有任何对象。点上面的「＋ 新建」先建一个人，或者去「采集」导一段聊天记录。</div>`;
     return;
   }
-  box.innerHTML = state.persons.map(p => {
+
+  const shown = state.persons.filter(personMatches);
+  if (!shown.length) {
+    box.innerHTML = `<div class="empty-hint">没有匹配「${esc(state.objQuery)}」的对象。</div>`;
+    return;
+  }
+
+  box.innerHTML = shown.map(p => {
     const sel = p.id === state.personId;
+    const meta = personMeta(p);
     const head = `
       <div class="objitem ${sel ? "on" : ""}" data-pid="${esc(p.id)}" tabindex="0"
-           title="${esc(p.name)} · ${p.channel_count} 个渠道 · ${p.message_count} 条消息">
-        <span class="nm">${esc(p.name)}</span>
-        <span class="ct">${p.channel_count} 渠道 · ${p.message_count}</span>
+           title="${esc(p.name)} · ${meta.text}（右键：打开 / 设置 / 重命名 / 删除）">
+        <span class="nm">${esc(p.name)}${
+          p.relation ? `<span class="cbadge">${esc(p.relation)}</span>` : ""}</span>
+        <span class="ct ${meta.fresh ? "fresh" : ""}">${esc(meta.text)}</span>
       </div>`;
-    // 只展开当前选中的对象：对象多起来之后全展开会糊成一片
-    const chans = sel ? state.channels.map(c => `
+    // 只展开当前选中的对象：对象多起来之后全展开会糊成一片。
+    // 选中但一个渠道都没有时，给一句「下一步做什么」而不是留一片空白 ——
+    // 「提前新建的对象」就是这个样子，那是最需要有人指路的状态。
+    const chans = sel ? (state.channels.map(c => `
       <div class="chitem ${c.chat_id === state.chatId ? "on" : ""}" data-cid="${esc(c.chat_id)}" tabindex="0"
            title="${esc(chanLabel(c))} · ${c.message_count} 条（右键可设置）">
-        <span class="nm">${esc(chanLabel(c))}</span>
+        <span class="nm"><span class="cbadge ${platformClass(c.platform)}">${
+          esc(chatPlatformLabel(c.platform))}</span>${esc(c.name || c.chat_id)}</span>
         <span class="ct">${c.message_count}</span>
-      </div>`).join("") : "";
+      </div>`).join("") || `<div class="empty-hint" style="padding:6px 12px 10px 16px">
+          这个人还没有聊天记录。「采集」里导一段，或者在对象页看「下一步」提示。</div>`) : "";
     return head + chans;
   }).join("");
 
@@ -1664,6 +1921,22 @@ function renderObjects() {
     el.addEventListener("click", () => selectPerson(el.dataset.pid));
     el.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectPerson(el.dataset.pid); }
+    });
+    // 对象右键菜单：打开 / 设置 / 重命名 / 删除。渠道也有右键菜单，
+    // 两级都长在同一个手势上，用户不用记两套。
+    el.addEventListener("contextmenu", (e) => {
+      const p = state.persons.find(x => x.id === el.dataset.pid);
+      if (!p) return;
+      e.preventDefault();
+      openPersonMenu(e.clientX, e.clientY, p);
+    });
+    el.addEventListener("keydown", (e) => {
+      if (e.key !== "ContextMenu" && !(e.shiftKey && e.key === "F10")) return;
+      const p = state.persons.find(x => x.id === el.dataset.pid);
+      if (!p) return;
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      openPersonMenu(r.left + 12, r.bottom - 4, p);
     });
   });
   box.querySelectorAll(".chitem").forEach(el => {
@@ -1692,6 +1965,205 @@ function selectPerson(id) {
   goView("objects");
 }
 
+// ---------------------------------------------------------------- 对象的增删改
+//
+// 需求：对象要能**提前新建** —— 我知道要分析谁，但记录还没导。
+// 所以新建表单刻意分成两块：
+//   · 第一块（名字）是唯一必填的，建完就能往下走；
+//   · 第二块（关系 / 目标 / 雷区 / 备注）全是选填，留给「我先写点我知道的」。
+// 这种「必填只有一个」的设计是有意的：一上来就要十项的表单，新手会直接关掉。
+// 之后导入聊天记录，用「记忆」里的「让 AI 帮我整理」把它补全。
+
+/** 对象右键菜单。和渠道的右键菜单对称 —— 两级都长在同一个手势上。 */
+function openPersonMenu(x, y, person) {
+  const empty = !person.channel_count;
+  openCtxMenu(x, y, [
+    { label: "打开", run: () => selectPerson(person.id) },
+    { sep: true },
+    { label: "设置…", run: () => openPersonDialog(person) },
+    { label: "重命名…", run: () => openPersonRenameDialog(person) },
+    { label: "合并到…", run: () => openPersonMergeDialog(person) },
+    { sep: true },
+    { label: "删除对象…", danger: true, run: () => openPersonDeleteDialog(person) },
+  ], { title: `${person.name}${empty ? "（还没有聊天记录）" : `（${person.channel_count} 个渠道）`}` });
+}
+
+/** 新建 / 编辑对象。同一个弹窗：编辑时把已有值填进去。 */
+function openPersonDialog(person = null) {
+  const p = person || {};
+  const editing = !!person;
+  const h = openModal({
+    title: editing ? "对象设置" : "新建对象",
+    sub: editing
+      ? `ID：${p.id}`
+      : "先建人、再往里装记录。除了名字，其余都可以以后补。",
+    body: `
+      <label class="f"><span>名字（必填）</span>
+        <input type="text" id="pn-name" value="${esc(p.name || "")}" placeholder="例：小鹿" /></label>
+      <label class="f"><span>别名 / 别的称呼（逗号分隔）</span>
+        <input type="text" id="pn-aliases" value="${esc((p.aliases || []).join("、"))}"
+               placeholder="例：鹿鹿、小鹿儿" />
+        <span class="fhint">导入或采集时，这些名字也会被认成同一个人。</span></label>
+      <label class="f"><span>我们的关系</span>
+        <input type="text" id="pn-relation" value="${esc(p.relation || "")}" placeholder="例：同事 / 相亲认识" /></label>
+      <label class="f"><span>希望走到哪一步</span>
+        <input type="text" id="pn-desired" value="${esc(p.desired_relation || "")}" placeholder="例：能自然地约出来" /></label>
+      <label class="f"><span>这一阶段的目标</span>
+        <input type="text" id="pn-stage" value="${esc(p.stage_goal || "")}" placeholder="例：先聊到她愿意分享日常" /></label>
+      <label class="f"><span>我已知的情况（备注）</span>
+        <textarea id="pn-notes" style="min-height:70px"
+          placeholder="想到什么写什么。这些会原样喂给模型当依据 —— 也是「让 AI 帮我整理」的基础。">${esc(p.notes || "")}</textarea></label>
+      <div class="fhint">
+        ${editing
+          ? "聊天记录不会被这里改到 —— 名字和备注只是「你怎么看这个人」。"
+          : "建好之后，可以马上去「采集」导一段聊天记录；也可以在对象页「记忆」里用「让 AI 帮我整理」把它补全。"}
+      </div>`,
+  });
+
+  const note = document.createElement("span");
+  note.className = "mnote";
+  const save = async (e) => {
+    const btn = e.currentTarget;
+    const name = h.root.querySelector("#pn-name").value.trim();
+    if (!name) { note.textContent = "名字不能为空。"; return; }
+    // 「、」和「,」都当分隔符 —— 中文输入法下打出的是前者，别让用户为此返工
+    const aliases = h.root.querySelector("#pn-aliases").value
+      .split(/[、,，]/).map(s => s.trim()).filter(Boolean);
+    const payload = {
+      name, aliases,
+      relation: h.root.querySelector("#pn-relation").value.trim(),
+      desired_relation: h.root.querySelector("#pn-desired").value.trim(),
+      stage_goal: h.root.querySelector("#pn-stage").value.trim(),
+      notes: h.root.querySelector("#pn-notes").value.trim(),
+    };
+    busy(btn, true, editing ? "保存中…" : "创建中…");
+    try {
+      let r;
+      if (editing) {
+        r = await api(`/api/persons/${encodeURIComponent(p.id)}`, {
+          method: "PATCH", body: JSON.stringify(payload),
+        });
+      } else {
+        r = await api("/api/persons", { method: "POST", body: JSON.stringify(payload) });
+        state.personId = r.id;
+        state.objTab = "memory";        // 新建完直接送到「记忆」，接着就能填设定
+      }
+      closeModal();
+      await loadObjects();
+      if (editing) { goView("objects"); toast("#of-msg", "已保存", "ok"); }
+      else { selectPerson(r.id); }
+    } catch (err) {
+      busy(btn, false);
+      // 重名是**最常遇到**的失败，服务端已经给了人话（含「确实不是就勾仍然新建」）。
+      // 客户端只负责把它原样显示出来，不要自己造一句更含糊的。
+      note.textContent = err.message;
+    }
+  };
+  h.root.querySelector("#pn-name").addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") save({ currentTarget: h.foot.querySelector(".btn.primary") });
+  });
+  h.foot.append(note, modalButton("取消", "ghost", () => closeModal()),
+                modalButton(editing ? "保存" : "创建", "primary", save));
+}
+
+/** 只改名字的轻量入口 —— 右键菜单里最常点的就是它。 */
+function openPersonRenameDialog(person) {
+  const h = openModal({
+    title: "重命名对象",
+    sub: `ID：${person.id}`,
+    body: `<div class="frow"><span>名字</span>
+             <input type="text" id="pr-name" value="${esc(person.name)}" /></div>
+           <div class="fhint">只改这个名字。别名、备注、聊天记录都不动；
+             想改关系或目标，用「设置…」。</div>`,
+  });
+  const note = document.createElement("span");
+  note.className = "mnote";
+  const save = async () => {
+    const name = h.root.querySelector("#pr-name").value.trim();
+    if (!name) { note.textContent = "名字不能为空。"; return; }
+    const btn = h.foot.querySelector(".btn.primary");
+    busy(btn, true, "保存中…");
+    try {
+      await api(`/api/persons/${encodeURIComponent(person.id)}`,
+                { method: "PATCH", body: JSON.stringify({ name }) });
+      closeModal();
+      await loadObjects();
+    } catch (e) { busy(btn, false); note.textContent = e.message; }
+  };
+  h.root.querySelector("#pr-name").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") save();
+  });
+  h.foot.append(note, modalButton("取消", "ghost", () => closeModal()),
+                modalButton("保存", "primary", save));
+}
+
+/** 把当前对象并到另一个对象名下（同一个人被建了两次时用）。 */
+function openPersonMergeDialog(person) {
+  const others = state.persons.filter(p => p.id !== person.id);
+  if (!others.length) {
+    alert("至少要有两个对象才能合并。");
+    return;
+  }
+  const h = openModal({
+    title: "把「" + person.name + "」合并到…",
+    sub: "合并后这个名字会变成对方的别名，聊天记录也一起并过去。",
+    body: `
+      <div class="frow"><span>合并到</span>
+        <select id="pm-target">
+          ${others.map(o => `<option value="${esc(o.id)}">${esc(o.name)}（${o.channel_count} 个渠道）</option>`).join("")}
+        </select></div>
+      <div class="fhint">
+        合并<b>不会删消息</b>：两个人的渠道、事实、画像都会归到保留的那个名下。
+        这一步不可撤销，但对象和记录都还在，可以再手工分开。
+      </div>`,
+  });
+  const note = document.createElement("span");
+  note.className = "mnote";
+  h.foot.append(note, modalButton("取消", "ghost", () => closeModal()),
+    modalButton("合并", "primary", async (e) => {
+      const btn = e.currentTarget;
+      const target = h.root.querySelector("#pm-target").value;
+      busy(btn, true, "合并中…");
+      try {
+        await api(`/api/persons/${encodeURIComponent(target)}/merge`, {
+          method: "POST", body: JSON.stringify({ merge_ids: [person.id] }),
+        });
+        closeModal();
+        state.personId = target;
+        await loadObjects();
+        goView("objects");
+      } catch (err) { busy(btn, false); note.textContent = err.message; }
+    }));
+}
+
+function openPersonDeleteDialog(person) {
+  const many = person.message_count > 0;
+  confirmWithCountdown({
+    title: `删除对象「${person.name}」`,
+    sub: `ID：${person.id}`,
+    body: `
+      <div class="note ${many ? "" : "ok"}">
+        ${many
+          ? `这个对象名下有 <b>${person.channel_count} 个渠道、${person.message_count} 条消息</b>。
+             删除只会<b>解除归属</b> —— <b>聊天记录一条都不会删</b>，
+             它们会回到「未归属」状态，可以再挂给别人。`
+          : "这个人名下还没有聊天记录，删掉没有任何损失。"}
+      </div>
+      <div class="fhint">
+        会一起删掉的是：这个对象的人物设定、对象级事实，以及历次分析的留存。
+        想留一份就先在「聊天记录」里导出 JSON。
+      </div>`,
+    confirmLabel: "删除对象",
+    onConfirm: async () => {
+      await api(`/api/persons/${encodeURIComponent(person.id)}`, { method: "DELETE" });
+      if (state.personId === person.id) state.personId = null;
+      state.cpChatIds = [];
+      await loadObjects();
+      loadHealth();
+    },
+  });
+}
+
 /** 指挥台当前的主渠道 —— 勾选顺序里的第 1 个。 */
 function cpPrimary() {
   return state.cpChatIds.find(id => state.chats.some(c => c.id === id)) || null;
@@ -1701,7 +2173,7 @@ function reflectChat() {
   const has = !!state.personId && state.chats.length > 0;
   $("#cp-nochat").classList.toggle("hidden", has);
   $("#cp-main").classList.toggle("hidden", !has);
-  if (!has) return;
+  if (!has) { renderCopilotEmpty(); return; }
   renderCopilotPicker();
   const ids = state.cpChatIds;
   const c = state.chats.find(x => x.id === cpPrimary());
@@ -1710,6 +2182,32 @@ function reflectChat() {
     tag.textContent = c
       ? (ids.length > 1 ? `${c.name} + 另外 ${ids.length - 1} 个渠道` : `${c.name} · ${c.message_count} 条`)
       : "还没勾渠道";
+  }
+}
+
+/** 指挥台在「没什么可分析」时说的话。
+ *
+ * 两种空是不同的：**一个对象都没有**，和**选中了人但这个人还没有记录**。
+ * 前者要教他建人/导记录，后者只要告诉他「这个人还空着，去补记录」——
+ * 都说成「先选一个对象」，第二种情况下就会让人以为界面坏了（明明选了啊）。
+ */
+function renderCopilotEmpty() {
+  const t = $("#cp-nochat-t"), d = $("#cp-nochat-d"), hint = $("#cp-nochat-hint");
+  if (!t || !d) return;
+  const p = state.persons.find(x => x.id === state.personId);
+  if (p) {
+    t.textContent = `${p.name} 还没有聊天记录`;
+    d.innerHTML = `指挥台需要至少一段记录才能分析 —— 它读的是聊天内容，不是名字。
+      到「采集」页导一段（QQ / 微信导出的 txt，或者其他聊天工具导出的 JSON / CSV），
+      再回来这里。`;
+    hint.innerHTML = `想先手动补一点？到「对象」页的「记忆」Tab，可以手填你和 Ta 的关系、目标、雷区，
+      之后导入记录再用「让 AI 帮我整理」补全。`;
+  } else {
+    t.textContent = "先选一个对象";
+    d.innerHTML = `左侧还没有对象。到「采集」页上传一份聊天记录（QQ / 微信导出的 txt 都支持），
+      或者直接用示例文件 <span class="mono">samples/qq_sample_小鹿.txt</span> 试跑一遍流程。`;
+    hint.innerHTML = `「对象」就是你在聊的那个人。一个人可以有好几段记录（微信、QQ、其他聊天工具），
+      它们都归到同一个对象名下 —— 指挥台就能一次看全，而不是只看其中一段。`;
   }
 }
 
@@ -2085,14 +2583,40 @@ async function objectsOnEnter() {
   openObjTab(state.objTab || "overview");
 }
 
+/** 对象页页头：这个人是谁、我们什么关系、有多少料、下一步该干什么。 */
 function renderObjHeader() {
   const p = state.persons.find(x => x.id === state.personId);
-  if (!p) return;
-  $("#obj-title").textContent = p.name;
-  $("#obj-sub").textContent =
-    `${p.channel_count} 个渠道 · ${p.message_count} 条消息（对方 ${p.peer_count} / 我 ${p.me_count}）`
-    + (p.relation ? ` · 关系：${p.relation}` : "")
-    + (p.stage_goal ? ` · 阶段目标：${p.stage_goal}` : "");
+  const box = $("#obj-head");
+  if (!p || !box) return;
+
+  const empty = !p.message_count;
+  const meta = [`${p.channel_count} 个渠道`, `${p.message_count} 条消息`];
+  if (p.message_count) meta.push(`对方 ${p.peer_count} / 我 ${p.me_count}`);
+  const when = shortDate(p.last_ts);
+  if (when) meta.push(`最近联系 ${when}`);
+
+  box.innerHTML = `
+    <div class="oh-main">
+      <div class="oh-name">${esc(p.name)}${
+        p.relation ? `<span class="cbadge">${esc(p.relation)}</span>` : ""}</div>
+      <div class="oh-meta">${esc(meta.join(" · "))}</div>
+      ${p.stage_goal ? `<div class="oh-meta">阶段目标：${esc(p.stage_goal)}</div>` : ""}
+      ${empty ? `<div class="oh-meta">
+        还没有聊天记录。到「采集」导一段（QQ / 微信导出的 txt，或「其他聊天」的文本），
+        再回「记忆」用「让 AI 帮我整理」补全这个人。</div>` : ""}
+    </div>
+    <div class="oh-acts">
+      ${p.channel_count ? `<button class="btn sm" data-oh="analyze">去指挥台分析</button>` : ""}
+      <button class="btn sm ghost" data-oh="settings">对象设置</button>
+    </div>`;
+
+  box.querySelectorAll("[data-oh]").forEach(b => b.addEventListener("click", () => {
+    if (b.dataset.oh === "settings") { openPersonDialog(p); return; }
+    // 「去指挥台分析」顺带把这个人的全部渠道勾上 —— 用户点这个按钮的意思
+    // 就是「看这个人」，让他到了指挥台再一个个勾渠道是多余的。
+    state.cpChatIds = state.channels.map(c => c.chat_id);
+    goView("copilot");
+  }));
 }
 
 function openObjTab(name) {
@@ -2110,6 +2634,25 @@ function openObjTab(name) {
 $("#obj-tabs").addEventListener("click", (e) => {
   const b = e.target.closest(".otab");
   if (b) openObjTab(b.dataset.otab);
+});
+
+// ---------------------------------------------------------------- 新建对象的入口
+//
+// 三个入口指向同一个函数：左栏标题旁的「＋」、空状态里的「＋ 先建一个人」、
+// 以及（右键菜单里的）「设置…」。**入口多、实现只有一处** —— 三个入口各写一套
+// 是这类界面最常见的腐化方式，改了一处忘了一处。
+$("#obj-new")?.addEventListener("click", () => openPersonDialog());
+$("#obj-new2")?.addEventListener("click", () => openPersonDialog());
+$("#obj-go-collect")?.addEventListener("click", () => goView("collect"));
+// 指挥台的空状态也用同一套动作 —— 用户在哪一页撞到「什么都没有」，
+// 就给他在那一页能点的按钮，而不是「去左边某处找找看」。
+$("#cp-nochat-new")?.addEventListener("click", () => openPersonDialog());
+$("#cp-nochat-collect")?.addEventListener("click", () => goView("collect"));
+
+// 对象搜索。只在对象多起来之后才显示（见 renderObjects）。
+$("#obj-find")?.addEventListener("input", (e) => {
+  state.objQuery = e.target.value || "";
+  renderObjects();
 });
 
 // ---------------------------------------------------------------- 概览
@@ -2249,6 +2792,65 @@ $("#op-save").addEventListener("click", async () => {
   } catch (e) { toast("#op-msg", e.message, "err"); }
   finally { busy("#op-save", false); }
 });
+
+// ---------------------------------------------------------------- 让 AI 帮我整理
+//
+// 「我先手填一部分，等记录导进来再让大模型优化」—— 这个按钮就是那条路。
+// 两处刻意的设计：
+//   1. 结果必须**逐项交代**「保留了什么、更新了什么」。只说一句「整理完成」，
+//      用户没法判断自己写的东西还在不在，也就不敢再按第二次。
+//   2. 默认不动手写内容；想连手写的一起改写，得再点一次明确的按钮。
+
+const PERSONA_FIELD_CN = {
+  goal: "你的目标", stage: "关系阶段", taboos: "雷区",
+  my_style: "你的说话风格", peer_profile: "对方画像",
+};
+
+async function refinePersonProfile(overwrite = false) {
+  if (!state.personId) return;
+  const btn = $("#op-refine");
+  const was = btn ? btn.textContent : "";
+  busy(btn, true, "整理中…（要跑一会儿）");
+  try {
+    const r = await api(`/api/persons/${encodeURIComponent(state.personId)}/refine`, {
+      method: "POST", body: JSON.stringify({ overwrite }),
+    });
+    const cn = (list) => list.map(k => PERSONA_FIELD_CN[k] || k).join("、");
+
+    const warns = (r.warnings || []).filter(Boolean);
+    // 「整理完成」只在**真的动了东西**时才说。没渠道、没消息的时候说
+    // 「整理完成：新增 0 条」会让人以为按钮坏了 —— 直接说没整理出东西，
+    // 后面跟着的 warning 才是他真正需要读的那句。
+    const didSomething = (r.updated || []).length || r.facts_extracted;
+    let line = didSomething
+      ? `整理完成：新增 ${r.facts_extracted} 条事实（共 ${r.facts_total} 条）。`
+      : "这次没整理出东西：";
+    if (r.updated && r.updated.length) line += `<br>已更新：${esc(cn(r.updated))}。`;
+    if (r.kept && r.kept.length) {
+      line += `<br>保留了你手写的：${esc(cn(r.kept))}。`;
+    }
+    if (warns.length) {
+      line += `<br><span class="delta-up">${warns.map(esc).join("<br>")}</span>`;
+    }
+    const box = $("#op-msg");
+    if (box) {
+      // 只有**这次真的动过**才给「连手写的一起改写」这个入口：
+      // 什么都没跑成的时候点它还是什么都改不了，是个纯粹的假按钮。
+      box.innerHTML = line + (r.kept && r.kept.length && didSomething
+        ? `<br><button class="linkbtn" id="op-refine-force">连我手写的那几项也一起改写</button>`
+        : "");
+      $("#op-refine-force")?.addEventListener("click", () => refinePersonProfile(true));
+    }
+    await loadObjMemory();          // 把刷新后的设定与事实显示出来
+  } catch (e) {
+    toast("#op-msg", e.message, "err");
+  } finally {
+    busy(btn, false);
+    if (btn) btn.textContent = was;
+  }
+}
+
+$("#op-refine")?.addEventListener("click", () => refinePersonProfile(false));
 
 $("#of-add").addEventListener("click", async () => {
   if (!state.personId) return;
@@ -2880,11 +3482,20 @@ $("#paste-go").addEventListener("click", async () => {
   if (text.trim().length < 10) { toast("#paste-msg", "文本太短", "err"); return; }
   busy("#paste-go", true, "导入中…");
   try {
+    const plat = $("#paste-platform")?.value || "";
     const r = await api("/api/import/text", {
       method: "POST",
-      body: JSON.stringify({ text, chat_name: $("#paste-name").value.trim() || "粘贴导入" }),
+      body: JSON.stringify({
+        text,
+        chat_name: $("#paste-name").value.trim() || "粘贴导入",
+        ...(plat ? { platform: plat } : {}),
+      }),
     });
-    toast("#paste-msg", `成功导入 ${r.inserted} 条`, "ok");
+    // 带上归到哪个渠道 —— 来源有时是猜的，用户得当场看见，而不是事后从分析结果里反推
+    const where = r.channel ? ` · 归到「${chatPlatformLabel(r.channel)}」` : "";
+    if (r.inserted) toast("#paste-msg", `成功导入 ${r.inserted} 条${where}`, "ok");
+    else toast("#paste-msg", r.warnings?.[0] || "没有导入任何消息", "err");
+    if (r.warnings?.length && r.inserted) console.warn("导入提示：", r.warnings);
     state.chatId = r.chat_id;
     await loadObjects();
     loadHealth();
@@ -3171,8 +3782,8 @@ function updateSteps() {
             : "现在跑的是演示模式，回复是套模板的。填入 API Key 才会有真实效果。",
       "去配置", "settings") +
     step(2, hasChat, "导入一份聊天记录",
-      hasChat ? `已经有 ${state.chats.length} 个会话了。`
-              : "QQ / 微信导出的 txt 都支持，也可以直接把聊天内容粘进去。",
+      hasChat ? `已经有 ${state.chats.length} 个渠道了。`
+              : "QQ / 微信导出的 txt 直接拖进来；其他聊天工具（Telegram / 钉钉 / 短信…）导出的 JSON、CSV 也认。只有整段文字就点「粘贴文本」。",
       "去导入", "collect") +
     step(3, false, "开始分析",
       "把对方刚发的那句话贴进下面的输入框，点「分析并给建议」。",

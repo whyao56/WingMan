@@ -145,8 +145,46 @@ class JsonCharsetMiddleware:
         await self.app(scope, receive, send_with_charset)
 
 
+class NoStoreHtmlMiddleware:
+    """给 HTML 响应加 `Cache-Control: no-store`。
+
+    为什么只针对 HTML：`index.html` 是**单文件前端**，它自带整个界面的版本。
+    浏览器一旦缓存住它，升级完程序再刷新，看到的可能还是上一版的界面 ——
+    而那一版会去问新服务要数据，于是出现「按钮是旧的、接口是新的」这类
+    谁都看不懂的错。JS/CSS 都在这个文件里，跟着一起不缓存也不亏（本来就只有它一个）。
+
+    静态资源（图标等）不带 `text/html`，行为完全不变。
+    """
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_no_store(message) -> None:
+            if message.get("type") == "http.response.start":
+                headers = list(message.get("headers") or [])
+                ctype = ""
+                for name, value in headers:
+                    if name.lower() == b"content-type":
+                        ctype = value.decode("latin-1").lower()
+                        break
+                if ctype.startswith("text/html") and not any(
+                    name.lower() == b"cache-control" for name, _ in headers
+                ):
+                    headers.append((b"cache-control", b"no-store"))
+                message["headers"] = headers
+            await send(message)
+
+        await self.app(scope, receive, send_no_store)
+
+
 # 先注册 charset 中间件、再注册 CORS：后注册的在外层，CORS 仍然能覆盖所有响应
 app.add_middleware(JsonCharsetMiddleware)
+app.add_middleware(NoStoreHtmlMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in _settings.cors_origins.split(",") if o.strip()] or ["*"],

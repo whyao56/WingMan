@@ -565,6 +565,250 @@ def test_update_check_marks_the_current_version_as_up_to_date() -> None:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+# ================================================================ 对象级画像整理
+
+
+def _seed_with_draft(store, **persona):
+    """建一个有两渠道、并已经手写了部分设定的对象。"""
+    pid, wx, qq = _seed_two_channels(store)
+    store.save_person_persona(pid, persona)
+    return pid, wx, qq
+
+
+def test_refine_keeps_what_the_user_wrote_and_fills_the_rest() -> None:
+    """「让 AI 帮我优化」**不能吃掉用户手写的东西** —— 这是这个接口的全部前提。
+
+    用户是先自己填一部分、之后才导入聊天记录的。如果按一下按钮就把
+    「雷区：提她前任」冲成模型的措辞，他下次就不敢按了 —— 而那时这个功能
+    等于不存在。所以断言的不是「有没有生成画像」，而是「谁的内容活下来了」。
+    """
+    client, tmp = _client_with_temp_data_dir()
+    try:
+        from app.context import get_ctx
+
+        store = get_ctx().store
+        pid, wx, qq = _seed_with_draft(
+            store, goal="想约她周末去看展", taboos="提她前任、叫她宝贝",
+        )
+
+        r = client.post(f"/api/persons/{pid}/refine", json={})
+        assert r.status_code == 200, r.text
+        body = r.json()
+
+        assert set(body["channels"]) == {wx, qq}, "应当把两个渠道都读到"
+        assert "goal" in body["kept"], body
+        assert "taboos" in body["kept"], body
+        assert "goal" not in body["updated"] and "taboos" not in body["updated"], body
+        assert "peer_profile" in body["updated"], "对方画像是模型字段，应当被更新"
+
+        saved = store.get_person_persona(pid)
+        assert saved.goal == "想约她周末去看展", "手写的目标被改掉了"
+        assert saved.taboos == "提她前任、叫她宝贝", "手写的雷区被改掉了"
+        assert saved.peer_profile, "对方画像没有被写进去"
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_refine_still_reports_a_draft_field_the_model_said_nothing_about() -> None:
+    """模型对某一项一个字都没提，`kept` 里**照样要有它**。
+
+    `kept` 是给用户的一句**保证**，不是模型这次的成绩单：
+    「你手写的这几项，我一项都没动」。如果只在「模型恰好也想改这一项」时
+    才把它列出来，用户拿到的就是一份随模型心情浮动的清单 —— 少了一项，
+    他就得自己去比对是不是被改掉了，反而更不敢按这个按钮。
+
+    所以这里故意造一个「没有证据的字段就不写」的模型（真模型就是这个脾气），
+    只让它回一个它拿得准的字段。
+    """
+    import asyncio
+
+    client, tmp = _client_with_temp_data_dir()
+    try:
+        from app.context import get_ctx
+        from app.memory import profiler
+
+        ctx = get_ctx()
+        store = ctx.store
+        pid, _wx, _qq = _seed_with_draft(
+            store, goal="想约她周末去看展", taboos="提她前任",
+            my_style="话少", stage="暧昧期",
+        )
+
+        original = ctx.llm  # 先把懒加载的 Provider 建出来，拿到手再换
+
+        class _Quiet:
+            """只在对象级画像这一件事上作答，其余交给原来的模型。"""
+
+            name = "quiet-stub"
+
+            async def complete_json(self, system, user, *, schema_hint="",
+                                    retries=1, temperature=None, max_tokens=None):
+                if "PERSON_PROFILE" in str(system):
+                    # 像真模型一样：聊天里看不出雷区和阶段，就干脆不写
+                    return {"peer_profile": "话不多，但会接梗"}
+                return await original.complete_json(
+                    system, user, schema_hint=schema_hint,
+                    retries=retries, temperature=temperature, max_tokens=max_tokens,
+                )
+
+        # 换的是 `_llm` 这个缓存槽：`llm` 是只读属性，而且槽里没值时会被懒加载覆盖掉
+        ctx._llm = _Quiet()
+        try:
+            result = asyncio.run(profiler.build_person_profile(ctx, pid))
+        finally:
+            ctx._llm = original
+
+        assert set(result.kept) >= {"goal", "taboos", "my_style", "stage"}, (
+            f"模型一个字没提的那几项没出现在 kept 里：kept={result.kept}；"
+            "用户会以为它们被改掉了"
+        )
+        assert not (set(result.kept) & set(result.updated)), (
+            f"同一项不能既说保留又说更新：kept={result.kept} updated={result.updated}"
+        )
+        assert "peer_profile" in result.updated, result.updated
+        saved = store.get_person_persona(pid)
+        assert saved.goal == "想约她周末去看展" and saved.taboos == "提她前任"
+        assert saved.peer_profile == "话不多，但会接梗"
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_refine_overwrite_true_is_the_only_way_to_rewrite_a_draft() -> None:
+    """想被改写，就得显式说 `overwrite`。
+
+    默认「只填空」这件事不能靠文档说明，得靠行为本身成立 ——
+    这一个用例就是「默认安全」的另一半：显式要求时它确实会改。
+    """
+    client, tmp = _client_with_temp_data_dir()
+    try:
+        from app.context import get_ctx
+
+        store = get_ctx().store
+        pid, _wx, _qq = _seed_with_draft(store, stage="暧昧期")
+
+        r = client.post(f"/api/persons/{pid}/refine", json={"overwrite": True})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert "stage" not in body["kept"], body
+        assert "stage" in body["updated"], body
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_refine_without_channels_says_what_to_do_next() -> None:
+    """还没导入记录的「提前新建」对象 → 不报错，而是告诉他下一步做什么。"""
+    client, tmp = _client_with_temp_data_dir()
+    try:
+        from app.context import get_ctx
+
+        pid = get_ctx().store.create_person("只填了名字")
+
+        r = client.post(f"/api/persons/{pid}/refine", json={})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["channels"] == []
+        assert body["warnings"], "没有渠道却不说原因，用户只会以为按钮坏了"
+        assert "导入" in body["warnings"][0] or "采集" in body["warnings"][0]
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_refine_404s_on_an_unknown_object() -> None:
+    client, tmp = _client_with_temp_data_dir()
+    try:
+        r = client.post("/api/persons/no-such/refine", json={})
+        assert r.status_code == 404, r.text
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+# ================================================================ 其他聊天（渠道类型）
+
+
+def test_other_chat_is_a_real_channel_not_an_unknown() -> None:
+    """「其他聊天」是一等渠道，不是「认不出来的东西」。
+
+    用户明确要求收罗 QQ / 微信以外的聊天内容。落到数据上就是：平台认不出来时
+    渠道应当是 `other`，而不是一个含义模糊的兜底词 —— 后者会让界面显示
+    「未知」，用户不知道该不该去改它。
+    """
+    from app.store import _channel_from_platform
+
+    assert _channel_from_platform("other") == "other"
+    assert _channel_from_platform("generic") == "other", "generic 是适配器术语，不是渠道名"
+    assert _channel_from_platform("telegram") == "other", "没见过的平台也归到「其他聊天」"
+    assert _channel_from_platform("qq") == "qq", "别把已知平台一起吞了"
+
+
+def test_semi_collect_accepts_other_chat_but_auto_collect_does_not_claim_to() -> None:
+    """半自动能采「其他聊天」，但自动采集**不许**假装支持它。
+
+    两张名单必须分开：自动采集的 `SUPPORT_MATRIX` 回答的是「能不能读这个客户端的
+    加密库」，其他聊天读不了；而剪贴板是你复制什么就接什么，来源无关紧要。
+    以前 `semi_start` 直接拿 `SUPPORT_MATRIX` 当白名单，等于让自动采集的短板
+    连坐了半自动 —— 加上「其他聊天」就会同时把这两件事说错。
+    """
+    client, tmp = _client_with_temp_data_dir()
+    try:
+        from app.collect.matrix import SUPPORT_MATRIX
+
+        assert "other" not in SUPPORT_MATRIX, "自动采集不该声称支持其他聊天"
+
+        r = client.post("/api/collect/semi/start", json={"client": "other", "peer_name": "小鹿"})
+        assert r.status_code == 200, r.text
+        assert r.json()["state"]["client"] == "other"
+        client.post("/api/collect/semi/stop")
+
+        bad = client.post("/api/collect/semi/start", json={"client": "telegram", "peer_name": "小鹿"})
+        assert bad.status_code == 404, bad.text
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_semi_other_chat_records_land_in_the_other_channel() -> None:
+    """落库时渠道是 `other`，且同一个人的「其他聊天」只有一段 —— 不重复建。"""
+    client, tmp = _client_with_temp_data_dir()
+    try:
+        from app.context import get_ctx
+
+        store = get_ctx().store
+        pid = store.create_person("小鹿")
+        r = client.post("/api/collect/semi/start",
+                        json={"client": "other", "peer_name": "小鹿", "person_id": pid})
+        assert r.status_code == 200, r.text
+        chat_id = r.json()["state"]["chat_id"]
+        assert chat_id == f"other:{pid}", chat_id
+        client.post("/api/collect/semi/stop")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+# ================================================================ 桌面壳自述（版本防呆）
+
+
+def test_desktop_state_tells_which_process_is_answering() -> None:
+    """`/desktop/state` 要说清「现在答话的是哪个进程」。
+
+    背景是一个真实踩到的坑：界面每次从磁盘现读，服务却是一个一直在跑的进程。
+    升级完忘了重启，就会看到「界面是新的、版本号是旧的」，用户会以为是版本号写错。
+    把这个进程的版本、启动时刻、打包版还是源码运行如实报出来，用户自己就能判断。
+    """
+    client, tmp = _client_with_temp_data_dir()
+    try:
+        r = client.get("/api/desktop/state")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        from app import __version__
+
+        assert body["version"] == __version__
+        assert body["mode"] in ("exe", "source")
+        assert body["pid"] > 0
+        assert body["started_at"], "没有启动时刻就认不出「这是老进程」"
+        assert isinstance(body["uptime_seconds"], int)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 # ---------------------------------------------------------------- 直跑入口
 
 

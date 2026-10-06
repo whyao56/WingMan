@@ -203,9 +203,14 @@ def test_set_chat_platform_recomputes_channel_and_keeps_chat_id() -> None:
         assert got is not None
         assert got.id == "qq:a", "chat_id 是幂等键，绝不能改"
         assert got.platform == "offline" and got.channel == "offline"
-        # 显式传 channel 时听显式的
-        got2 = store.set_chat_platform("qq:a", "offline", channel="generic")
-        assert got2.channel == "generic"
+        # 显式传 channel 时听显式的……
+        got2 = store.set_chat_platform("qq:a", "offline", channel="call")
+        assert got2.channel == "call"
+        # ……但 `generic` 是个例外：它是导入适配器的术语，不是渠道名。
+        # 放它进库会让同一个「其他聊天」有两个写法（半自动采集靠 channel 认领
+        # 已有渠道，两个写法 = 重复建渠道），所以显式传也要归一。
+        got3 = store.set_chat_platform("qq:a", "generic", channel="generic")
+        assert got3.channel == "other"
         assert store.set_chat_platform("nope", "qq") is None
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
