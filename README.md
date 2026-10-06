@@ -41,8 +41,9 @@ WingMan 是一个本地优先的「对话参谋」系统。它做两件事：
 |---|---|---|
 | **[`WingMan-0.2.0-win64.zip`](https://github.com/whyao56/WingMan/releases/download/v0.2.0/WingMan-0.2.0-win64.zip)** | 34 MB | 唯一的包。聊天记录分析、人物画像、回复建议、采集都在里面 |
 
-早期版本曾分成「标准版 / 完整版」两个包，区别只在**是否内置本地语音识别**。
-语音撤下后这个区别消失了，现在只有一个包。
+早期版本曾分成「标准版 / 完整版」两个包，区别只在**是否内置本地语音识别**；
+语音撤下后这个区别消失，两个包合并成一个。**更早的包已从下载页移除**（原因见
+[「版本与状态」](#版本与状态)）—— 下载页只留当前这一版，不用再纠结选哪个。
 
 > ⚠️ **解压后双击 `WingMan.exe`，不要只把 exe 单独拖出来。** 旁边的 `_internal`
 > 文件夹是程序本体的一部分，少一个文件都起不来。要挪位置就整个文件夹一起挪。
@@ -102,7 +103,7 @@ PowerShell 里第 2 步要写成 `.\wingman.cmd`（否则提示找不到命令�
 | 入口 | `wingman.cmd` | `WingMan.exe` | `uvicorn` |
 | 需要 Python | ✅ 3.11+ | ❌ 不用装 | ✅ 3.11+ |
 | 首次启动 | 几分钟（自动建环境装依赖） | 秒级 | 几分钟 |
-| 体积 | 仓库本身（几 MB） | 下载 31 MB | 仓库本身 |
+| 体积 | 仓库本身（几 MB） | 下载 34 MB | 仓库本身 |
 | 改了代码 | 直接生效 | 要重新打包 | 直接生效 |
 | 适合 | 想改代码 / 已装 Python | 只想用，或给不懂技术的朋友 | 非 Windows、要做开发 |
 
@@ -134,10 +135,11 @@ wingman.cmd
 
 | 体积 | 解压后 | 里面有什么 |
 |---|---|---|
-| 31 MB | 约 68 MB | 全部功能：聊天记录分析、人物画像、回复建议与推演 |
+| 34 MB | 约 77 MB | 全部功能：聊天记录分析、人物画像、回复建议与推演 |
 
-> 早期的「完整版」（91 MB / 解压后 237 MB）只比标准版多一套本地语音识别。
-> 语音撤下后它就没有存在理由了，两个包合并成一个 —— 下载页不再需要你纠结选哪个。
+> 早期的「完整版」（91 MB / 解压后 237 MB）多一套本地语音识别，语音撤下后并入单包。
+> 那些历史包在 0.2.0 归档时已从下载页移除 —— 功能被当前版本完全覆盖，
+> 留着只会让人在下载页上做一次没有意义的选择。
 
 **你的数据在** `%LOCALAPPDATA%\WingMan\` —— 聊天记录、画像、设置、日志都在那。
 
@@ -191,6 +193,10 @@ python -m uvicorn app.main:app --reload --port 8787
   Windows 桌面版（双击即用，不需要 Python）；源码路线同样可用。
   **最大的缺口是建议内容本身** —— 默认的 Mock 引擎让整条链路跑得通，但给的建议还是规则生成的，
   下一步是 Prompt 调优，详见 [docs/ROADMAP.md](docs/ROADMAP.md)。
+- **下载页只有 v0.2.0 带安装包。** 更早的版本（v0.1.0 ~ v0.1.5）在归档时收成了**纯文本**：
+  每个版本留一份说明，讲清它做了什么、修了什么（过程记录收在 [docs/DEVLOG.md](docs/DEVLOG.md)），
+  但**不再提供二进制** —— 它们的功能已被 v0.2.0 完整覆盖，继续挂着只会让人下一个过时的包。
+  想看旧实现，`git log` 里都在。
 
 | | 说明 |
 |---|---|
@@ -198,7 +204,7 @@ python -m uvicorn app.main:app --reload --port 8787
 | 🟡 采集（半自动实测可用） | 采集页四步：判断本机版本 → 自动采集（六道关全通，但**实测这两个版本取不到密钥**）→ **半自动采集（读剪贴板，不依赖版本与密钥）** → 游标。详见 [采集聊天记录](#采集聊天记录两条路一条能自动一条点哪条抓哪条) |
 | ⏸️ 已撤下（规划中） | **通话实时转写**。上一版试过云端转写，但延迟、双方串音、断句切碎都还不够好，而且要把通话音频送出本机 —— 对一个「本地优先」的工具来说代价不划算。已从界面与代码里整体移除（0.1.4 起收进「设置 · 关于」的折叠说明），思路保留在 [docs/ROADMAP.md](docs/ROADMAP.md) |
 | ⬜ 尚未实现 | 事实人工校对 UI、前端工程化、自动回复（明确不做，见 COMPLIANCE）、自动采集的密钥获取（等客户端版本变化后再适配） |
-| 验证过的环境 | 中文 Windows + Python 3.11（实测安装 + 端到端人工验收）；Python 3.13 已由 CI 在真实环境验证：GitHub Actions（Ubuntu）用同一份锁定集真实安装并跑通冒烟测试（[run 37215141304](https://github.com/whyao56/WingMan/actions/runs/37215141304)，`3.11` / `3.13` 两个 job 均 success），但**开发机没有 3.13、未在本机真跑**；macOS / Linux 桌面未做人工验收 |
+| 验证过的环境 | 中文 Windows + Python 3.11（实测安装 + 端到端人工验收）；Python 3.13 已由 CI 在真实环境验证：GitHub Actions（Ubuntu）用同一份锁定集真实安装并跑通冒烟测试（`3.11` / `3.13` 两个 job 均 success，见 [Actions](https://github.com/whyao56/WingMan/actions/workflows/ci.yml)），但**开发机没有 3.13、未在本机真跑**；macOS / Linux 桌面未做人工验收 |
 
 ---
 
@@ -435,6 +441,7 @@ python -m uvicorn app.main:app --reload --port 8787
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 系统架构、模块职责、数据模型、接口契约 |
 | [docs/ENGINE_DESIGN.md](docs/ENGINE_DESIGN.md) | 参谋引擎的算法与 Prompt 设计（这是项目的灵魂） |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | 迭代路线：从脚手架到能用、好用 |
+| [docs/DEVLOG.md](docs/DEVLOG.md) | **开发全流程**：每个版本从哪来、怎么做、踩到什么、怎么验证 |
 | [docs/COMPLIANCE.md](docs/COMPLIANCE.md) | 数据合规、隐私边界、使用红线 |
 | [CHANGELOG.md](CHANGELOG.md) | 版本变更记录 |
 
@@ -460,7 +467,7 @@ WingMan/
 │   │                            # + 采集层六个守卫：cipher / clipboard / reader / semi / api
 │   │                            #   / offwindows（非 Windows 上必须能 import）
 │   │                            # + 对象中心：多渠道上下文、桌面壳关窗、检查更新
-│   │                            # + 隐私守卫：仓库里不许出现真人姓名
+│   │                            # + 隐私守卫：不许出现真人姓名，提交邮箱必须匿名
 │   ├── requirements.txt         # 依赖下限声明（人类可读）
 │   ├── requirements.lock.txt    # 精确版本锁定（启动器安装的就是它）
 │   ├── requirements-desktop.txt # 打包工具链（pyinstaller / pywebview）
@@ -507,7 +514,7 @@ set WINGMAN_E2E_CLIPBOARD=1
 backend\.venv\Scripts\python.exe backend\tests\test_collect_api.py
 REM 非 Windows 上必须也能 import（模拟 Linux，防「本地全绿、CI 全红」）
 backend\.venv\Scripts\python.exe backend\tests\test_collect_offwindows.py
-REM 仓库里不许出现真人姓名（用例 / 文档 / 界面提示统一用虚构的「小鹿」）
+REM 隐私守卫：不许出现真人姓名（统一用虚构的「小鹿」）；提交元数据不许带真实邮箱
 backend\.venv\Scripts\python.exe backend\tests\test_privacy_pseudonyms.py
 ```
 
@@ -546,6 +553,11 @@ backend\.venv\Scripts\python.exe backend\tests\test_privacy_pseudonyms.py
 
 那是 v0.1.4 加的，三选一：**关闭程序**（服务停掉）/ **关闭弹窗（后台运行）**
 （窗口收起来，服务继续在后台跑）/ 取消。选过之后会记住你的选择，不会每次都问。
+
+> v0.2.0 修掉了这一处的卡死：在那之前**每次**点 × 都会让窗口「未响应」几秒。
+> 原因是关窗回调跑在界面线程上，却在里面**同步**等一段 JavaScript 执行完 ——
+> 而那段脚本要跑还是得回到界面线程，两边互等，谁也动不了。现在回调只负责发信号，
+> 真正的等待挪到后台线程并带超时。详见 [CHANGELOG.md](CHANGELOG.md)。
 
 选了「后台运行」想把窗口找回来：**再双击一次 `WingMan.exe`**。程序会发现服务已经在跑，
 请原来那个进程把窗口显示出来 —— 不会另起一个。（浏览器模式下本来就没有原生窗口，
