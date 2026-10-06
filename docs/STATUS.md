@@ -403,9 +403,9 @@ _commit_capture(293-358)：
 
 ## 8. 测试 / CI / 发版
 
-- 测试：`backend/tests/` 20 个文件，**从 `backend/` 目录跑**（`conftest.py` 在那里重定向 `DATA_DIR`；从仓库根跑单文件会因 rootdir 落到 `backend/tests` 而跳过 conftest）。
+- 测试：`backend/tests/` 21 个文件，**从 `backend/` 目录跑**（`conftest.py` 在那里重定向 `DATA_DIR`；从仓库根跑单文件会因 rootdir 落到 `backend/tests` 而跳过 conftest）。
   ```bash
-  cd backend && ./.venv/Scripts/python.exe -m pytest tests/ -q     # 235 passed, 1 skipped（0.5.0）
+  cd backend && ./.venv/Scripts/python.exe -m pytest tests/ -q     # 240 passed, 1 skipped（0.6.0）
   ```
 - **0.5.0 新增/扩写的守卫**：
   - `tests/test_adapter_import.py`（新，10 项）：**导入这条路本身能不能走通** ——
@@ -424,6 +424,22 @@ _commit_capture(293-358)：
     `kept` 里照样要有。实现方式是把 `ctx._llm` 换成只答对象级画像的桩
     （`llm` 是只读属性，换的是 `_llm` 这个缓存槽）。
   - `tests/test_version.py`（新增 1 条）：前端 `BUILD` 常量必须等于后端 `__version__`。
+- **0.6.0 新增的守卫**：
+  - `tests/test_memory_footprint.py`（新，2 项）：用**干净子解释器**验证「BLAS 限流
+    发生在 numpy 被导入之前」，并直接量提交内存（< 200 MB）。
+    为什么非要子进程：测试进程自己早就把 numpy 导进来了，环境变量设得再对也看不出效果。
+    内存读法用 `psapi.GetProcessMemoryInfo`；**`GetCurrentProcess.restype` 必须显式声明
+    成 `HANDLE`**，否则伪句柄被截断成 32 位、整个调用静默返回 0（踩过一次）。
+  - `tests/test_objects_center.py`（29→33 项）：
+    `test_the_close_hook_never_blocks_on_evaluate_js` —— 把「UI 线程里同步调
+    `evaluate_js` 会死锁」的语义照搬进测试（一旦在调用者线程上被调就不按时返回），
+    要求关窗钩子仍然立刻返回；
+    `test_desktop_close_quit_actually_tells_the_server_to_stop` —— 退出必须**真的**
+    置 `server.should_exit`，不能只 `set()` 一个没人读的 Event；
+    `test_when_the_page_cannot_be_reached_the_window_is_still_closed` —— 通知不到界面时
+    必须补关窗，否则 × 变成「点了没反应」；
+    `test_state_is_shared_even_when_desktop_py_runs_as_main` —— 以 `__main__` 加载
+    `desktop.py` 再 `import app.desktop`，两者必须是**同一个模块对象**（否则状态两份）。
 - **写守卫的标准**：新测试要能在**旧代码上失败**。0.4.0 的 `loadChats` 那条、
   和「缺时间=inferred」那条都实测过在修复前会挂 —— 不会失败的守卫等于没有。
   0.5.0 的六条关键守卫做了脚本化反证（把修复逐条改回旧写法 → 对应用例必须失败，
@@ -437,13 +453,23 @@ _commit_capture(293-358)：
   | `_guess_paste_suffix` 一律返回 `.txt` | `test_column_names_are_matched_against_the_real_columns` |
   | `import_file` 忽略用户声明的 `platform` | `test_declaring_the_source_beats_the_adapter_guess` |
   | `kept` 改成「模型也想改时才列入」 | `test_refine_still_reports_a_draft_field_the_model_said_nothing_about` |
+  | **0.6.0** 删掉 BLAS 限流 | `test_the_package_caps_blas_threads_before_numpy_arrives` |
+  | **0.6.0** 删掉 BLAS 限流（效果侧） | `test_importing_numpy_stays_within_a_sane_memory_budget` |
+  | **0.6.0** 关窗钩子改回同步调 `evaluate_js` | `test_the_close_hook_never_blocks_on_evaluate_js` |
+  | **0.6.0** 退出只 `set()` 一个没人读的 Event | `test_desktop_close_quit_actually_tells_the_server_to_stop` |
+  | **0.6.0** 通知不到界面时不补关窗 | `test_when_the_page_cannot_be_reached_the_window_is_still_closed` |
+  | **0.6.0** 去掉 `desktop.py` 顶部的自我登记 | `test_state_is_shared_even_when_desktop_py_runs_as_main` |
 
-  **这次反证有两个额外收获**（这才是它真正的价值）：
-  1. 「`kept` 只在模型也想改时才列出来」这条改动**本来没有任何测试盯着** ——
+  **反证本身才是价值所在**，两次都印证了这点：
+  1. （0.5.0）「`kept` 只在模型也想改时才列出来」这条改动**本来没有任何测试盯着** ——
      旧测试用的是 Mock 引擎，而 Mock 会把全部字段都填满，所以新旧写法都能过。
      为此专门加了一个「没有证据的字段就不写」的模型桩，才把这件事钉住。
-  2. 第一次写的反证脚本里，「`_resolve_map`」那条改动**不够忠实**（改成了另一种坏法，
-     恰好被别的修复兜住了），于是它「通过」了 —— 说明**反证本身也要被怀疑**。
+  2. （0.5.0）第一次写的反证脚本里，「`_resolve_map`」那条改动**不够忠实**（改成了另一种坏法，
+     恰好被别的修复兜住了），于是它「通过」了。
+  3. （0.6.0）「关窗死锁」那条第一版**也没抓住**，原因同类但更微妙：我只把 `_on_closing`
+     改回了同步调用，却留着 `_ask_frontend_to_choose` 内部的线程包装 ——
+     那是个现实中不存在的混合状态。改成「两处必须一起改回」之后才如期失败。
+     **一条通过了的反证，可能只是因为你复现得不够像。**
 - CI（`.github/workflows/ci.yml`）：push/PR 到 main，矩阵 Python 3.11 + 3.13；步骤＝语法检查 → `pytest tests/ -q` → `tests/test_smoke.py` → 冒烟编码防护 → 前端 JS 语法检查。基线耗时 ~40 秒。
 - 发版：
   ```bash
@@ -562,20 +588,131 @@ if store is not None and person_id:            # ← 守卫：person_id 非空�
 但本模块既没赋值也没导入、又不是内置名」的符号。Python 自己已经算出了这个事实，
 我们只是把它问出来。**带 `import *` 的文件跳过**（星号导入会让符号表失真）。
 
+### 10.5 【0.6.0 修复】点 × 卡死、状态两份、以及 760 MB 的 numpy
+
+这四个都不是新写坏的功能，而是**一直那样、只在特定路径上才显形**的问题。
+
+#### 1. 关窗死锁（用户直接报的）
+
+**现象**：点窗口右上角 ×，标题栏变「WingMan 未响应」，点什么都没反应。
+
+**根因**：`desktop._on_closing` 是 pywebview 的 `FormClosing` 回调，**跑在 UI 线程上**，
+而它同步调用了 `_WINDOW.evaluate_js(...)`。`evaluate_js` 的实现
+（pywebview 6.2.1 `platforms/edgechromium.py:136`）是：
+
+```python
+self.webview.Invoke(lambda: self.webview.ExecuteScriptAsync(script)
+                    .ContinueWith(Action[Task[String]](...), self.syncContextTaskScheduler))
+semaphore.acquire()        # ← 无限等待
+```
+
+`ContinueWith(..., syncContextTaskScheduler)` 把回调投递到 **UI 线程的同步上下文**。
+而 UI 线程正卡在 `_on_closing` 里等 `semaphore` → 回调永远没机会执行 → 永远不 release。
+**互等，必然死锁**（不是偶发，是每次点都中）。
+
+**实测证据**（对进程发 `WM_CLOSE`，每秒采样一次）：
+
+| | 修复前 | 修复后 |
+|---|---|---|
+| `Process.Responding` | `False`（连续 8 秒） | `True`（连续 8 秒） |
+| CPU | 2.0625s → 2.0625s（纹丝不动） | 正常 |
+
+CPU「纹丝不动」是死锁的指纹：真在算的话读数会往上走，这里是**完全在等**。
+
+**修法**：`_on_closing` 只置标志 + 起后台线程，然后**立刻返回**。后台线程再去
+`evaluate_js`（非 UI 线程调用是安全的：`Invoke` 会投递到 UI 线程，而 UI 线程此刻空闲）。
+另加 5 秒超时；超时或异常就**主动关窗口** —— 否则 `_on_closing` 已经取消了这次关闭，
+用户再点 × 也关不掉，就成了「点了没反应」。
+
+守卫：`test_the_close_hook_never_blocks_on_evaluate_js`（把「在调用者线程上被调
+就不按时返回」这套语义搬进测试）、`test_when_the_page_cannot_be_reached_the_window_is_still_closed`。
+
+#### 2. 「关闭程序」从未让 uvicorn 收工
+
+`close_action("quit")` 原本只 `_STOP.set()`，而那个 `threading.Event` **全仓没有任何消费者**
+（`grep -rn "_STOP" backend/app/` 只命中它自己的定义与这一处 set）。
+注释写着「先让 uvicorn 收工」，实际它压根没收到信号：退出完全靠 1.2 秒后的 `os._exit(0)`。
+正在写的库随时可能被掐断（WAL 模式下不会损坏数据，但会留下没 checkpoint 的 `-wal`）。
+
+**修法**：`_run_server` 保存 `uvicorn.Server` 引用，退出时置 `server.should_exit = True`，
+并**轮询等它收工**（最多 4 秒）再关窗口。**顺序不能反** —— 窗口一关，主线程就从
+`webview.start()` 返回、一路走到进程退出。
+
+现在日志里能看到完整链路：`已通知服务收工（uvicorn should_exit）` →
+`Application shutdown complete` → `Finished server process` → `服务已收工` → `已退出。`
+
+守卫：`test_desktop_close_quit_actually_tells_the_server_to_stop`。
+
+#### 3. `python -m app.desktop` 下窗口状态有两份
+
+`desktop.py` 既以 `__main__` 被执行，又被 `app.api.routes_admin` `from .. import desktop`
+导入一次 → `_WINDOW` / `_CLOSE` / `_SERVER` / `_STARTED_AT` **各存一份**：
+主流程写的是 A 份，接口读的是 B 份（永远是初始值）。
+
+症状全是「像功能坏了」而不是「像状态串了」：窗口开着但 `/api/desktop/state` 报
+`native_window: false`（界面于是按「浏览器模式」措辞）；点「后台运行」读到 `None` 窗口 →
+回你「已关闭」却什么都没做。
+
+**修法**：文件顶部加一句自我登记（`if __name__ == "__main__": sys.modules.setdefault(...)`）。
+exe 与 `python run_wingman.py` 走的是 `from app.desktop import main`，`__name__` 本来就是
+`app.desktop`，不受影响 —— 但排查问题时很容易被它带偏，所以一并修了。
+
+守卫：`test_state_is_shared_even_when_desktop_py_runs_as_main`。
+
+#### 4. `import numpy` 一下提交 760 MB
+
+numpy 在本项目只用来算几千条 512 维向量的余弦相似度（`memory/retriever.py`）。
+OpenBLAS 默认按**逻辑核数**开线程，并给每个线程预留工作缓冲。本机 24 逻辑核：
+
+| | 提交内存 | 线程 |
+|---|---|---|
+| 默认 | 760.6 MB | 27 |
+| `OPENBLAS_NUM_THREADS=1` | 19.4 MB | 4 |
+
+**修法**：`app/__init__.py` **顶层**（这是唯一能保证早于 numpy 的位置）用 `setdefault` 设
+`OPENBLAS_NUM_THREADS` / `OMP_NUM_THREADS` / `MKL_NUM_THREADS` / `NUMEXPR_NUM_THREADS` /
+`VECLIB_MAXIMUM_THREADS` = `1`。用 `setdefault` 是刻意的：用户自己设过就听用户的。
+
+带窗口的整个程序：提交内存 844.9 MB → 107.0 MB，线程 43 → 20。
+
+守卫：`tests/test_memory_footprint.py`（干净子进程里验证顺序 + 直接量提交内存）。
+
+> **量内存的坑**：`psapi.GetProcessMemoryInfo` 必须先
+> `kernel32.GetCurrentProcess.restype = wintypes.HANDLE`。不声明的话伪句柄被当成
+> 32 位 int 截断，调用静默返回 0、结构体字段全是 0 —— 不报错，只是永远读到 0。
+> 这个坑让我第一次的探针白跑了一轮。
+
+#### 5. 内存画像（0.6.0 实测，打包版）
+
+| 部分 | WorkingSet |
+|---|---|
+| `WingMan.exe` 主进程（Python + FastAPI + 本项目代码） | 162.1 MB |
+| 6 个 `msedgewebview2.exe` 子进程（Edge 渲染引擎） | 400.8 MB |
+| 合计 | 约 563 MB |
+
+主进程那部分已经压到位（0.6.0 之前光提交内存就 845 MB）。剩下 400 MB 是 WebView2 的
+固有成本 —— 那是一整套 Chromium 进程组（browser / gpu / network / renderer / utility /
+crashpad）。压它需要限制渲染参数，**副作用不可控且收益不确定，这一版刻意没动**。
+
+> 在意内存可以走浏览器模式（`WingMan.exe --browser`，或 `WINGMAN_USE_BROWSER=1`）：
+> 复用系统已有的浏览器，不起 WebView2 进程组，主进程只剩约 74 MB。
+> 代价是没有原生窗口（独立任务栏图标、原生窗口行为都没有）。
+
 ---
 
 ## 11. 当前版本与发布
 
-- 版本号：`backend/app/__init__.py` 的 `__version__ = "0.5.0"`（**改版本只改这一处**；
+- 版本号：`backend/app/__init__.py` 的 `__version__ = "0.6.0"`（**改版本只改这一处**；
   前端 `frontend/index.html` 顶部的 `const BUILD` 必须跟着改，`test_version.py` 会盯着）
 - 仓库：<https://github.com/whyao56/WingMan>（public），
-  tag `v0.2.0` / `v0.2.1` / `v0.3.0` / `v0.3.1` / `v0.4.0` / `v0.5.0`
+  tag `v0.2.0` / `v0.2.1` / `v0.3.0` / `v0.3.1` / `v0.4.0` / `v0.5.0` / `v0.6.0`
+- v0.6.0 Release：<https://github.com/whyao56/WingMan/releases/tag/v0.6.0>
+  附件 `WingMan-0.6.0-win64.zip`（SHA256 见 [releases/v0.6.0.md](releases/v0.6.0.md)）
 - v0.5.0 Release：<https://github.com/whyao56/WingMan/releases/tag/v0.5.0>
   附件 `WingMan-0.5.0-win64.zip`（221 个文件，33.8 MB，解压后约 77 MB），
   SHA256 `d96894fe2a41eb4091357c6938ebe87a84cbe0082f790c3ce698aadc93d0b184`
-  （**实测同一份 `dist/` 连打两次 SHA 相同**，所以这个值是可核对的事实）
-- **本地 tag 可能是旧的**：这个仓库只在远端有 `v0.3.x` / `v0.4.x` 标签（本地只推过 `v0.2.x` 时
-  容易误判成「没发过版」）。查远端用 `git ls-remote --tags origin`，别只看 `git tag`。
+- **本地 tag 可能是旧的**：这个仓库只在远端有 `v0.3.x` / `v0.4.x` / `v0.5.x` 标签（本地只推过
+  `v0.2.x` 时容易误判成「没发过版」）。查远端用 `git ls-remote --tags origin`，别只看 `git tag`。
 - 检查更新查的是 GitHub Releases API（`routes_admin.py` 的 `/api/update/check`）。
   **查不到时不给 `has_update` 字段**，提示「不等于已是最新」—— 这是刻意的，别改成默认「已是最新」。
 - **历史遗留**：曾用 `git-filter-repo` 重写过历史清掉真人姓名；旧 SHA 仍能被 GitHub 缓存视图取到，
@@ -694,4 +831,47 @@ if store is not None and person_id:            # ← 守卫：person_id 非空�
   粘贴一张**只有一行**的表头 + 一行数据、且列名完全自定义时，可能退回 `.txt` 而读不出来 ——
   此时用户改走「导入文件」即可（那条路带真正的扩展名）。
 - 导出仍未覆盖 `engine_runs` / `activity_log`（见 §10.3）。
+- 自动采集取密钥在本机仍跑不通（见 §12.3）。
+
+---
+
+## 14. 0.6.0（关窗死锁 + 内存）已落地
+
+> 面向用户的说明见 [releases/v0.6.0.md](releases/v0.6.0.md)；成因与实测数据见 §10.5。
+
+### 14.1 后端
+
+1. **关窗协商改成「置标志 + 后台线程」**（`desktop.py`）：
+   - `_on_closing` 只置 `_CLOSE["pending"]`、起 `_ask_frontend_or_close` 线程、立刻返回 `False`；
+   - `_ask_frontend_to_choose(timeout=5.0)` 起子线程调 `evaluate_js` 并 `Event.wait`，
+     超时按「通知失败」处理（不会把用户永远留在不动的窗口里）；
+   - `_ask_frontend_or_close` 失败时补一刀 `_destroy_window()`，并置 `quitting` 让
+     destroy 触发的 `_on_closing` 放行 —— 否则 × 会变成「点了没反应」。
+2. **状态机加 `quitting`**：用户选了「关闭程序」之后，所有关闭事件一律放行
+   （否则 `_destroy_window()` 会再触发一次协商，转回来又拦一次）。
+3. **优雅退出**：`_SERVER` 保存 `uvicorn.Server` 与它的线程；`_ask_server_to_stop()` 置
+   `should_exit`，`_wait_server_stop(timeout)` 轮询确认；`_quit_soon` 按
+   「等服务收工 → 关窗口 → 兜底强退」的顺序执行。`main()` 尾部同样等一次。
+   `_STOP`（那个没有任何消费者的 Event）删除。
+4. **自我登记**（`desktop.py` 顶部）：`if __name__ == "__main__": sys.modules.setdefault(
+   "app.desktop", sys.modules[__name__])` —— 消除 `-m` 启动时的双份状态。
+5. **`desktop_state()` 增加 `quitting`**（只加不删）。
+6. **BLAS 限流**（`app/__init__.py` 顶层）：5 个 `*_NUM_THREADS` 用 `setdefault` 设 `1`。
+   注意这里**必须用 `setdefault`**，别改成硬赋值 —— 用户可能自己设过。
+
+### 14.2 测试
+
+- 新增 `tests/test_memory_footprint.py`（2 项，含**干净子进程探针**）。
+- `tests/test_objects_center.py` 29 → 33 项：4 条桌面壳守卫。
+- 6 条关键守卫做过脚本化反证，见 §8。
+
+### 14.3 未做 / 存疑
+
+- **WebView2 的 400 MB 刻意没动**：能靠 `--disable-gpu`、限制渲染进程数之类压下去，
+  但那些参数会改变渲染行为，副作用面太大而收益不确定。**要压得先做一整轮界面回归。**
+- **没有给用户一个「低内存模式」开关**。当前 `--browser` 已经能省掉整个 WebView2 进程组
+  （主进程只剩 ~74 MB），但它是个命令行参数，界面上没有入口。要加得先想清楚怎么讲清代价
+  （没有原生窗口、没有独立任务栏图标）。
+- 关窗协商那 5 秒超时是**拍的**。真实环境下 `evaluate_js` 通常在几十毫秒内返回；
+  这个值只是「兜底别卡太久」的上界，没有实测依据。
 - 自动采集取密钥在本机仍跑不通（见 §12.3）。

@@ -27,6 +27,7 @@
 | ✅ | **以人为中心**：`persons` 表 + 跨渠道归并/合并 + 按人取消息 | `store.py`、`routes_persons.py` |
 | ✅ | **0.4.0「对象中心」界面**：左栏两级、对象页 5 Tab、指挥台多渠道合并、聊天记录二次编辑、历史留存 | `frontend/index.html`、`app/api/` |
 | ✅ | **0.5.0「先填后补」**：对象可预建（只填名字）、右键菜单、对象级 AI 整理画像（默认不吃手写稿）、新增「其他聊天」渠道 | `frontend/index.html`、`memory/profiler.py`、`store.py` |
+| ✅ | **0.6.0「关窗不再卡死 + 瘦身」**：修掉点 × 时 UI 线程死锁、退出让 uvicorn 真的收工、消除 `-m` 启动的双份状态；限掉 OpenBLAS 线程池（提交内存 −87%） | `app/desktop.py`、`app/__init__.py` |
 
 ---
 

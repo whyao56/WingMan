@@ -31,6 +31,19 @@ from .config import APP_DIR, IS_FROZEN, KEEP_ALIVE_S, LOG_DIR, RESOURCE_DIR, get
 
 log = logging.getLogger("wingman.desktop")
 
+# `python -m app.desktop` 会以 `__main__` 的名字执行本文件，而
+# `app.api.routes_admin` 又会 `from .. import desktop` 把同一份代码**再导入一次** ——
+# 于是 `_WINDOW` / `_CLOSE` / `_SERVER` 在内存里变成两套：主流程写的是 `__main__`
+# 那份，接口读的是 `app.desktop` 那份（永远是初始值）。症状很隐蔽：
+# 窗口明明开着，`/api/desktop/state` 却说 `native_window: false`，
+# 界面于是按「浏览器模式」说话；用户点「后台运行」时后端读到一个 None 窗口，
+# 退化成「服务继续跑、窗口不隐藏」，还回一句「已关闭」。
+# 提前把自己登记到 `app.desktop` 名下，后续任何导入拿到的都是这一份。
+# （exe 与 `python run_wingman.py` 走的是 `from app.desktop import main`，
+#  `__name__` 本来就是 `app.desktop`，这里不会触发。）
+if __name__ == "__main__":      # pragma: no cover - 只有直接运行时才成立
+    sys.modules.setdefault("app.desktop", sys.modules[__name__])
+
 DEFAULT_PORT = 8787
 # 从 8787 起往后试几个，避免和别的程序撞车
 PORT_SCAN_RANGE = 20
@@ -135,45 +148,95 @@ def _show_error(title: str, message: str) -> None:
 
 _CLOSE = {
     "pending": False,      # 已经拦下了一次关闭，正在等用户选
-    "hide_ok": False,      # 这个窗口对象支不支持 hide（拿不到就当不支持）
+    "quitting": False,     # 用户已选「关闭程序」，此后所有关闭一律放行
 }
 _WINDOW: Any = None
-_STOP = threading.Event()
+# uvicorn 的 Server 对象与它的线程。留在这里是为了「关闭程序」时能真的
+# 让它收工 —— 见 `_ask_server_to_stop`。
+_SERVER: dict[str, Any] = {"server": None, "thread": None}
 
 
-def _ask_frontend_to_choose() -> bool:
-    """让页面弹出「关闭程序 / 后台运行」的小窗。成功返回 True。"""
+def _ask_frontend_to_choose(timeout: float = 5.0) -> bool:
+    """让页面弹出「关闭程序 / 后台运行」的小窗。成功返回 True。
+
+    **必须从非 UI 线程调用。** `evaluate_js` 是同步阻塞的（内部
+    `semaphore.acquire()` 等一个只能由 UI 线程执行的回调），在 UI 线程上
+    调它必然互等死锁 —— 见 `_on_closing`。
+
+    再套一层超时：万一界面那边真的卡住了，也不能把用户永远留在
+    「窗口不动」的状态里。到点返回 False，调用方按「直接关闭」处理。
+    """
     if _WINDOW is None:
         return False
-    try:
-        _WINDOW.evaluate_js("window.__wingmanAskClose && window.__wingmanAskClose()")
-        return True
-    except Exception as exc:      # pragma: no cover - 依赖 pywebview 运行时
-        log.warning("通知界面弹出关闭选项失败：%s", exc)
+
+    done = threading.Event()
+    ok = {"v": False}
+
+    def _call() -> None:      # pragma: no cover - 依赖 pywebview 运行时
+        try:
+            _WINDOW.evaluate_js("window.__wingmanAskClose && window.__wingmanAskClose()")
+            ok["v"] = True
+        except Exception as exc:
+            log.warning("通知界面弹出关闭选项失败：%s", exc)
+        finally:
+            done.set()
+
+    threading.Thread(target=_call, name="wingman-ask-close", daemon=True).start()
+    if not done.wait(timeout):
+        log.warning("通知界面超时（%.1fs 没返回），按「直接关闭」处理。", timeout)
         return False
+    return ok["v"]
 
 
 def _on_closing() -> bool:
     """pywebview 的关窗钩子。返回 False = 取消这次关闭。
 
-    已在等用户选择时（`pending`）再点一次 × → 直接放行，别把人卡死在
-    一个弹不出来的窗口里 —— 那种「× 点不动」的观感比任何设计失误都糟。
+    ⚠️ 这个函数跑在 **UI 线程**上（winforms 的 `FormClosing` 事件回调），
+    所以这里**绝不允许出现同步的 `evaluate_js`**。
+
+    0.5.0 及以前正是那么写的：本函数直接调 `_ask_frontend_to_choose()`
+    → `evaluate_js` → 内部 `semaphore.acquire()` 死等一个**必须由 UI 线程
+    执行**的回调（`ContinueWith(..., syncContextTaskScheduler)`）。
+    而 UI 线程正卡在本函数里，两边互等 —— 后果是**点一下 × 必卡死**：
+    标题变成「WingMan 未响应」，CPU 纹丝不动（实测 8 秒内一个 tick 都没动，
+    `IsHungAppWindow` 判真）。
+
+    正确做法：只置标志，把「通知界面」丢给后台线程，立刻返回。
     """
-    if _CLOSE["pending"]:
-        log.info("已在等待用户选择，这次直接关闭。")
+    if _CLOSE["quitting"]:
+        log.info("正在退出，放行这次关闭。")
         return True
+    if _CLOSE["pending"]:
+        # 再点一次 × → 直接放行。别把人卡在一个弹不出来的窗口里 ——
+        # 那种「× 点不动」的观感比任何设计失误都糟。
+        log.info("已在等用户选择，这次直接关闭。")
+        return True
+    _CLOSE["pending"] = True
+    threading.Thread(
+        target=_ask_frontend_or_close, name="wingman-close-ask", daemon=True
+    ).start()
+    return False
+
+
+def _ask_frontend_or_close() -> None:
+    """后台线程：请界面弹窗；弹不出来就自己把窗口关掉。
+
+    后面这一刀是必需的。`_on_closing` 已经返回 False（取消了这次关闭），
+    如果通知界面又失败，用户再点 × 也还是关不掉 —— 就成了「点了没反应」。
+    """
     if _ask_frontend_to_choose():
-        _CLOSE["pending"] = True
         log.info("已拦下关闭请求，等用户选择「关闭程序 / 后台运行」。")
-        return False
-    log.info("界面没法弹窗（没开原生窗口），按「关闭程序」处理。")
-    return True
+        return
+    log.info("界面接不住关闭请求，直接关闭窗口。")
+    _CLOSE["pending"] = False
+    _CLOSE["quitting"] = True      # 让 destroy 触发的 _on_closing 放行
+    _destroy_window()
 
 
 def close_action(action: str) -> dict[str, Any]:
     """界面里选完之后回调这里。`action`：quit | background | cancel。"""
-    _CLOSE["pending"] = False
     action = (action or "").strip()
+    _CLOSE["pending"] = False
 
     if action == "cancel":
         return {"ok": True, "action": "cancel", "hint": "已取消，程序继续运行。"}
@@ -194,22 +257,74 @@ def close_action(action: str) -> dict[str, Any]:
             "hint": "浏览器模式没有可隐藏的窗口 —— 关掉这个标签页即可，服务本来就在后台跑。",
         }
 
-    # quit：先让 uvicorn 收工，再结束进程。
-    # 直接 `os._exit` 会跳过 uvicorn 的优雅退出（正在写的库可能被打断），
-    # 所以先给服务一个退出的信号，等一小会儿再兜底强退。
+    # quit：先让 uvicorn 收工，再关窗口，最后才兜底强退。
     log.info("用户选择关闭程序，准备退出。")
-    _STOP.set()
-    threading.Thread(target=_force_exit_soon, name="wingman-exit", daemon=True).start()
+    _CLOSE["quitting"] = True
+    _ask_server_to_stop()
+    threading.Thread(target=_quit_soon, name="wingman-exit", daemon=True).start()
     return {"ok": True, "action": "quit", "hint": "正在关闭…"}
 
 
-def _force_exit_soon(delay: float = 1.2) -> None:      # pragma: no cover - 进程收尾
-    time.sleep(delay)
+def _ask_server_to_stop() -> None:
+    """告诉 uvicorn 收工。
+
+    0.5.0 及以前这里只有一个 `_STOP.set()`，而那个 Event **没有任何消费者** ——
+    注释写着「先让 uvicorn 收工」，实际 uvicorn 根本没收到信号，整个退出完全靠
+    1.2 秒后 `os._exit(0)` 硬切。正在写的库随时可能被掐断，WAL 也来不及 checkpoint。
+    现在是真的通知到它了。
+    """
+    server = _SERVER.get("server")
+    if server is None:
+        return
     try:
-        if _WINDOW is not None:
-            _WINDOW.destroy()
-    except Exception:
-        pass
+        server.should_exit = True
+        log.info("已通知服务收工（uvicorn should_exit）。")
+    except Exception as exc:      # pragma: no cover - 依赖 uvicorn 内部属性
+        log.warning("通知服务收工失败：%s", exc)
+
+
+def _wait_server_stop(timeout: float) -> bool:
+    """等 uvicorn 线程结束。返回它是否真的结束了。"""
+    t = _SERVER.get("thread")
+    if t is None:
+        return True
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if not t.is_alive():
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def _destroy_window() -> None:
+    """关掉原生窗口。从任何线程调都行 —— pywebview 自己会转到 UI 线程。"""
+    global _WINDOW
+    win = _WINDOW
+    if win is None:
+        return
+    try:
+        win.destroy()
+    except Exception as exc:      # pragma: no cover - 依赖 pywebview 运行时
+        log.warning("关闭窗口失败：%s", exc)
+    _WINDOW = None
+
+
+def _quit_soon(grace: float = 4.0) -> None:      # pragma: no cover - 进程收尾
+    """收尾：先让服务体面收工，再关窗口，最后兜底强退。
+
+    **顺序不能反。** 窗口一关，主线程就从 `webview.start()` 返回、一路走到
+    进程退出；那时 uvicorn 若还在写库，就是被硬生生掐断的。宁可让用户多看
+    一两秒「正在关闭…」，也要先把该落的盘落完。
+    """
+    if _wait_server_stop(grace):
+        log.info("服务已收工。")
+    else:
+        log.warning("服务 %.0fs 内没收工，仍然继续关闭。", grace)
+    _destroy_window()
+    # 窗口关掉后主线程会自己走完收尾；这里只是兜底，
+    # 防止某个非守护线程或 pywebview 回调把退出卡住。
+    time.sleep(1.5)
+    log.info("兜底强退。")
     os._exit(0)
 
 
@@ -246,6 +361,7 @@ def desktop_state() -> dict[str, Any]:
     return {
         "native_window": _WINDOW is not None,
         "pending_close": _CLOSE["pending"],
+        "quitting": _CLOSE["quitting"],
         "platform": sys.platform,
         "version": __version__,
         "started_at": datetime.fromtimestamp(_STARTED_AT).astimezone().isoformat(timespec="seconds"),
@@ -327,6 +443,10 @@ def _run_server(port: int, host: str, log_level: str) -> threading.Thread:
             log.exception("服务线程异常退出")
 
     t = threading.Thread(target=_target, name="wingman-server", daemon=True)
+    # 留一份引用：退出时要靠 `server.should_exit` 让它体面收工，
+    # 靠 `t.is_alive()` 判断它收干净了没有。
+    _SERVER["server"] = server
+    _SERVER["thread"] = t
     t.start()
     return t
 
@@ -425,7 +545,19 @@ def main(argv: list[str] | None = None) -> int:
                     time.sleep(1)
             except KeyboardInterrupt:
                 pass
-        log.info("界面已关闭，退出。")
+            _ask_server_to_stop()
+            _wait_server_stop(4.0)
+            log.info("收到中断，退出。")
+            return 0
+
+        # 原生窗口关掉了。可能来自三条路：用户选了「关闭程序」、通知界面失败后
+        # 我们主动关的、或者用户连点了两次 ×。无论哪条，都要等服务收干净再走 ——
+        # 主线程一返回，进程就开始退，守护线程会连同它正在写的库一起被掐掉。
+        log.info("界面已关闭，等后台服务收工…")
+        _ask_server_to_stop()
+        if not _wait_server_stop(4.0):
+            log.warning("服务 4s 内没收工，进程仍将退出。")
+        log.info("已退出。")
         return 0
 
     except Exception as exc:  # 兜底：任何异常都要让用户看见，不许静默退出

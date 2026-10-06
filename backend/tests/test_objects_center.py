@@ -21,8 +21,11 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
+import threading
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -347,40 +350,149 @@ def test_desktop_close_background_without_a_window_does_not_kill_the_server() ->
         from app import desktop
 
         killed: list[str] = []
-        original = desktop._force_exit_soon
-        desktop._force_exit_soon = lambda *a, **k: killed.append("exit")
+        original_quit = desktop._quit_soon
+        original_window = desktop._WINDOW
+        desktop._quit_soon = lambda *a, **k: killed.append("exit")
+        desktop._WINDOW = None          # 浏览器模式：没有原生窗口
         try:
             r = client.post("/api/desktop/close", json={"action": "background"})
             assert r.status_code == 200, r.text
             assert not killed, "浏览器模式下点「后台运行」把进程杀了"
-            assert desktop._STOP.is_set() is False
+            assert desktop._CLOSE["quitting"] is False, "浏览器模式不该进入退出态"
         finally:
-            desktop._force_exit_soon = original
-            desktop._STOP.clear()
+            desktop._quit_soon = original_quit
+            desktop._WINDOW = original_window
+            desktop._CLOSE["quitting"] = False
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def test_desktop_close_quit_signals_shutdown_without_forkbombing() -> None:
-    """「关闭程序」要真的发起退出（这里把强退替换掉，只验信号与返回值）。"""
+def test_desktop_close_quit_actually_tells_the_server_to_stop() -> None:
+    """「关闭程序」要**真的**通知 uvicorn 收工，不能只靠定时强退。
+
+    0.5.0 及以前这里只有一个 `_STOP.set()`，而那个 Event **没有任何消费者** ——
+    注释里写着「先让 uvicorn 收工」，实际它压根没收到信号：整个退出完全靠
+    1.2 秒后的 `os._exit(0)` 硬切，正在写的库随时可能被掐断。
+    """
     client, tmp = _client_with_temp_data_dir()
     try:
         from app import desktop
 
-        called: list[str] = []
-        original = desktop._force_exit_soon
-        desktop._force_exit_soon = lambda *a, **k: called.append("exit")
+        class _FakeServer:
+            should_exit = False
+
+        exits: list[str] = []
+        original_quit = desktop._quit_soon
+        original_server = desktop._SERVER["server"]
+        desktop._quit_soon = lambda *a, **k: exits.append("quit")
+        desktop._SERVER["server"] = _FakeServer()
         try:
             r = client.post("/api/desktop/close", json={"action": "quit"})
             assert r.status_code == 200, r.text
             assert r.json()["action"] == "quit"
-            assert desktop._STOP.is_set(), "没有发出退出信号"
+            assert desktop._SERVER["server"].should_exit is True, (
+                "没有通知 uvicorn 收工 —— 它会带着没写完的库被硬切"
+            )
+            assert desktop._CLOSE["quitting"] is True, "没有进入退出态（再点 × 会被重复拦）"
             assert desktop._CLOSE["pending"] is False, "拦下的关闭没有复位"
+            assert exits == ["quit"], "没有走到收尾流程"
         finally:
-            desktop._force_exit_soon = original
-            desktop._STOP.clear()
+            desktop._quit_soon = original_quit
+            desktop._SERVER["server"] = original_server
+            desktop._CLOSE["quitting"] = False
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_the_close_hook_never_blocks_on_evaluate_js() -> None:
+    """⚠️ 核心守卫：关窗钩子里**不许**同步调用 evaluate_js。
+
+    这就是 0.5.0「点 × 必卡死、Windows 提示未响应」的成因，形状很特别：
+    `_on_closing` 跑在 UI 线程（winforms 的 `FormClosing`）上，而
+    `evaluate_js` 内部是 `semaphore.acquire()` 死等一个**只能由 UI 线程执行**
+    的回调 —— UI 线程正卡在钩子里，两边互等，CPU 一个 tick 都不动。
+
+    这里把那个语义照搬过来：让 evaluate_js 一旦在「UI 线程」上被调用就
+    不按时返回，然后要求 `_on_closing` 仍然立刻返回。
+    """
+    from app import desktop
+
+    ui_thread = threading.get_ident()
+
+    class _WindowThatOnlyWorksOffTheUiThread:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def evaluate_js(self, script: str) -> bool:
+            self.calls.append(threading.current_thread().name)
+            if threading.get_ident() == ui_thread:
+                # 真实世界在这里永久阻塞（等一个永远等不到的回调）。
+                # 测试里改成「睡够久」，免得把整个测试套件挂死。
+                time.sleep(2.0)
+            return True
+
+    original_window = desktop._WINDOW
+    original_quitting = desktop._CLOSE["quitting"]
+    win = _WindowThatOnlyWorksOffTheUiThread()
+    desktop._WINDOW = win
+    desktop._CLOSE["quitting"] = False
+    desktop._CLOSE["pending"] = False
+    try:
+        started = time.time()
+        allowed = desktop._on_closing()          # 从这一行起，当前线程就是「UI 线程」
+        elapsed = time.time() - started
+        assert allowed is False, "应该拦下这次关闭，交给界面去问"
+        assert elapsed < 1.0, (
+            f"关窗钩子在 UI 线程上被 evaluate_js 拖住了 {elapsed:.2f}s —— "
+            "线上表现就是「WingMan 未响应」"
+        )
+        for _ in range(60):                      # 通知是后台线程发的，等它一下
+            if win.calls:
+                break
+            time.sleep(0.05)
+        assert win.calls, "拦下了关闭却完全没通知界面"
+        assert desktop._CLOSE["pending"] is True, "应该在等用户选"
+    finally:
+        desktop._WINDOW = original_window
+        desktop._CLOSE["quitting"] = original_quitting
+        desktop._CLOSE["pending"] = False
+
+
+def test_when_the_page_cannot_be_reached_the_window_is_still_closed() -> None:
+    """界面接不住关闭请求时，必须补一刀把窗口关掉。
+
+    否则 `_on_closing` 已经取消了这次关闭，用户再点 × 也还是关不掉 ——
+    「点了没反应」是所有失败方式里最糟的一种。
+    """
+    from app import desktop
+
+    closed: list[str] = []
+
+    class _BrokenWindow:
+        def evaluate_js(self, script: str) -> bool:
+            raise RuntimeError("页面已经没了")
+
+        def destroy(self) -> None:
+            closed.append("destroy")
+
+    original_window = desktop._WINDOW
+    desktop._WINDOW = _BrokenWindow()
+    desktop._CLOSE["pending"] = False
+    desktop._CLOSE["quitting"] = False
+    try:
+        assert desktop._on_closing() is False, "第一次点 × 应该先拦下来问一句"
+        for _ in range(60):
+            if closed:
+                break
+            time.sleep(0.05)
+        assert closed == ["destroy"], (
+            "通知不到界面时没有把窗口关掉 —— × 会变成「点了没反应」"
+        )
+        assert desktop._CLOSE["quitting"] is True, "主动关窗后要放行后续关闭事件"
+    finally:
+        desktop._WINDOW = original_window
+        desktop._CLOSE["pending"] = False
+        desktop._CLOSE["quitting"] = False
 
 
 def test_desktop_show_without_a_window_says_so_instead_of_pretending() -> None:
@@ -454,6 +566,57 @@ def test_desktop_show_reports_failure_when_the_window_refuses() -> None:
             desktop._WINDOW = original
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_state_is_shared_even_when_desktop_py_runs_as_main() -> None:
+    """以 `__main__` 身份运行时，状态必须和 `app.desktop` 是**同一份**。
+
+    `python -m app.desktop` 会让这个文件以 `__main__` 执行，而
+    `app.api.routes_admin` 又会 `from .. import desktop` 把它再导入一次 ——
+    于是 `_WINDOW` / `_CLOSE` 在内存里存了两份：主流程写的是 `__main__` 那份，
+    接口读的是 `app.desktop` 那份（永远是初始值）。
+
+    症状很隐蔽，而且每一条都像「功能坏了」而不是「状态串了」：
+      · 窗口明明开着，`/api/desktop/state` 说 `native_window: false`；
+      · 界面于是按「浏览器模式」措辞；
+      · 点「后台运行」时后端读到一个 None 窗口，回你「已关闭」却什么也没做。
+
+    这里在干净子进程里复现那条路径：先以 `__main__` 加载 `desktop.py`
+    （跳过最后那句启动服务），再像 routes_admin 那样 `import app.desktop`，
+    然后要求两者是同一个模块对象。
+    """
+    desktop_py = BACKEND / "app" / "desktop.py"
+    probe = "\n".join([
+        "import sys, types",
+        f"sys.path.insert(0, r'{BACKEND}')",
+        "import app",                                  # `from . import ...` 要有落脚点
+        # 造一个真实的模块对象来扮演 `__main__` —— `python -m` 就是这么干的
+        "m = types.ModuleType('__main__')",
+        f"m.__file__ = r'{desktop_py}'",
+        "m.__package__ = 'app'",                       # 相对导入靠它
+        "sys.modules['__main__'] = m",
+        "src = open(m.__file__, encoding='utf-8').read()",
+        "src = src.replace('    sys.exit(main())', '    pass')",   # 否则会真的起服务
+        "exec(compile(src, m.__file__, 'exec'), m.__dict__)",
+        "import app.desktop as d",
+        "print(d is m)",                               # 应该是同一个模块对象
+        "print(d._CLOSE is m._CLOSE)",                 # 连状态字典都共享
+    ])
+
+    proc = subprocess.run(
+        [sys.executable, "-c", probe],
+        capture_output=True, text=True, timeout=120, cwd=str(BACKEND),
+    )
+    assert proc.returncode == 0, (
+        f"探针子进程失败（{proc.returncode}）\n"
+        f"--- stdout ---\n{proc.stdout}\n--- stderr ---\n{proc.stderr}"
+    )
+    lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
+    assert lines[-2:] == ["True", "True"], (
+        f"以 `__main__` 跑时，`app.desktop` 拿到的是**另一个**模块对象 —— "
+        f"状态分成了两份（探针输出：{lines}）。"
+        "窗口状态、关闭状态都会各说各话。修法见 desktop.py 顶部的那句登记。"
+    )
 
 
 # ================================================================ 检查更新（需求 5）
